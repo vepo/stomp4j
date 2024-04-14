@@ -6,4 +6,8 @@ public class StompException extends RuntimeException {
         super(message);
     }
 
+    public StompException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
 }

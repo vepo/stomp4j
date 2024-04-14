@@ -7,6 +7,7 @@ import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
+import java.util.Objects;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -110,7 +111,14 @@ public class WebSocketPort implements AutoCloseable {
                           webSocket.request(1);
                           return null;
                       }
+
+                      @Override
+                      public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
+                          logger.warn("Connection closed! statusCode={}, reason={}", statusCode, reason);
+                          return null;
+                      }
                   });
+
         logger.info("WebSocket connection established!");
     }
 
@@ -127,8 +135,15 @@ public class WebSocketPort implements AutoCloseable {
 
     public void close() {
         logger.info("Closing WebSocket connection!");
-        webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "Closing connection").join();
+        if (Objects.nonNull(webSocket)) {
+            webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "Closing connection").join();
+        }
         this.httpClient.close();
+    }
+
+    @Override
+    public String toString() {
+        return String.format("WebSocketPort [url=%s, key=%s]", url, key);
     }
 
 }

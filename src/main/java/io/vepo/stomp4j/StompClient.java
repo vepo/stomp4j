@@ -1,10 +1,8 @@
 package io.vepo.stomp4j;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
+import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -78,6 +76,7 @@ public final class StompClient implements AutoCloseable, StompEventListener {
 
                 @Override
                 public void connectionOpened() {
+                    logger.info("Connection open!");
                     webSocket.send(Stomp.connect(webSocket.url(), credentials));
                 }
 
@@ -124,8 +123,9 @@ public final class StompClient implements AutoCloseable, StompEventListener {
             logger.error("Error communicating with server", e);
         }
 
+        logger.info("Waiting for client connection");
         awaitClientConnection();
-
+        logger.info("Client connected");
     }
 
     public StompClient subscribe(String topic) {
@@ -153,11 +153,17 @@ public final class StompClient implements AutoCloseable, StompEventListener {
     public void close() {
         logger.info("Stoping Stomp client");
         webSocket.close();
-        heartBeatTask.cancel(false);
+        logger.info("Stoping heart beat service");
+        if (Objects.nonNull(heartBeatTask)) {
+            heartBeatTask.cancel(false);
+        }
+        logger.info("Shutting down heart beat service");
         heartBeatService.shutdown();
+        logger.info("Stomp client stopped");
         synchronized (closeLock) {
             closeLock.notify();
         }
+        logger.info("Notified all threads");
     }
 
     /**
@@ -174,14 +180,14 @@ public final class StompClient implements AutoCloseable, StompEventListener {
      */
     private void awaitClientConnection() {
         synchronized (connectedLock) {
-            if (!isClientConnected)
+            if (!isClientConnected) {
                 try {
                     connectedLock.wait();
                     isClientConnected = true;
                 } catch (InterruptedException e) {
-                    logger.error("[Stomp client] got an unexpected exception", e);
-                    throw new StompException("unexpected exception " + e.getMessage());
+                    Thread.currentThread().interrupt();
                 }
+            }
         }
     }
 }
