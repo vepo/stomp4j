@@ -9,3 +9,17 @@ This library can support all Stomp versions, but it was not test in others than 
 - [X] [STOMP Protocol Specification, Version 1.2](https://stomp.github.io/stomp-specification-1.2.html)
 - [ ] [STOMP Protocol Specification, Version 1.1](https://stomp.github.io/stomp-specification-1.1.html)
 - [ ] [STOMP Protocol Specification, Version 1.0](https://stomp.github.io/stomp-specification-1.0.html)
+
+## Possible Clients
+
+- [UK Network Rail](https://publicdatafeeds.networkrail.co.uk)
+   ```java
+   try (var client = new StompClient("ws://publicdatafeeds.networkrail.co.uk:61618", 
+                                     new UserCredential(System.getenv("USERNAME"), System.getenv("PASSWORD")))) {
+        client.connect();
+        client.subscribe("TRAIN_MVT_ALL_TOC", data -> {
+            // consume train data
+        });
+        client.join();
+   }
+   ```
