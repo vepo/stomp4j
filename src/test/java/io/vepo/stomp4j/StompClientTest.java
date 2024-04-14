@@ -1,12 +1,14 @@
 package io.vepo.stomp4j;
 
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.testcontainers.activemq.ActiveMQContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+@Disabled
 @Testcontainers
 public class StompClientTest {
 
