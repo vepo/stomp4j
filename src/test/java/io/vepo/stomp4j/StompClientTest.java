@@ -16,7 +16,7 @@ public class StompClientTest {
     @Test
     @Timeout(30)
     void simpleTest() {
-        try (StompClient client = new StompClient("ws://host.docker.internal:" + activemq.getMappedPort(61613))) {
+        try (StompClient client = new StompClient("ws://" + activemq.getHost() + ":" + activemq.getMappedPort(61613))) {
             client.connect();
         }
     }
