@@ -25,4 +25,8 @@ jobs:
         distribution: 'adopt'
         cache: maven
     - name: Build with Maven
-      run: mvn verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar package -Dsonar.projectKey=vepo_stomp4j
+      run: mvn verify jacoco:report org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=vepo_stomp4j \
+                                                                                           -Dsonar.organization=vepo-github \
+                                                                                           -Dsonar.host.url=https://sonarcloud.io \
+                                                                                           -Dsonar.login=$SONAR_TOKEN \
+                                                                                           -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
