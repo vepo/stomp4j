@@ -6,5 +6,6 @@ public enum Command {
     SUBSCRIBE,
     MESSAGE,
     ERROR,
-    ACK
+    ACK, 
+    UNSUBSCRIBE
 }

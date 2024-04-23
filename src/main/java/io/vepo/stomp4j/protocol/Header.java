@@ -2,14 +2,18 @@ package io.vepo.stomp4j.protocol;
 
 public enum Header {
     ACCEPT_VERSION("accept-version"),
-    HOST("host"),
-    HEART_BEAT("heart-beat"),
-    LOGIN("login"),
-    PASSCODE("passcode"),
+    ACK("ack"),
     DESTINATION("destination"),
-    ACK("ack"), 
+    HEART_BEAT("heart-beat"),
+    HOST("host"),
     ID("id"),
-    MESSAGE_ID("message-id");
+    LOGIN("login"),
+    MESSAGE_ID("message-id"),
+    PASSCODE("passcode"),
+    SERVER("server"),
+    SESSION("session"),
+    VERSION("version"),
+    CONTENT_TYPE("content-type");
 
     private final String value;
 

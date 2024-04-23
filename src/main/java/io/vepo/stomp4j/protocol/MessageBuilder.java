@@ -23,13 +23,13 @@ public class MessageBuilder {
     public String build() {
         var builder = new StringBuilder();
         builder.append(command.name())
-               .append("\n");
+               .append(Message.NEW_LINE);
         headers.forEach((key, value) -> builder.append(key.value())
-                                               .append(Stomp.DELIMITER)
+                                               .append(Message.DELIMITER)
                                                .append(value)
-                                               .append(Stomp.NEW_LINE));
-        return builder.append(Stomp.NEW_LINE)
-                      .append(Stomp.END)
+                                               .append(Message.NEW_LINE));
+        return builder.append(Message.NEW_LINE)
+                      .append(Message.END)
                       .toString();
     }
 

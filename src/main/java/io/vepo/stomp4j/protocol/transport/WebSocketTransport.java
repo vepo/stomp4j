@@ -1,7 +1,8 @@
-package io.vepo.stomp4j.port;
+package io.vepo.stomp4j.protocol.transport;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
@@ -9,63 +10,56 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.util.Objects;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.vepo.stomp4j.ClientKey;
+import io.vepo.stomp4j.protocol.Message;
+import io.vepo.stomp4j.protocol.StompListener;
+import io.vepo.stomp4j.protocol.Transport;
 
-public class WebSocketPort implements AutoCloseable {
-    private static final Logger logger = LoggerFactory.getLogger(WebSocketPort.class);
-    private final String url;
-    private final ClientKey key;
+public class WebSocketTransport implements Transport {
+    private static final Logger logger = LoggerFactory.getLogger(WebSocketTransport.class);
     private final HttpClient httpClient;
+    private final ClientKey key;
+    private final URI uri;
+    private final StompListener listener;
+    private WebSocket webSocketClient;
 
-    private WebSocket webSocket;
-    private AtomicLong id;
-    private long lastSendMessage;
-
-    public WebSocketPort(String url, ClientKey key) {
-        this.url = url;
-        this.key = key;
+    public WebSocketTransport(URI uri, StompListener listener) {
+        this.uri = uri;
+        this.listener = listener;
         this.httpClient = HttpClient.newHttpClient();
-        this.id = new AtomicLong(0);
-        this.lastSendMessage = System.nanoTime();
+        this.key = new ClientKey();
     }
 
-    public String url() {
-        return url;
+    @Override
+    public void send(String message) {
+        webSocketClient.sendText(message, true);
+        webSocketClient.request(1);
     }
 
-    public long currentId() {
-        return id.get();
-    }
-
-    public long nextId() {
-        return id.incrementAndGet();
-    }
-
-    public void connect(WebSocketListener listener) throws InterruptedException, ExecutionException {
+    @Override
+    public void connect() {
         var byteArrayOutputStream = new ByteArrayOutputStream();
         var byteChannel = Channels.newChannel(byteArrayOutputStream);
         var buffer = new StringBuffer();
+        logger.info("Open WebSocket connection with: {}", uri);
         httpClient.newWebSocketBuilder()
                   .header("uuid", key.toHex())
-                  .buildAsync(URI.create(url), new WebSocket.Listener() {
+                  .buildAsync(uri, new WebSocket.Listener() {
                       @Override
                       public void onOpen(WebSocket webSocket) {
                           logger.info("Connection open!");
-                          WebSocketPort.this.webSocket = webSocket;
-                          listener.connectionOpened();
+                          webSocketClient = webSocket;
+                          listener.connected(WebSocketTransport.this);
                       }
 
                       @Override
                       public void onError(WebSocket webSocket, Throwable error) {
                           logger.error("Error on WebSocket connection!", error);
-                          listener.error(error);
+                          // listener.error(error);
                       };
 
                       @Override
@@ -81,7 +75,7 @@ public class WebSocketPort implements AutoCloseable {
                           buffer.append(new String(value.array()));
 
                           if (last) {
-                              listener.messageReceived(buffer.toString());
+                              listener.message(Message.readMessage(buffer.toString()));
                               buffer.setLength(0);
                           } else {
                               logger.info("Data until now: {}", buffer.toString());
@@ -122,28 +116,27 @@ public class WebSocketPort implements AutoCloseable {
         logger.info("WebSocket connection established!");
     }
 
-    public long silentTime() {
-        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastSendMessage);
-    }
-
-    public void send(String message) {
-        logger.info("Sending message: {}", message);
-        webSocket.sendText(message, true);
-        webSocket.request(1);
-        this.lastSendMessage = System.nanoTime();
-    }
-
-    public void close() {
-        logger.info("Closing WebSocket connection!");
-        if (Objects.nonNull(webSocket)) {
-            webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "Closing connection").join();
-        }
-        this.httpClient.close();
+    @Override
+    public String host() {
+        return uri.getHost();
     }
 
     @Override
-    public String toString() {
-        return String.format("WebSocketPort [url=%s, key=%s]", url, key);
+    public void close() {
+        if (Objects.nonNull(webSocketClient)) {
+            webSocketClient.sendClose(WebSocket.NORMAL_CLOSURE, "Client closed connection");
+        }
+        httpClient.close();
+    }
+
+    @Override
+    public long silentTime() {
+        return 0;
+    }
+
+    @Override
+    public long nextId() {
+        return 0;
     }
 
 }

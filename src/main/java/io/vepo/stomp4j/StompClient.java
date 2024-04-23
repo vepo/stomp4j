@@ -1,9 +1,14 @@
 package io.vepo.stomp4j;
 
+import java.net.URI;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.ExecutionException;
+import java.util.Optional;
+import java.util.Queue;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -15,53 +20,146 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.vepo.stomp4j.exceptions.StompException;
-import io.vepo.stomp4j.port.WebSocketListener;
-import io.vepo.stomp4j.port.WebSocketPort;
-import io.vepo.stomp4j.protocol.Command;
+import io.vepo.stomp4j.protocol.Header;
 import io.vepo.stomp4j.protocol.Message;
 import io.vepo.stomp4j.protocol.Stomp;
-import io.vepo.stomp4j.protocol.StompEventListener;
+import io.vepo.stomp4j.protocol.StompListener;
+import io.vepo.stomp4j.protocol.Transport;
+import io.vepo.stomp4j.protocol.transport.TcpTransport;
+import io.vepo.stomp4j.protocol.transport.WebSocketTransport;
 
-public final class StompClient implements AutoCloseable, StompEventListener {
+public final class StompClient implements AutoCloseable, StompListener {
+
+    public enum TransportType {
+        WEB_SOCKET, TCP
+    };
 
     private final static Logger logger = LoggerFactory.getLogger(StompClient.class);
 
-    private final Object connectedLock = new Object();
+    private final CountDownLatch connectedLatch;
     private final Object closeLock = new Object();
     private final AtomicReference<Stomp> selectedProtocol = new AtomicReference<>();
     private boolean isClientConnected = false;
     private UserCredential credentials;
-    private WebSocketPort webSocket;
+    private Transport transport;
     private final Map<String, Consumer<String>> consumers = new HashMap<>();
+    private final Map<String, Queue<Message>> pulledMessages = Collections.synchronizedMap(new HashMap<>());
     private final ScheduledExecutorService heartBeatService;
     private ScheduledFuture<?> heartBeatTask;
 
+    private Set<Stomp> protocols;
+    private Optional<String> session;
+
     public StompClient(String url) {
-        this(url, null);
+        this(url, null, Stomp.ALL_VERSIONS);
+    }
+
+    public StompClient(String url, TransportType transportType) {
+        this(url, null, transportType, Stomp.ALL_VERSIONS);
     }
 
     public StompClient(String url, UserCredential credentials) {
-        this.webSocket = new WebSocketPort(url, new ClientKey());
-        this.credentials = credentials;
-        this.heartBeatService = Executors.newSingleThreadScheduledExecutor();
-        this.heartBeatTask = null;
+        this(url, credentials, Stomp.ALL_VERSIONS);
+    }
+
+    public StompClient(String url, TransportType transportType, UserCredential credentials) {
+        this(url, credentials, transportType, Stomp.ALL_VERSIONS);
+    }
+
+    public StompClient(String url, UserCredential credentials, Set<Stomp> protocols) {
+        try {
+            this.protocols = protocols;
+            this.transport = Transport.create(new URI(url), this);
+            this.session = null;
+            this.credentials = credentials;
+            this.heartBeatService = Executors.newSingleThreadScheduledExecutor();
+            this.heartBeatTask = null;
+            this.connectedLatch = new CountDownLatch(1);
+        } catch (Exception e) {
+            logger.error("Error creating StompClient", e);
+            throw new StompException("Error creating StompClient", e);
+        }
+    }
+
+    public StompClient(String url, UserCredential credentials, TransportType transportType, Set<Stomp> protocols) {
+        try {
+            this.protocols = protocols;
+            this.transport = switch (transportType) {
+                case WEB_SOCKET -> new WebSocketTransport(new URI(url), this);
+                case TCP -> new TcpTransport(new URI(url), this);
+            };
+            this.session = null;
+            this.credentials = credentials;
+            this.heartBeatService = Executors.newSingleThreadScheduledExecutor();
+            this.heartBeatTask = null;
+            this.connectedLatch = new CountDownLatch(1);
+        } catch (Exception e) {
+            logger.error("Error creating StompClient", e);
+            throw new StompException("Error creating StompClient", e);
+        }
+    }
+
+    @Override
+    public void connected(Transport transport) {
+        logger.info("Connected with server {}", transport);
+        transport.send(Stomp.connect(transport.host(), credentials, protocols));
+    }
+
+    private void connected(Message message) {
+        logger.info("Connected with server {}", message);
+        session = message.headers().get(Header.SESSION);
+        selectedProtocol.set(Stomp.getProtocol(message.headers().version(),
+                                               protocols));
+        if (selectedProtocol.get().hasHeartBeat()) {
+            logger.info("Heart beat is enabled");
+            logger.info("Heart beat interval: {}", message.headers().get("heart-beat"));
+            message.headers()
+                   .get("heart-beat")
+                   .map(heartBeatInterval -> {
+                       String[] heartBeats = heartBeatInterval.split(",");
+                       return Math.round(0.7 * Integer.parseInt(heartBeats[1]));
+                   }).ifPresent(interval -> {
+                       if (interval > 0) {
+                           logger.info("Setting up heart beat with interval: {}", interval);
+                           heartBeatTask = heartBeatService.scheduleAtFixedRate(() -> {
+                               logger.info("Sending heart beat message");
+                               if (transport.silentTime() > interval) {
+                                   transport.send(selectedProtocol.get().heartBeatMessage());
+                               }
+                           }, 0, interval, TimeUnit.MILLISECONDS);
+                       } else {
+                           logger.info("Heart beat interval is zero. Disabling heart beat");
+                       }
+                   });
+        }
+        connectedLatch.countDown();
+        logger.info("Client connected");
     }
 
     @Override
     public void message(Message message) {
         logger.info("Received message: {}", message);
-        var consumer = consumers.get(message.headers().destination().orElseThrow(() -> new StompException("Destination not found.")));
-        if (consumer != null) {
-            consumer.accept(message.payload());
+        switch (message.command()) {
+            case CONNECTED:
+                connected(message);
+                break;
+            case MESSAGE:
+                message.headers()
+                       .get(Header.DESTINATION)
+                       .ifPresentOrElse(topic -> {
+                           if (consumers.containsKey(topic)) {
+                               consumers.get(topic).accept(message.payload());
+                           } else {
+                               pulledMessages.computeIfAbsent(topic, k -> new LinkedList<>())
+                                             .add(message);
+                           }
+                       }, () -> {
+                           logger.warn("No topic found in message: {}", message);
+                       });
+                selectedProtocol.get().onMessage(message, session, transport);
+            default:
+                break;
         }
-        if (selectedProtocol.get().shouldAcknowledge()) {
-            webSocket.send(selectedProtocol.get().acknowledge(message));
-        }
-    }
-
-    @Override
-    public void connected() {
-        emitClientConnected();
     }
 
     @Override
@@ -70,66 +168,19 @@ public final class StompClient implements AutoCloseable, StompEventListener {
     }
 
     public void connect() {
-        logger.info("Connecting with server {}", webSocket);
-        try {
-            webSocket.connect(new WebSocketListener() {
-
-                @Override
-                public void connectionOpened() {
-                    logger.info("Connection open!");
-                    webSocket.send(Stomp.connect(webSocket.url(), credentials));
-                }
-
-                @Override
-                public void messageReceived(String content) {
-                    logger.info("Received message: {}", content);
-                    var message = Stomp.readMessage(content);
-                    logger.info("Received message: {}", message);
-                    if (message.command() == Command.CONNECTED) {
-                        selectedProtocol.set(Stomp.getProtocol(message.headers().version()));
-                        if (selectedProtocol.get().hasHeartBeat()) {
-                            logger.info("Heart beat is enabled");
-                            logger.info("Heart beat interval: {}", message.headers().get("heart-beat"));
-                            message.headers()
-                                   .get("heart-beat")
-                                   .map(heartBeatInterval -> {
-                                       String[] heartBeats = heartBeatInterval.split(",");
-                                       return Math.round(0.7 * Integer.parseInt(heartBeats[1]));
-                                   }).ifPresent(interval -> {
-                                       logger.info("Setting up heart beat with interval: {}", interval);
-                                       heartBeatTask = heartBeatService.scheduleAtFixedRate(() -> {
-                                           logger.info("Sending heart beat message");
-                                           if (webSocket.silentTime() > interval) {
-                                               webSocket.send(selectedProtocol.get().heartBeatMessage());
-                                           }
-                                       }, interval, interval, TimeUnit.MILLISECONDS);
-                                   });
-                        }
-                    }
-                    selectedProtocol.get().handleMessage(message, StompClient.this);
-
-                }
-
-                @Override
-                public void error(Throwable error) {
-                    logger.error("Error on WebSocket connection!", error);
-                }
-
-            });
-
-        } catch (InterruptedException ie) {
-            Thread.currentThread().interrupt();
-        } catch (ExecutionException e) {
-            logger.error("Error communicating with server", e);
-        }
-
+        logger.info("Connecting with server {}", transport);
+        transport.connect();
         logger.info("Waiting for client connection");
-        awaitClientConnection();
+        try {
+            connectedLatch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
         logger.info("Client connected");
     }
 
     public StompClient subscribe(String topic) {
-        this.selectedProtocol.get().subscribe(topic, webSocket);
+        this.selectedProtocol.get().subscribe(topic, session, this.transport);
         return this;
     }
 
@@ -145,49 +196,29 @@ public final class StompClient implements AutoCloseable, StompEventListener {
 
     public StompClient subscribe(String topic, Consumer<String> consumer) {
         this.consumers.put(topic, consumer);
-        this.selectedProtocol.get().subscribe(topic, webSocket);
+        this.selectedProtocol.get().subscribe(topic, this.session, this.transport);
         return this;
     }
 
     @Override
     public void close() {
-        logger.info("Stoping Stomp client");
-        webSocket.close();
-        logger.info("Stoping heart beat service");
-        if (Objects.nonNull(heartBeatTask)) {
-            heartBeatTask.cancel(false);
-        }
-        logger.info("Shutting down heart beat service");
-        heartBeatService.shutdown();
-        logger.info("Stomp client stopped");
-        synchronized (closeLock) {
-            closeLock.notify();
-        }
-        logger.info("Notified all threads");
+        // logger.info("Stoping Stomp client");
+        // webSocket.close();
+        // logger.info("Stoping heart beat service");
+        // if (Objects.nonNull(heartBeatTask)) {
+        // heartBeatTask.cancel(false);
+        // }
+        // logger.info("Shutting down heart beat service");
+        // heartBeatService.shutdown();
+        // logger.info("Stomp client stopped");
+        // synchronized (closeLock) {
+        // closeLock.notify();
+        // }
+        // logger.info("Notified all threads");
     }
 
-    /**
-     * Emits that the client is connected.
-     */
-    private void emitClientConnected() {
-        synchronized (connectedLock) {
-            connectedLock.notify();
-        }
-    }
-
-    /**
-     * Awaits if necessary until the websocket client is connected.
-     */
-    private void awaitClientConnection() {
-        synchronized (connectedLock) {
-            if (!isClientConnected) {
-                try {
-                    connectedLock.wait();
-                    isClientConnected = true;
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }
-        }
+    public StompClient unsubscribe(String topic) {
+        // this.selectedProtocol.get().unsubscribe(topic, webSocket);
+        return this;
     }
 }

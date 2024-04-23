@@ -1,12 +1,13 @@
 package io.vepo.stomp4j.protocol.v1_0;
 
-import io.vepo.stomp4j.port.WebSocketPort;
+import java.util.Optional;
+
 import io.vepo.stomp4j.protocol.Command;
 import io.vepo.stomp4j.protocol.Header;
 import io.vepo.stomp4j.protocol.Message;
 import io.vepo.stomp4j.protocol.MessageBuilder;
 import io.vepo.stomp4j.protocol.Stomp;
-import io.vepo.stomp4j.protocol.StompEventListener;
+import io.vepo.stomp4j.protocol.Transport;
 
 public class Stomp1_0 extends Stomp {
 
@@ -16,16 +17,17 @@ public class Stomp1_0 extends Stomp {
     }
 
     @Override
-    public void handleMessage(Message message, StompEventListener listener) {
+    public void onMessage(Message message, Optional<String> session, Transport transport) {
         switch (message.command()) {
             case CONNECTED:
-                listener.connected();
-                break;
+                // do nothin
             case MESSAGE:
-                listener.message(message);
+                transport.send(MessageBuilder.builder(Command.ACK)
+                                             .header(Header.MESSAGE_ID, message.headers().get(Header.MESSAGE_ID).orElse(""))
+                                             .build());
                 break;
             case ERROR:
-                listener.error(message);
+                // listener.error(message);
                 break;
             default:
                 break;
@@ -48,11 +50,19 @@ public class Stomp1_0 extends Stomp {
     }
 
     @Override
-    public void subscribe(String topic, WebSocketPort webSocket) {
-        webSocket.send(MessageBuilder.builder(Command.SUBSCRIBE)
-                                     .header(Header.DESTINATION, "/topic/" + topic)
-                                     .header(Header.ACK, "client")
-                                     .build());
+    public void subscribe(String topic, Optional<String> session, Transport transport) {
+        var builder = MessageBuilder.builder(Command.SUBSCRIBE)
+                                    .header(Header.DESTINATION, topic)
+                                    .header(Header.ACK, "client");
+        transport.send(session.map(s -> builder.header(Header.SESSION, s)).orElse(builder).build());
     }
+
+    // @Override
+    // public void unsubscribe(String topic, WebSocketPort webSocket) {
+    // webSocket.send(MessageBuilder.builder(Command.UNSUBSCRIBE)
+    // .header(Header.DESTINATION, "/topic/" + topic)
+    // .build());
+    //
+    // }
 
 }

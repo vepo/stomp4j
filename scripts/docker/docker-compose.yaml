@@ -1,0 +1,13 @@
+version: '3'
+services:
+  broker:
+    ##user: "1001:1001"
+    image: apache/activemq-artemis:2.33.0
+    ports:
+      - "61613:61613"
+      - "61614:61614"
+      - "61616:61616"
+      - "8161:8161"
+    ##volumes:
+    ##  - type: volume  
+    ##    ./etc:/var/lib/artemis-instance/etc2/
