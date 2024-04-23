@@ -1,5 +1,9 @@
 package io.vepo.stomp4j;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
+import java.util.ArrayList;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -47,11 +51,11 @@ public class StompClientTcpTest {
         logger.info("Created topic: {}", topic);
     }
 
-    void sendMessage() throws JMSException {
-        var producer = session.createProducer(topic);
-        producer.setDeliveryMode(DeliveryMode.PERSISTENT);
-        producer.send(session.createTextMessage("Hello World"));
-        producer.close();
+    void sendMessage(String content) throws JMSException {
+        try (var producer = session.createProducer(topic)) {
+            producer.setDeliveryMode(DeliveryMode.PERSISTENT);
+            producer.send(session.createTextMessage(content));
+        }
     }
 
     @AfterEach
@@ -61,19 +65,30 @@ public class StompClientTcpTest {
     }
 
     @Test
-    @Timeout(30)
-    void simpleTest() throws InterruptedException, JMSException {
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void subscribeTest() throws InterruptedException, JMSException {
         try (StompClient client = new StompClient(stomp.tcpUrl(),
                                                   new UserCredential(stomp.username(), stomp.password()),
                                                   Set.of(new Stomp1_0()))) {
-            var countDown = new CountDownLatch(1);
+            var messageList = new ArrayList<String>();
             client.connect();
             client.subscribe(topicName, message -> {
-                System.out.println("Message received: " + message);
-                countDown.countDown();
+                messageList.add(message);
             });
-            sendMessage();
-            countDown.await();
+            sendMessage("message-01");
+            sendMessage("message-02");
+            sendMessage("message-03");
+            sendMessage("message-04");
+            sendMessage("message-05");
+            sendMessage("message-06");
+            sendMessage("message-07");
+            sendMessage("message-08");
+            sendMessage("message-09");
+            sendMessage("message-10");
+            await().until(() -> messageList.size() == 10);
+            assertThat(messageList).containsExactly("message-01", "message-02", "message-03", "message-04",
+                                                    "message-05", "message-06", "message-07", "message-08",
+                                                    "message-09", "message-10");
         }
     }
 }

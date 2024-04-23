@@ -1,10 +1,12 @@
 package io.vepo.stomp4j;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
@@ -32,14 +34,13 @@ public final class StompClient implements AutoCloseable, StompListener {
 
     public enum TransportType {
         WEB_SOCKET, TCP
-    };
+    }
 
     private final static Logger logger = LoggerFactory.getLogger(StompClient.class);
 
     private final CountDownLatch connectedLatch;
-    private final Object closeLock = new Object();
+    private final Object lock = new Object();
     private final AtomicReference<Stomp> selectedProtocol = new AtomicReference<>();
-    private boolean isClientConnected = false;
     private UserCredential credentials;
     private Transport transport;
     private final Map<String, Consumer<String>> consumers = new HashMap<>();
@@ -67,34 +68,28 @@ public final class StompClient implements AutoCloseable, StompListener {
     }
 
     public StompClient(String url, UserCredential credentials, Set<Stomp> protocols) {
-        try {
-            this.protocols = protocols;
-            this.transport = Transport.create(new URI(url), this);
-            this.session = null;
-            this.credentials = credentials;
-            this.heartBeatService = Executors.newSingleThreadScheduledExecutor();
-            this.heartBeatTask = null;
-            this.connectedLatch = new CountDownLatch(1);
-        } catch (Exception e) {
-            logger.error("Error creating StompClient", e);
-            throw new StompException("Error creating StompClient", e);
-        }
+        this(url, credentials, null, protocols);
     }
 
     public StompClient(String url, UserCredential credentials, TransportType transportType, Set<Stomp> protocols) {
         try {
             this.protocols = protocols;
-            this.transport = switch (transportType) {
-                case WEB_SOCKET -> new WebSocketTransport(new URI(url), this);
-                case TCP -> new TcpTransport(new URI(url), this);
-            };
-            this.session = null;
+            if (Objects.isNull(transportType)) {
+                this.transport = Transport.create(new URI(url), this);
+            } else {
+                this.transport = switch (transportType) {
+                    case WEB_SOCKET -> new WebSocketTransport(new URI(url), this);
+                    case TCP -> new TcpTransport(new URI(url), this);
+                };
+            }
+            ;
+            this.session = Optional.empty();
             this.credentials = credentials;
             this.heartBeatService = Executors.newSingleThreadScheduledExecutor();
             this.heartBeatTask = null;
             this.connectedLatch = new CountDownLatch(1);
-        } catch (Exception e) {
-            logger.error("Error creating StompClient", e);
+        } catch (URISyntaxException e) {
+            logger.error("Invalid URL!", e);
             throw new StompException("Error creating StompClient", e);
         }
     }
@@ -103,6 +98,92 @@ public final class StompClient implements AutoCloseable, StompListener {
     public void connected(Transport transport) {
         logger.info("Connected with server {}", transport);
         transport.send(Stomp.connect(transport.host(), credentials, protocols));
+    }
+
+    @Override
+    public void message(Message message) {
+        logger.info("Received message: {}", message);
+        switch (message.command()) {
+            case CONNECTED:
+                connected(message);
+                break;
+            case MESSAGE:
+                message.headers()
+                       .get(Header.DESTINATION)
+                       .ifPresentOrElse(topic -> {
+                           if (consumers.containsKey(topic)) {
+                               consumers.get(topic).accept(message.payload());
+                           } else {
+                               pulledMessages.computeIfAbsent(topic, k -> new LinkedList<>())
+                                             .add(message);
+                           }
+                       }, () -> {
+                           logger.warn("No topic found in message: {}", message);
+                       });
+                selectedProtocol.get().onMessage(message, session, transport);
+                break;
+            default:
+                break;
+        }
+    }
+
+    @Override
+    public void error(Message message) {
+        logger.error("Error message: {}", message);
+    }
+
+    public void connect() {
+        logger.info("Connecting with server {}", transport);
+        transport.connect();
+        logger.info("Waiting for client connection");
+        try {
+            connectedLatch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        logger.info("Client connected");
+    }
+
+    public StompClient subscribe(String topic) {
+        this.selectedProtocol.get().subscribe(topic, session, this.transport);
+        return this;
+    }
+
+    public void join() {
+        synchronized (lock) {
+            try {
+                lock.wait();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
+    public StompClient subscribe(String topic, Consumer<String> consumer) {
+        this.consumers.put(topic, consumer);
+        this.selectedProtocol.get().subscribe(topic, this.session, this.transport);
+        return this;
+    }
+
+    @Override
+    public void close() {
+        logger.info("Stoping Stomp client");
+        transport.close();
+        logger.info("Stoping heart beat service");
+        if (Objects.nonNull(heartBeatTask)) {
+            heartBeatTask.cancel(false);
+        }
+        logger.info("Shutting down heart beat service");
+        heartBeatService.shutdown();
+        logger.info("Stomp client stopped");
+        synchronized (lock) {
+            lock.notify();
+        }
+    }
+
+    public StompClient unsubscribe(String topic) {
+        // this.selectedProtocol.get().unsubscribe(topic, webSocket);
+        return this;
     }
 
     private void connected(Message message) {
@@ -134,91 +215,5 @@ public final class StompClient implements AutoCloseable, StompListener {
         }
         connectedLatch.countDown();
         logger.info("Client connected");
-    }
-
-    @Override
-    public void message(Message message) {
-        logger.info("Received message: {}", message);
-        switch (message.command()) {
-            case CONNECTED:
-                connected(message);
-                break;
-            case MESSAGE:
-                message.headers()
-                       .get(Header.DESTINATION)
-                       .ifPresentOrElse(topic -> {
-                           if (consumers.containsKey(topic)) {
-                               consumers.get(topic).accept(message.payload());
-                           } else {
-                               pulledMessages.computeIfAbsent(topic, k -> new LinkedList<>())
-                                             .add(message);
-                           }
-                       }, () -> {
-                           logger.warn("No topic found in message: {}", message);
-                       });
-                selectedProtocol.get().onMessage(message, session, transport);
-            default:
-                break;
-        }
-    }
-
-    @Override
-    public void error(Message message) {
-        logger.error("Error message: {}", message);
-    }
-
-    public void connect() {
-        logger.info("Connecting with server {}", transport);
-        transport.connect();
-        logger.info("Waiting for client connection");
-        try {
-            connectedLatch.await();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-        logger.info("Client connected");
-    }
-
-    public StompClient subscribe(String topic) {
-        this.selectedProtocol.get().subscribe(topic, session, this.transport);
-        return this;
-    }
-
-    public void join() {
-        synchronized (closeLock) {
-            try {
-                closeLock.wait();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
-    }
-
-    public StompClient subscribe(String topic, Consumer<String> consumer) {
-        this.consumers.put(topic, consumer);
-        this.selectedProtocol.get().subscribe(topic, this.session, this.transport);
-        return this;
-    }
-
-    @Override
-    public void close() {
-        // logger.info("Stoping Stomp client");
-        // webSocket.close();
-        // logger.info("Stoping heart beat service");
-        // if (Objects.nonNull(heartBeatTask)) {
-        // heartBeatTask.cancel(false);
-        // }
-        // logger.info("Shutting down heart beat service");
-        // heartBeatService.shutdown();
-        // logger.info("Stomp client stopped");
-        // synchronized (closeLock) {
-        // closeLock.notify();
-        // }
-        // logger.info("Notified all threads");
-    }
-
-    public StompClient unsubscribe(String topic) {
-        // this.selectedProtocol.get().unsubscribe(topic, webSocket);
-        return this;
     }
 }

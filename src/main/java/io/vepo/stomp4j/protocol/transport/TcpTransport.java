@@ -1,18 +1,21 @@
 package io.vepo.stomp4j.protocol.transport;
 
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.io.PrintWriter;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
 import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
+import java.nio.channels.SocketChannel;
 import java.util.Objects;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.slf4j.Logger;
@@ -29,9 +32,10 @@ public class TcpTransport implements Transport {
     private final StompListener listener;
     private final ExecutorService executor;
     private Socket socket;
-    private OutputStream os;
     private volatile long lastReceivedMessaged;
     private final AtomicLong idGenerator;
+    private final AtomicBoolean running;
+    private final CountDownLatch done;
 
     public TcpTransport(URI uri, StompListener listener) {
         this.host = uri.getHost();
@@ -40,6 +44,8 @@ public class TcpTransport implements Transport {
         this.executor = Executors.newSingleThreadExecutor();
         this.lastReceivedMessaged = System.nanoTime();
         this.idGenerator = new AtomicLong();
+        this.running = new AtomicBoolean(true);
+        this.done = new CountDownLatch(1);
     }
 
     public String host() {
@@ -49,6 +55,7 @@ public class TcpTransport implements Transport {
     @Override
     public void send(String message) {
         try {
+            var os = socket.getOutputStream();
             os.write(message.getBytes());
             os.write("\n".getBytes());
             os.flush();
@@ -59,10 +66,17 @@ public class TcpTransport implements Transport {
     }
 
     public void close() {
+        running.set(false);
+        try {
+            done.await(1, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            logger.error("Error waiting for message reader thread to finish", e);
+        }
         if (Objects.nonNull(socket)) {
             try {
                 socket.close();
             } catch (IOException e) {
+                logger.error("Error closing socket", e);
             }
         }
         executor.shutdown();
@@ -72,23 +86,36 @@ public class TcpTransport implements Transport {
         this.lastReceivedMessaged = System.nanoTime();
         try {
             var messageBuffer = new MessageBuffer();
-            var is = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            var buffer = new char[1024];
-            int length;
-            while ((length = is.read(buffer)) != -1) {
-                this.lastReceivedMessaged = System.nanoTime();
-                if (messageBuffer.append(new String(buffer, 0, length))) {
-                    do {
-                        logger.info("Message complete. Sending to listener. listener: {}", listener);
-                        listener.message(messageBuffer.message());
-                        logger.info("Message sent to listener.");
-                    } while (messageBuffer.hasMessage());
+            var inputStream = socket.getInputStream();
+            var buffer = new byte[1024];
+            int length = 0;
+            while (running.get() &&
+                    (inputStream.available() == 0 || (length = inputStream.read(buffer)) != -1)) {
+                if (length > 0) {
+                    this.lastReceivedMessaged = System.nanoTime();
+                    if (messageBuffer.append(new String(buffer, 0, length))) {
+                        do {
+                            logger.info("Message complete. Sending to listener. listener: {}", listener);
+                            listener.message(messageBuffer.message());
+                            logger.info("Message sent to listener.");
+                        } while (messageBuffer.hasMessage());
+                    }
+                    length = 0;
+                }
+
+                while (running.get() && inputStream.available() == 0) {
+                    logger.info("No more data available. Sleeping for 1 second.");
+                    try {
+                        TimeUnit.MILLISECONDS.sleep(100);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
                 }
             }
         } catch (IOException e) {
             logger.error("Error reading messages", e);
-        } catch (Exception e) {
-            logger.error("Error reading messages", e);
+        } finally {
+            done.countDown();
         }
         logger.info("Message reader thread finished.");
     }
@@ -98,7 +125,6 @@ public class TcpTransport implements Transport {
         logger.info("Trying to connect to {}:{}", host, port);
         try {
             this.socket = new Socket(host, port);
-            this.os = socket.getOutputStream();
             executor.submit(this::readMessages);
             listener.connected(this);
         } catch (UnknownHostException uhe) {
