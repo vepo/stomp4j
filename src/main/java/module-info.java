@@ -4,7 +4,6 @@ module stomp4j {
     requires java.naming;
 
     requires org.slf4j;
-    requires com.fasterxml.jackson.databind;
     requires org.apache.commons.codec;
 
     exports io.vepo.stomp4j;
