@@ -6,5 +6,5 @@ public interface TransportProvider {
 
     String protocol();
 
-    Transport getTransport(URI uri, StompListener listener);
+    Transport getTransport(URI uri, TransportListener listener);
 }

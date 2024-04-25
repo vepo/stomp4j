@@ -7,7 +7,7 @@ import java.util.ServiceLoader;
 public interface Transport extends Closeable {
 
     @SuppressWarnings("resource")
-    static Transport create(URI uri, StompListener listener) {
+    static Transport create(URI uri, TransportListener listener) {
         return ServiceLoader.load(TransportProvider.class)
                             .stream()
                             .map(ServiceLoader.Provider::get)
@@ -27,6 +27,4 @@ public interface Transport extends Closeable {
     void close();
 
     long silentTime();
-
-    long nextId();
 }

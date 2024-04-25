@@ -19,7 +19,8 @@ public class MessageBuffer {
     public Message message() {
         int endOfMessage = buffer.indexOf(Message.END);
         if (endOfMessage > 0) {
-            String message = buffer.substring(0, endOfMessage);
+            String message = buffer.substring(0, endOfMessage).replaceFirst("^\\s+", "");
+            logger.info("Message received: {}", message);
             buffer.delete(0, endOfMessage + 2);
             return Message.readMessage(message);
         } else {

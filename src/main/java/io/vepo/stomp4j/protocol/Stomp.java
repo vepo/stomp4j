@@ -1,10 +1,12 @@
 package io.vepo.stomp4j.protocol;
 
+import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import io.vepo.stomp4j.Subscription;
 import io.vepo.stomp4j.UserCredential;
 //import io.vepo.stomp4j.port.WebSocketPort;
 import io.vepo.stomp4j.protocol.v1_0.Stomp1_0;
@@ -25,11 +27,16 @@ public abstract class Stomp {
 
     public abstract boolean hasHeartBeat();
 
-    public static String connect(String host, UserCredential credentials, Set<Stomp> versions) {
+    public static String connect(String host,
+                                 UserCredential credentials,
+                                 Set<Stomp> versions,
+                                 Duration expectedHeartbeatFrequency) {
         var builder = MessageBuilder.builder(Command.CONNECT)
                                     .header(Header.ACCEPT_VERSION, acceptedVersions(versions))
                                     .header(Header.HOST, host)
-                                    .header(Header.HEART_BEAT, "0,0");
+                                    .header(Header.HEART_BEAT, String.format("%d,%d",
+                                                                             expectedHeartbeatFrequency.toMillis(),
+                                                                             expectedHeartbeatFrequency.toMillis()));
 
         if (Objects.nonNull(credentials)) {
             builder.header(Header.LOGIN, credentials.username())
@@ -50,15 +57,11 @@ public abstract class Stomp {
 
     public abstract void onMessage(Message message, Optional<String> session, Transport transport);
 
-    public abstract void subscribe(String topic, Optional<String> session, Transport transport);
+    public abstract void subscribe(Subscription subscription, Optional<String> session, Transport transport);
 
     public String heartBeatMessage() {
-        return Message.NEW_LINE + Message.END;
+        return Message.NEW_LINE;
     }
 
-    public abstract boolean shouldAcknowledge();
-
-    public abstract String acknowledge(Message message);
-
-    // public abstract void unsubscribe(String topic, WebSocketPort webSocket);
+    public abstract void unsubscribe(Subscription subscription, Transport transport);
 }

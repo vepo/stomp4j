@@ -5,12 +5,12 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.vepo.stomp4j.Subscription;
 import io.vepo.stomp4j.protocol.Command;
 import io.vepo.stomp4j.protocol.Header;
 import io.vepo.stomp4j.protocol.Message;
 import io.vepo.stomp4j.protocol.MessageBuilder;
 import io.vepo.stomp4j.protocol.Stomp;
-import io.vepo.stomp4j.protocol.StompListener;
 import io.vepo.stomp4j.protocol.Transport;
 
 public class Stomp1_2 extends Stomp {
@@ -33,7 +33,9 @@ public class Stomp1_2 extends Stomp {
             case CONNECTED:
                 // do nothing
             case MESSAGE:
-                // listener.message(message);
+                transport.send(MessageBuilder.builder(Command.ACK)
+                                             .headerIfPresent(Header.ID, message.headers().get(Header.MESSAGE_ID))
+                                             .build());
                 break;
             case ERROR:
                 // listener.error(message);
@@ -44,37 +46,20 @@ public class Stomp1_2 extends Stomp {
     }
 
     @Override
-    public boolean shouldAcknowledge() {
-        return true;
+    public void subscribe(Subscription subscription, Optional<String> session, Transport transport) {
+        transport.send(MessageBuilder.builder(Command.SUBSCRIBE)
+                                     .header(Header.ID, Integer.toString(subscription.id()))
+                                     .header(Header.DESTINATION, subscription.topic())
+                                     .header(Header.ACK, "client")
+                                     .headerIfPresent(Header.SESSION, session)
+                                     .build());
     }
 
     @Override
-    public String acknowledge(Message message) {
-        return message.headers()
-                      .get(Header.MESSAGE_ID)
-                      .map(messageId -> MessageBuilder.builder(Command.ACK)
-                                                      .header(Header.ID, messageId)
-                                                      .build())
-                      .orElse(null);
+    public void unsubscribe(Subscription subscription, Transport transport) {
+        transport.send(MessageBuilder.builder(Command.UNSUBSCRIBE)
+                                     .header(Header.ID, Integer.toString(subscription.id()))
+                                     .build());
     }
-
-    @Override
-    public void subscribe(String topic, Optional<String> session, Transport transport) {
-        var builder = MessageBuilder.builder(Command.SUBSCRIBE)
-                                    .header(Header.ID, Long.toString(transport.nextId()))
-                                    .header(Header.DESTINATION, topic)
-                                    .header(Header.ACK, "client");
-        transport.send(session.map(s -> builder.header(Header.SESSION, s))
-                              .orElse(builder)
-                              .build());
-    }
-
-    // @Override
-    // public void unsubscribe(String topic, WebSocketPort webSocket) {
-    // webSocket.send(MessageBuilder.builder(Command.UNSUBSCRIBE)
-    // .header(Header.ID, Long.toString(webSocket.nextId()))
-    // .header(Header.DESTINATION, "/topic/" + topic)
-    // .build());
-    // }
 
 }

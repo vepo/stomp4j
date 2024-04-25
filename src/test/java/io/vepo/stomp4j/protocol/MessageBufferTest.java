@@ -67,6 +67,43 @@ public class MessageBufferTest {
     }
 
     @Test
+    void heartbeatWithMessageTest() {
+        var buffer = new MessageBuffer();
+        assertTrue(buffer.append("""
+                                  MESSAGE
+                                  destination:/topic/test
+                                  message-id:1234
+                                  content-type:text/plain
+
+                                  Hello, World!
+                                  \u0000
+
+                                  MESSAGE
+                                  destination:/topic/test-2
+                                  message-id:1235
+                                  content-type:text/plain
+
+                                  Hello, World! 2
+                                  \u0000"""));
+        var message = buffer.message();
+        assertNotNull(message);
+        assertEquals(Command.MESSAGE, message.command());
+        assertEquals("/topic/test", message.headers().get(Header.DESTINATION).orElse(null));
+        assertEquals("1234", message.headers().get(Header.MESSAGE_ID).orElse(null));
+        assertEquals("text/plain", message.headers().get(Header.CONTENT_TYPE).orElse(null));
+        assertEquals("Hello, World!", message.payload());
+        assertTrue(buffer.hasMessage());
+        message = buffer.message();
+        assertNotNull(message);
+        assertEquals(Command.MESSAGE, message.command());
+        assertEquals("/topic/test-2", message.headers().get(Header.DESTINATION).orElse(null));
+        assertEquals("1235", message.headers().get(Header.MESSAGE_ID).orElse(null));
+        assertEquals("text/plain", message.headers().get(Header.CONTENT_TYPE).orElse(null));
+        assertEquals("Hello, World! 2", message.payload());
+        assertFalse(buffer.hasMessage());
+    }
+
+    @Test
     void hasMessageTest() {
         var buffer = new MessageBuffer();
         assertTrue(buffer.append("""

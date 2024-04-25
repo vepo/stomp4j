@@ -16,7 +16,7 @@ import org.slf4j.LoggerFactory;
 
 import io.vepo.stomp4j.ClientKey;
 import io.vepo.stomp4j.protocol.Message;
-import io.vepo.stomp4j.protocol.StompListener;
+import io.vepo.stomp4j.protocol.TransportListener;
 import io.vepo.stomp4j.protocol.Transport;
 
 public class WebSocketTransport implements Transport {
@@ -24,10 +24,10 @@ public class WebSocketTransport implements Transport {
     private final HttpClient httpClient;
     private final ClientKey key;
     private final URI uri;
-    private final StompListener listener;
+    private final TransportListener listener;
     private WebSocket webSocketClient;
 
-    public WebSocketTransport(URI uri, StompListener listener) {
+    public WebSocketTransport(URI uri, TransportListener listener) {
         this.uri = uri;
         this.listener = listener;
         this.httpClient = HttpClient.newHttpClient();
@@ -36,6 +36,7 @@ public class WebSocketTransport implements Transport {
 
     @Override
     public void send(String message) {
+        logger.info("Sending message: {}", message);
         webSocketClient.sendText(message, true);
         webSocketClient.request(1);
     }
@@ -53,7 +54,7 @@ public class WebSocketTransport implements Transport {
                       public void onOpen(WebSocket webSocket) {
                           logger.info("Connection open!");
                           webSocketClient = webSocket;
-                          listener.connected(WebSocketTransport.this);
+                          listener.onConnected(WebSocketTransport.this);
                       }
 
                       @Override
@@ -75,7 +76,7 @@ public class WebSocketTransport implements Transport {
                           buffer.append(new String(value.array()));
 
                           if (last) {
-                              listener.message(Message.readMessage(buffer.toString()));
+                              listener.onMessage(Message.readMessage(buffer.toString()));
                               buffer.setLength(0);
                           } else {
                               logger.info("Data until now: {}", buffer.toString());
@@ -131,11 +132,6 @@ public class WebSocketTransport implements Transport {
 
     @Override
     public long silentTime() {
-        return 0;
-    }
-
-    @Override
-    public long nextId() {
         return 0;
     }
 

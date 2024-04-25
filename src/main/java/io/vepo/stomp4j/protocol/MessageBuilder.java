@@ -1,6 +1,7 @@
 package io.vepo.stomp4j.protocol;
 
 import java.util.HashMap;
+import java.util.Optional;
 
 public class MessageBuilder {
     private final Command command;
@@ -15,8 +16,13 @@ public class MessageBuilder {
         return new MessageBuilder(command);
     }
 
-    public MessageBuilder header(Header acceptVersion, String acceptedVersions) {
-        this.headers.put(acceptVersion, acceptedVersions);
+    public MessageBuilder header(Header key, String value) {
+        this.headers.put(key, value);
+        return this;
+    }
+
+    public MessageBuilder headerIfPresent(Header key, Optional<String> value) {
+        value.ifPresent(v -> this.headers.put(key, v));
         return this;
     }
 

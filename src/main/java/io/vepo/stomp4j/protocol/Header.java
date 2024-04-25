@@ -13,7 +13,8 @@ public enum Header {
     SERVER("server"),
     SESSION("session"),
     VERSION("version"),
-    CONTENT_TYPE("content-type");
+    CONTENT_TYPE("content-type"),
+    SUBSCRIPTION("subscription");
 
     private final String value;
 

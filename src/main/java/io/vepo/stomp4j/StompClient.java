@@ -2,8 +2,10 @@ package io.vepo.stomp4j;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.time.Duration;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Objects;
@@ -15,6 +17,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
@@ -25,16 +28,12 @@ import io.vepo.stomp4j.exceptions.StompException;
 import io.vepo.stomp4j.protocol.Header;
 import io.vepo.stomp4j.protocol.Message;
 import io.vepo.stomp4j.protocol.Stomp;
-import io.vepo.stomp4j.protocol.StompListener;
 import io.vepo.stomp4j.protocol.Transport;
+import io.vepo.stomp4j.protocol.TransportListener;
 import io.vepo.stomp4j.protocol.transport.TcpTransport;
 import io.vepo.stomp4j.protocol.transport.WebSocketTransport;
 
-public final class StompClient implements AutoCloseable, StompListener {
-
-    public enum TransportType {
-        WEB_SOCKET, TCP
-    }
+public final class StompClient implements AutoCloseable, TransportListener {
 
     private final static Logger logger = LoggerFactory.getLogger(StompClient.class);
 
@@ -43,10 +42,13 @@ public final class StompClient implements AutoCloseable, StompListener {
     private final AtomicReference<Stomp> selectedProtocol = new AtomicReference<>();
     private UserCredential credentials;
     private Transport transport;
-    private final Map<String, Consumer<String>> consumers = new HashMap<>();
-    private final Map<String, Queue<Message>> pulledMessages = Collections.synchronizedMap(new HashMap<>());
+    private final Map<Subscription, Consumer<String>> consumers = new HashMap<>();
+    private final Map<Subscription, Queue<Message>> receivedMessages = Collections.synchronizedMap(new HashMap<>());
+    private final Set<Subscription> polling = Collections.synchronizedSet(new HashSet<>());
     private final ScheduledExecutorService heartBeatService;
     private ScheduledFuture<?> heartBeatTask;
+    private final AtomicInteger subscriptIdSequence;
+    private static final Duration DEFAULT_HEART_BEAT_INTERVAL = Duration.ofSeconds(30);
 
     private Set<Stomp> protocols;
     private Optional<String> session;
@@ -88,6 +90,7 @@ public final class StompClient implements AutoCloseable, StompListener {
             this.heartBeatService = Executors.newSingleThreadScheduledExecutor();
             this.heartBeatTask = null;
             this.connectedLatch = new CountDownLatch(1);
+            this.subscriptIdSequence = new AtomicInteger(0);
         } catch (URISyntaxException e) {
             logger.error("Invalid URL!", e);
             throw new StompException("Error creating StompClient", e);
@@ -95,44 +98,81 @@ public final class StompClient implements AutoCloseable, StompListener {
     }
 
     @Override
-    public void connected(Transport transport) {
+    public void onConnected(Transport transport) {
         logger.info("Connected with server {}", transport);
-        transport.send(Stomp.connect(transport.host(), credentials, protocols));
+        transport.send(Stomp.connect(transport.host(), credentials, protocols, DEFAULT_HEART_BEAT_INTERVAL));
+    }
+
+    private Optional<Subscription> findSubscription(Optional<String> subscriptionId,
+                                                    Optional<String> destination,
+                                                    Set<Subscription> subscriptions) {
+        /*
+         * 1. Need to filter all ids that are non-numbers. ActiveMQ Stomp V1.0 sends as
+         * subscription id "/subscription/<topic>". So, we need to filter out the value
+         * and use the destination header to follow the specification.
+         */
+        return subscriptionId.filter(id -> id.matches("\\d+"))
+                             .map(Integer::parseInt)
+                             .flatMap(id -> subscriptions.stream()
+                                                         .filter(subs -> subs.id() == id)
+                                                         .findFirst())
+                             .or(() -> subscriptions.stream()
+                                                    .filter(subs -> subs.topic()
+                                                                        .equals(destination.orElseThrow(() -> new IllegalStateException("No destination found in message"))))
+                                                    .findFirst());
+    }
+
+    private Optional<Subscription> findPollingSubscription(Optional<String> subscriptionId,
+                                                           Optional<String> destination) {
+        return findSubscription(subscriptionId, destination, polling);
+    }
+
+    private Optional<Subscription> findConsumerSubscription(Optional<String> subscriptionId,
+                                                            Optional<String> destination) {
+        return findSubscription(subscriptionId, destination, consumers.keySet());
     }
 
     @Override
-    public void message(Message message) {
+    public void onMessage(Message message) {
         logger.info("Received message: {}", message);
         switch (message.command()) {
             case CONNECTED:
-                connected(message);
+                setupConnection(message);
                 break;
             case MESSAGE:
-                message.headers()
-                       .get(Header.DESTINATION)
-                       .ifPresentOrElse(topic -> {
-                           if (consumers.containsKey(topic)) {
-                               consumers.get(topic).accept(message.payload());
-                           } else {
-                               pulledMessages.computeIfAbsent(topic, k -> new LinkedList<>())
-                                             .add(message);
-                           }
-                       }, () -> {
-                           logger.warn("No topic found in message: {}", message);
-                       });
-                selectedProtocol.get().onMessage(message, session, transport);
+                consumeMessage(message);
                 break;
             default:
                 break;
         }
     }
 
+    private void consumeMessage(Message message) {
+        var subscription = findConsumerSubscription(message.headers().get(Header.SUBSCRIPTION),
+                                                    message.headers().get(Header.DESTINATION));
+
+        if (subscription.isPresent()) {
+            consumers.get(subscription.get()).accept(message.payload());
+        } else {
+            subscription = findPollingSubscription(message.headers().get(Header.SUBSCRIPTION),
+                                                   message.headers().get(Header.DESTINATION));
+            if (subscription.isEmpty()) {
+                receivedMessages.computeIfAbsent(subscription.get(), k -> new LinkedList<>())
+                                .add(message);
+            } else {
+                logger.warn("No subscription found for message: {}", message);
+            }
+        }
+
+        selectedProtocol.get().onMessage(message, session, transport);
+    }
+
     @Override
-    public void error(Message message) {
+    public void onError(Message message) {
         logger.error("Error message: {}", message);
     }
 
-    public void connect() {
+    public StompClient connect() {
         logger.info("Connecting with server {}", transport);
         transport.connect();
         logger.info("Waiting for client connection");
@@ -142,11 +182,13 @@ public final class StompClient implements AutoCloseable, StompListener {
             Thread.currentThread().interrupt();
         }
         logger.info("Client connected");
+        return this;
     }
 
-    public StompClient subscribe(String topic) {
-        this.selectedProtocol.get().subscribe(topic, session, this.transport);
-        return this;
+    public Subscription subscribe(String topic) {
+        var subscription = new Subscription(topic, subscriptIdSequence.incrementAndGet());
+        this.selectedProtocol.get().subscribe(subscription, session, this.transport);
+        return subscription;
     }
 
     public void join() {
@@ -159,10 +201,11 @@ public final class StompClient implements AutoCloseable, StompListener {
         }
     }
 
-    public StompClient subscribe(String topic, Consumer<String> consumer) {
-        this.consumers.put(topic, consumer);
-        this.selectedProtocol.get().subscribe(topic, this.session, this.transport);
-        return this;
+    public Subscription subscribe(String topic, Consumer<String> consumer) {
+        var subscription = new Subscription(topic, subscriptIdSequence.incrementAndGet());
+        this.consumers.put(subscription, consumer);
+        this.selectedProtocol.get().subscribe(subscription, this.session, this.transport);
+        return subscription;
     }
 
     @Override
@@ -181,21 +224,35 @@ public final class StompClient implements AutoCloseable, StompListener {
         }
     }
 
-    public StompClient unsubscribe(String topic) {
-        // this.selectedProtocol.get().unsubscribe(topic, webSocket);
+    public StompClient unsubscribe(Subscription subscription) {
+        this.selectedProtocol.get().unsubscribe(subscription, transport);
+        this.consumers.remove(subscription);
         return this;
     }
 
-    private void connected(Message message) {
+    public StompClient unsubscribe(String topic) {
+        this.consumers.entrySet()
+                      .stream()
+                      .map(Map.Entry::getKey)
+                      .filter(subscription -> subscription.topic().equals(topic))
+                      .toList() // avoid concurrent exception
+                      .forEach(subscription -> {
+                          this.selectedProtocol.get().unsubscribe(subscription, transport);
+                          this.consumers.remove(subscription);
+                      });
+        return this;
+    }
+
+    private void setupConnection(Message message) {
         logger.info("Connected with server {}", message);
         session = message.headers().get(Header.SESSION);
         selectedProtocol.set(Stomp.getProtocol(message.headers().version(),
                                                protocols));
         if (selectedProtocol.get().hasHeartBeat()) {
             logger.info("Heart beat is enabled");
-            logger.info("Heart beat interval: {}", message.headers().get("heart-beat"));
+            logger.info("Heart beat interval: {}", message.headers().get(Header.HEART_BEAT));
             message.headers()
-                   .get("heart-beat")
+                   .get(Header.HEART_BEAT)
                    .map(heartBeatInterval -> {
                        String[] heartBeats = heartBeatInterval.split(",");
                        return Math.round(0.7 * Integer.parseInt(heartBeats[1]));
