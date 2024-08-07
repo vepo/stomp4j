@@ -17,7 +17,7 @@ public interface Transport extends Closeable {
                             .orElseThrow(() -> new IllegalArgumentException("No transport found for protocol " + uri.getScheme()));
     }
 
-    void send(String acknowledge);
+    void send(String content);
 
     void connect();
 

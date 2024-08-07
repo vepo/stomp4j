@@ -1,6 +1,5 @@
 package io.vepo.stomp4j.protocol.transport;
 
-import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.net.Socket;
 import java.net.URI;
@@ -11,7 +10,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
