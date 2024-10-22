@@ -1,4 +1,4 @@
-package io.vepo.stomp4j;
+package dev.vepo.stomp4j;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -21,11 +21,11 @@ import org.slf4j.LoggerFactory;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import io.vepo.stomp4j.infra.StompActiveMqContainer;
-import io.vepo.stomp4j.protocol.Stomp;
-import io.vepo.stomp4j.protocol.v1_0.Stomp1_0;
-import io.vepo.stomp4j.protocol.v1_1.Stomp1_1;
-import io.vepo.stomp4j.protocol.v1_2.Stomp1_2;
+import dev.vepo.stomp4j.infra.StompActiveMqContainer;
+import dev.vepo.stomp4j.protocol.Stomp;
+import dev.vepo.stomp4j.protocol.v1_0.Stomp1_0;
+import dev.vepo.stomp4j.protocol.v1_1.Stomp1_1;
+import dev.vepo.stomp4j.protocol.v1_2.Stomp1_2;
 import jakarta.jms.Connection;
 import jakarta.jms.DeliveryMode;
 import jakarta.jms.JMSException;

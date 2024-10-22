@@ -1,4 +1,4 @@
-package io.vepo.stomp4j;
+package dev.vepo.stomp4j;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -24,14 +24,14 @@ import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.vepo.stomp4j.exceptions.StompException;
-import io.vepo.stomp4j.protocol.Header;
-import io.vepo.stomp4j.protocol.Message;
-import io.vepo.stomp4j.protocol.Stomp;
-import io.vepo.stomp4j.protocol.Transport;
-import io.vepo.stomp4j.protocol.TransportListener;
-import io.vepo.stomp4j.protocol.transport.TcpTransport;
-import io.vepo.stomp4j.protocol.transport.WebSocketTransport;
+import dev.vepo.stomp4j.exceptions.StompException;
+import dev.vepo.stomp4j.protocol.Header;
+import dev.vepo.stomp4j.protocol.Message;
+import dev.vepo.stomp4j.protocol.Stomp;
+import dev.vepo.stomp4j.protocol.Transport;
+import dev.vepo.stomp4j.protocol.TransportListener;
+import dev.vepo.stomp4j.protocol.transport.TcpTransport;
+import dev.vepo.stomp4j.protocol.transport.WebSocketTransport;
 
 public final class StompClient implements AutoCloseable, TransportListener {
 

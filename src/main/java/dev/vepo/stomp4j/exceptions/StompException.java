@@ -1,4 +1,4 @@
-package io.vepo.stomp4j.exceptions;
+package dev.vepo.stomp4j.exceptions;
 
 public class StompException extends RuntimeException {
 

@@ -1,4 +1,4 @@
-package io.vepo.stomp4j.protocol;
+package dev.vepo.stomp4j.protocol;
 
 import java.io.Closeable;
 import java.net.URI;
@@ -6,7 +6,6 @@ import java.util.ServiceLoader;
 
 public interface Transport extends Closeable {
 
-    @SuppressWarnings("resource")
     static Transport create(URI uri, TransportListener listener) {
         return ServiceLoader.load(TransportProvider.class)
                             .stream()

@@ -1,4 +1,4 @@
-package io.vepo.stomp4j.protocol;
+package dev.vepo.stomp4j.protocol;
 
 public interface TransportListener {
     void onConnected(Transport transport);

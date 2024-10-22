@@ -1,4 +1,4 @@
-package io.vepo.stomp4j;
+package dev.vepo.stomp4j;
 
 @FunctionalInterface
 public interface Callback {

@@ -1,10 +1,10 @@
-package io.vepo.stomp4j.protocol.transport;
+package dev.vepo.stomp4j.protocol.transport;
 
 import java.net.URI;
 
-import io.vepo.stomp4j.protocol.TransportListener;
-import io.vepo.stomp4j.protocol.Transport;
-import io.vepo.stomp4j.protocol.TransportProvider;
+import dev.vepo.stomp4j.protocol.TransportListener;
+import dev.vepo.stomp4j.protocol.Transport;
+import dev.vepo.stomp4j.protocol.TransportProvider;
 
 public class WebSocketTransportProvider implements TransportProvider {
     @Override

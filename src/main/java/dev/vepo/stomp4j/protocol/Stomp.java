@@ -1,4 +1,4 @@
-package io.vepo.stomp4j.protocol;
+package dev.vepo.stomp4j.protocol;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -6,12 +6,12 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import io.vepo.stomp4j.Subscription;
-import io.vepo.stomp4j.UserCredential;
-//import io.vepo.stomp4j.port.WebSocketPort;
-import io.vepo.stomp4j.protocol.v1_0.Stomp1_0;
-import io.vepo.stomp4j.protocol.v1_1.Stomp1_1;
-import io.vepo.stomp4j.protocol.v1_2.Stomp1_2;
+import dev.vepo.stomp4j.Subscription;
+import dev.vepo.stomp4j.UserCredential;
+//import dev.vepo.stomp4j.port.WebSocketPort;
+import dev.vepo.stomp4j.protocol.v1_0.Stomp1_0;
+import dev.vepo.stomp4j.protocol.v1_1.Stomp1_1;
+import dev.vepo.stomp4j.protocol.v1_2.Stomp1_2;
 
 public abstract class Stomp {
 
@@ -39,8 +39,7 @@ public abstract class Stomp {
                                                                              expectedHeartbeatFrequency.toMillis()));
 
         if (Objects.nonNull(credentials)) {
-            builder.header(Header.LOGIN, credentials.username())
-                   .header(Header.PASSCODE, credentials.password());
+            credentials.apply(builder);
         }
 
         return builder.build();

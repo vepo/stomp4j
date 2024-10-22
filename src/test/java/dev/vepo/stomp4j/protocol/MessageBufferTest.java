@@ -1,4 +1,4 @@
-package io.vepo.stomp4j.protocol;
+package dev.vepo.stomp4j.protocol;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;

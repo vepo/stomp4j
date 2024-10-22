@@ -1,8 +1,7 @@
-package io.vepo.stomp4j.protocol.transport;
+package dev.vepo.stomp4j.protocol.transport;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
@@ -14,10 +13,10 @@ import java.util.concurrent.CompletionStage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.vepo.stomp4j.ClientKey;
-import io.vepo.stomp4j.protocol.Message;
-import io.vepo.stomp4j.protocol.TransportListener;
-import io.vepo.stomp4j.protocol.Transport;
+import dev.vepo.stomp4j.ClientKey;
+import dev.vepo.stomp4j.protocol.Message;
+import dev.vepo.stomp4j.protocol.Transport;
+import dev.vepo.stomp4j.protocol.TransportListener;
 
 public class WebSocketTransport implements Transport {
     private static final Logger logger = LoggerFactory.getLogger(WebSocketTransport.class);

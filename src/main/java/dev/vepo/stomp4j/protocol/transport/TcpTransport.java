@@ -1,4 +1,4 @@
-package io.vepo.stomp4j.protocol.transport;
+package dev.vepo.stomp4j.protocol.transport;
 
 import java.io.IOException;
 import java.net.Socket;
@@ -14,9 +14,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.vepo.stomp4j.protocol.MessageBuffer;
-import io.vepo.stomp4j.protocol.Transport;
-import io.vepo.stomp4j.protocol.TransportListener;
+import dev.vepo.stomp4j.protocol.MessageBuffer;
+import dev.vepo.stomp4j.protocol.Transport;
+import dev.vepo.stomp4j.protocol.TransportListener;
 
 public class TcpTransport implements Transport {
     private static final Logger logger = LoggerFactory.getLogger(TcpTransport.class);

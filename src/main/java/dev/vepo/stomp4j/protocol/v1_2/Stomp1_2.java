@@ -1,17 +1,17 @@
-package io.vepo.stomp4j.protocol.v1_2;
+package dev.vepo.stomp4j.protocol.v1_2;
 
 import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.vepo.stomp4j.Subscription;
-import io.vepo.stomp4j.protocol.Command;
-import io.vepo.stomp4j.protocol.Header;
-import io.vepo.stomp4j.protocol.Message;
-import io.vepo.stomp4j.protocol.MessageBuilder;
-import io.vepo.stomp4j.protocol.Stomp;
-import io.vepo.stomp4j.protocol.Transport;
+import dev.vepo.stomp4j.Subscription;
+import dev.vepo.stomp4j.protocol.Command;
+import dev.vepo.stomp4j.protocol.Header;
+import dev.vepo.stomp4j.protocol.Message;
+import dev.vepo.stomp4j.protocol.MessageBuilder;
+import dev.vepo.stomp4j.protocol.Stomp;
+import dev.vepo.stomp4j.protocol.Transport;
 
 public class Stomp1_2 extends Stomp {
     private static Logger logger = LoggerFactory.getLogger(Stomp1_2.class);

@@ -1,4 +1,4 @@
-package io.vepo.stomp4j.protocol;
+package dev.vepo.stomp4j.protocol;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

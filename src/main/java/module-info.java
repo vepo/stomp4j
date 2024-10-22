@@ -6,11 +6,11 @@ module stomp4j {
     requires org.slf4j;
     requires org.apache.commons.codec;
 
-    exports io.vepo.stomp4j;
-    exports io.vepo.stomp4j.protocol;
+    exports dev.vepo.stomp4j;
+    exports dev.vepo.stomp4j.protocol;
 
-    provides io.vepo.stomp4j.protocol.TransportProvider with io.vepo.stomp4j.protocol.transport.TcpTransportProvider,
-            io.vepo.stomp4j.protocol.transport.WebSocketTransportProvider;
+    provides dev.vepo.stomp4j.protocol.TransportProvider with dev.vepo.stomp4j.protocol.transport.TcpTransportProvider,
+            dev.vepo.stomp4j.protocol.transport.WebSocketTransportProvider;
 
-    uses io.vepo.stomp4j.protocol.TransportProvider;
+    uses dev.vepo.stomp4j.protocol.TransportProvider;
 }
