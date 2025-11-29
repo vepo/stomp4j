@@ -1,4 +1,4 @@
-package dev.vepo.stomp4j;
+package dev.vepo.stomp4j.tests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
@@ -14,52 +14,50 @@ import org.awaitility.Durations;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
-import dev.vepo.stomp4j.infra.StompActiveMqContainer;
+import dev.vepo.stomp4j.StompClient;
+import dev.vepo.stomp4j.UserCredential;
 import dev.vepo.stomp4j.protocol.Stomp;
 import dev.vepo.stomp4j.protocol.v1_0.Stomp1_0;
 import dev.vepo.stomp4j.protocol.v1_1.Stomp1_1;
 import dev.vepo.stomp4j.protocol.v1_2.Stomp1_2;
+import dev.vepo.stomp4j.tests.infra.StompActiveMqContainer;
+import dev.vepo.stomp4j.tests.infra.StompContainer;
 import jakarta.jms.Connection;
 import jakarta.jms.DeliveryMode;
 import jakarta.jms.JMSException;
 import jakarta.jms.Session;
 import jakarta.jms.Topic;
 
-@Testcontainers
-public class StompClientTcpTest {
+@ExtendWith(StompContainer.class)
+class StompClientTcpTest {
 
     private static final Logger logger = LoggerFactory.getLogger(StompClientTcpTest.class);
 
-    @Container
-    private static StompActiveMqContainer stomp = new StompActiveMqContainer();
-
     private static Stream<Arguments> allVersions() {
         return Stream.of(Arguments.of(new Stomp1_0()),
-                         Arguments.of(new Stomp1_1()),
-                         Arguments.of(new Stomp1_2()));
+                Arguments.of(new Stomp1_1()),
+                Arguments.of(new Stomp1_2()));
     }
 
     private static Stream<Arguments> allHeartbeatVersions() {
         return Stream.of(Arguments.of(new Stomp1_1()),
-                         Arguments.of(new Stomp1_2()));
+                Arguments.of(new Stomp1_2()));
     }
 
     private String topicName;
     private Connection connection;
     private Session session;
-
     private Topic topic;
 
     @BeforeEach
-    void setup() throws JMSException {
+    void setup(StompActiveMqContainer stomp) throws JMSException {
         var connectionFactory = new ActiveMQConnectionFactory(stomp.clientUrl());
         connection = connectionFactory.createConnection(stomp.username(), stomp.password());
         // topic
@@ -88,15 +86,15 @@ public class StompClientTcpTest {
     @ParameterizedTest
     @MethodSource("allHeartbeatVersions")
     @Timeout(value = 90, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    void heartbeatTest(Stomp version) {
+    void heartbeatTest(Stomp version, StompActiveMqContainer stomp) {
         try (StompClient client = new StompClient(stomp.tcpUrl(),
-                                                  new UserCredential(stomp.username(), stomp.password()),
-                                                  Set.of(version))) {
+                new UserCredential(stomp.username(), stomp.password()),
+                Set.of(version))) {
             var messageList = new ArrayList<String>();
             client.connect();
             await().timeout(Durations.TWO_MINUTES)
-                   .pollDelay(Durations.ONE_MINUTE)
-                   .until(() -> true);
+                    .pollDelay(Durations.ONE_MINUTE)
+                    .until(() -> true);
             client.subscribe(topicName, message -> {
                 messageList.add(message);
             });
@@ -112,8 +110,8 @@ public class StompClientTcpTest {
             sendMessage("message-10");
             await().until(() -> messageList.size() == 10);
             assertThat(messageList).containsExactly("message-01", "message-02", "message-03", "message-04",
-                                                    "message-05", "message-06", "message-07", "message-08",
-                                                    "message-09", "message-10");
+                    "message-05", "message-06", "message-07", "message-08",
+                    "message-09", "message-10");
             client.unsubscribe(topicName);
             sendMessage("message-11");
             await().pollDelay(Durations.ONE_SECOND).until(() -> true);
@@ -128,10 +126,10 @@ public class StompClientTcpTest {
     @ParameterizedTest
     @MethodSource("allVersions")
     @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    void subscribeTest(Stomp version) {
+    void subscribeTest(Stomp version, StompActiveMqContainer stomp) {
         try (StompClient client = new StompClient(stomp.tcpUrl(),
-                                                  new UserCredential(stomp.username(), stomp.password()),
-                                                  Set.of(version))) {
+                new UserCredential(stomp.username(), stomp.password()),
+                Set.of(version))) {
             var messageList = new ArrayList<String>();
             client.connect();
             client.subscribe(topicName, message -> {
@@ -149,8 +147,8 @@ public class StompClientTcpTest {
             sendMessage("message-10");
             await().until(() -> messageList.size() == 10);
             assertThat(messageList).containsExactly("message-01", "message-02", "message-03", "message-04",
-                                                    "message-05", "message-06", "message-07", "message-08",
-                                                    "message-09", "message-10");
+                    "message-05", "message-06", "message-07", "message-08",
+                    "message-09", "message-10");
             client.unsubscribe(topicName);
             sendMessage("message-11");
             await().pollDelay(Durations.ONE_SECOND).until(() -> true);

@@ -8,6 +8,9 @@ module stomp4j {
 
     exports dev.vepo.stomp4j;
     exports dev.vepo.stomp4j.protocol;
+    exports dev.vepo.stomp4j.protocol.v1_0;
+    exports dev.vepo.stomp4j.protocol.v1_1;
+    exports dev.vepo.stomp4j.protocol.v1_2;
 
     provides dev.vepo.stomp4j.protocol.TransportProvider with dev.vepo.stomp4j.protocol.transport.TcpTransportProvider,
             dev.vepo.stomp4j.protocol.transport.WebSocketTransportProvider;

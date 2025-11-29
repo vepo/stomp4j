@@ -1,4 +1,4 @@
-package dev.vepo.stomp4j.infra;
+package dev.vepo.stomp4j.tests.infra;
 
 import java.time.Duration;
 

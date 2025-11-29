@@ -1,4 +1,4 @@
-package dev.vepo.stomp4j.protocol;
+package dev.vepo.stomp4j.tests.protocol;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -8,6 +8,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.stream.IntStream;
 
 import org.junit.jupiter.api.Test;
+
+import dev.vepo.stomp4j.protocol.Command;
+import dev.vepo.stomp4j.protocol.Header;
+import dev.vepo.stomp4j.protocol.MessageBuffer;
 
 public class MessageBufferTest {
 
