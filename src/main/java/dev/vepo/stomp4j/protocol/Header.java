@@ -14,7 +14,8 @@ public enum Header {
     SESSION("session"),
     VERSION("version"),
     CONTENT_TYPE("content-type"),
-    SUBSCRIPTION("subscription");
+    SUBSCRIPTION("subscription"), 
+    CONTENT_LENGTH("content-length");
 
     private final String value;
 

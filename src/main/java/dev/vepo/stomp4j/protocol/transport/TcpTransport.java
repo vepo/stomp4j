@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import dev.vepo.stomp4j.protocol.Message;
 import dev.vepo.stomp4j.protocol.MessageBuffer;
 import dev.vepo.stomp4j.protocol.Transport;
 import dev.vepo.stomp4j.protocol.TransportListener;
@@ -45,7 +46,10 @@ public class TcpTransport implements Transport {
 
     @Override
     public void send(String message) {
-        logger.info("Sending message: {}", message);
+        logger.atDebug()
+              .addArgument(() -> Message.formatted(message))
+              .log("Sending message: {}");
+
         try {
             var os = socket.getOutputStream();
             os.write(message.getBytes());

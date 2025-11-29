@@ -58,6 +58,8 @@ public abstract class Stomp {
 
     public abstract void subscribe(Subscription subscription, Optional<String> session, Transport transport);
 
+    public abstract void send(String destination, String content, String contentType, Optional<String> session, Transport transport);
+
     public String heartBeatMessage() {
         return Message.NEW_LINE;
     }

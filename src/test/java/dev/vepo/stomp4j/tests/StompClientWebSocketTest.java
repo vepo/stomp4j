@@ -2,18 +2,22 @@ package dev.vepo.stomp4j.tests;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assertions.fail;
 
+import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Executors;
 import java.util.stream.Stream;
 
 import org.apache.activemq.ActiveMQConnectionFactory;
 import org.awaitility.Durations;
-import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -44,8 +48,8 @@ class StompClientWebSocketTest {
     
     private static Stream<Arguments> allVersions() {
         return Stream.of(Arguments.of(new Stomp1_0()),
-                Arguments.of(new Stomp1_1()),
-                Arguments.of(new Stomp1_2()));
+                         Arguments.of(new Stomp1_1()),
+                         Arguments.of(new Stomp1_2()));
     }
 
     private String topicName;
@@ -70,6 +74,24 @@ class StompClientWebSocketTest {
         try (var producer = session.createProducer(topic)) {
             producer.setDeliveryMode(DeliveryMode.PERSISTENT);
             producer.send(session.createTextMessage(content));
+        }
+    }
+
+    Optional<String> receiveMessage(String content, Duration timeout) {
+        try (var consumer = session.createConsumer(topic)) {
+            long startTime = System.nanoTime();
+            while (System.nanoTime() - startTime < timeout.toNanos()) {
+                logger.info("Trying to read message...");
+                var message = consumer.receive(timeout.toMillis());
+                logger.info("Message received: {}", message);
+                if (Objects.nonNull(message) && message.isBodyAssignableTo(byte[].class)) {
+                    return Optional.ofNullable(new String(message.getBody(byte[].class)));
+                }
+            }
+            return Optional.empty();
+        } catch (JMSException e) {
+            fail("Error sending message", e);
+            return Optional.empty();
         }
     }
 
@@ -114,6 +136,30 @@ class StompClientWebSocketTest {
             assertThat(messageList).size().isEqualTo(10);
             sendMessage("message-13");
             assertThat(messageList).size().isEqualTo(10);
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("allVersions")
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    @DisplayName("Sending message with {0}")
+    void sendMessageTest(Stomp version, StompActiveMqContainer stomp) {
+        try (var pool = Executors.newSingleThreadExecutor();
+             var client = new StompClient(stomp.webSocketUrl(), new UserCredential(stomp.username(), stomp.password()), TransportType.WEB_SOCKET, Set.of(version))) {
+            client.connect();
+            // Queue is not durable. Start received first!
+            pool.submit(() ->{
+                try {
+                    Thread.sleep(Duration.ofMillis(100));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                client.sendPlain(topicName, "hello queue", "text/plain");
+            });
+            var message = receiveMessage(topicName, Duration.ofSeconds(15));
+            assertThat(message).as("Verifying message for %s".formatted(version))
+                               .isNotEmpty()
+                               .hasValue("hello queue");
         }
     }
 }

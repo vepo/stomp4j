@@ -35,7 +35,9 @@ public class WebSocketTransport implements Transport {
 
     @Override
     public void send(String message) {
-        logger.info("Sending message: {}", message);
+        logger.atDebug()
+              .addArgument(() -> Message.formatted(message))
+              .log("Sending message: {}");
         webSocketClient.sendText(message, true);
         webSocketClient.request(1);
     }

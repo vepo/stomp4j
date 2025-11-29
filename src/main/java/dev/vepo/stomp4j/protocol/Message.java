@@ -45,4 +45,8 @@ public record Message(Command command, Headers headers, String payload) {
             return new Message(Command.valueOf(command), stompHeaders, body.replace(Message.END, ""));
     }
 
+
+    public static String formatted(String message) {
+        return message.replace(Message.END, "^@");
+    }
 }
