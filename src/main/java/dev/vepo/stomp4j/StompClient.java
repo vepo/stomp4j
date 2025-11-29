@@ -208,6 +208,10 @@ public final class StompClient implements AutoCloseable, TransportListener {
         return subscription;
     }
 
+    public void sendPlain(String destination, String content, String contentType) {
+        this.selectedProtocol.get().send(destination, content, contentType, this.session, this.transport);
+    }
+
     @Override
     public void close() {
         logger.info("Stoping Stomp client");

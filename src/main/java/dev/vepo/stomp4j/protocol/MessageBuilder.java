@@ -1,15 +1,19 @@
 package dev.vepo.stomp4j.protocol;
 
-import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeMap;
 
 public class MessageBuilder {
     private final Command command;
-    private HashMap<Header, String> headers;
+    private Map<Header, String> headers;
+    private String body;
 
     public MessageBuilder(Command command) {
         this.command = command;
-        this.headers = new HashMap<>();
+        this.headers = new TreeMap<>();
+        this.body = null;
     }
 
     public static MessageBuilder builder(Command command) {
@@ -18,6 +22,11 @@ public class MessageBuilder {
 
     public MessageBuilder header(Header key, String value) {
         this.headers.put(key, value);
+        return this;
+    }
+
+    public MessageBuilder body(String body) {
+        this.body = body;
         return this;
     }
 
@@ -34,8 +43,12 @@ public class MessageBuilder {
                                                .append(Message.DELIMITER)
                                                .append(value)
                                                .append(Message.NEW_LINE));
-        return builder.append(Message.NEW_LINE)
-                      .append(Message.END)
+        builder.append(Message.NEW_LINE);
+        if (Objects.nonNull(body)) {
+            builder.append(body);
+        }
+            
+        return builder.append(Message.END)
                       .toString();
     }
 

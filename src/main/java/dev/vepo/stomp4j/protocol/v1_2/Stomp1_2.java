@@ -56,10 +56,25 @@ public class Stomp1_2 extends Stomp {
     }
 
     @Override
+    public void send(String destination, String content, String contentType, Optional<String> session, Transport transport) {
+        transport.send(MessageBuilder.builder(Command.SEND)
+                                     .header(Header.DESTINATION, destination)
+                                     .header(Header.CONTENT_TYPE, contentType)
+                                     .header(Header.CONTENT_LENGTH, Integer.toString(content.length()))
+                                     .headerIfPresent(Header.SESSION, session)
+                                     .body(content)
+                                     .build());
+    }
+
+    @Override
     public void unsubscribe(Subscription subscription, Transport transport) {
         transport.send(MessageBuilder.builder(Command.UNSUBSCRIBE)
                                      .header(Header.ID, Integer.toString(subscription.id()))
                                      .build());
     }
 
+    @Override
+    public String toString() {
+        return "Stomp 1.2 Implementation";
+    }
 }

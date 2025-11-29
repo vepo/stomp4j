@@ -6,7 +6,7 @@
 
     <groupId>dev.vepo</groupId>
     <artifactId>stomp4j</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>1.0.0-SNAPSHOT</version>
 
     <properties>
         <maven.compiler.source>21</maven.compiler.source>
@@ -21,7 +21,7 @@
         <version.junit>6.0.1</version.junit>
     </properties>
 
-    <name>Stomp4j</name>
+    <name>Stomp4J</name>
     <description>Java Library for Stomp protocol https://stomp.github.io/</description>
     <url>https://github.com/vepo/stomp4j</url>
 
