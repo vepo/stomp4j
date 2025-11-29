@@ -21,7 +21,7 @@
         <version.junit>6.0.1</version.junit>
     </properties>
 
-    <name>Stomp4j</name>
+    <name>Stomp4J</name>
     <description>Java Library for Stomp protocol https://stomp.github.io/</description>
     <url>https://github.com/vepo/stomp4j</url>
 
