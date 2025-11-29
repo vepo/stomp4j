@@ -29,4 +29,4 @@ This library can support all Stomp versions, but it was not test in others than 
 
 1. [X] Topic/Queue subscription
 2. [X] Topic/Queue unsubscription
-3. [ ] Send messages
+3. [X] Send messages
