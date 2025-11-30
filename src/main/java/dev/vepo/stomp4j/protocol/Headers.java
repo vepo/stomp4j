@@ -8,7 +8,11 @@ import java.util.Optional;
  * A simple class to represent the STOMP headers.
  */
 public class Headers {
-    private final Map<String, String> headers = new HashMap<>();
+    private final Map<String, String> headers;
+
+    public Headers() {
+        headers = new HashMap<>();
+    }
 
     public void add(String key, String value) {
         headers.put(key, value);
@@ -27,11 +31,6 @@ public class Headers {
         return Optional.of(destination);
     }
 
-    @Override
-    public String toString() {
-        return String.format("StompHeaders{headers=%s}", headers);
-    }
-
     public String version() {
         return headers.getOrDefault("version", "1.0");
     }
@@ -42,5 +41,10 @@ public class Headers {
 
     public Optional<String> get(Header header) {
         return get(header.value());
+    }
+
+    @Override
+    public String toString() {
+        return String.format("StompHeaders{headers=%s}", headers);
     }
 }

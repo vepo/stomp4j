@@ -16,4 +16,5 @@ module stomp4j {
             dev.vepo.stomp4j.protocol.transport.WebSocketTransportProvider;
 
     uses dev.vepo.stomp4j.protocol.TransportProvider;
+    uses dev.vepo.stomp4j.protocol.Stomp;
 }

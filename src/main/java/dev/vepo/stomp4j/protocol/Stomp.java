@@ -3,21 +3,19 @@ package dev.vepo.stomp4j.protocol;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import dev.vepo.stomp4j.Subscription;
 import dev.vepo.stomp4j.UserCredential;
-//import dev.vepo.stomp4j.port.WebSocketPort;
-import dev.vepo.stomp4j.protocol.v1_0.Stomp1_0;
-import dev.vepo.stomp4j.protocol.v1_1.Stomp1_1;
-import dev.vepo.stomp4j.protocol.v1_2.Stomp1_2;
 
 public abstract class Stomp {
 
-    public static final Set<Stomp> ALL_VERSIONS = Set.of(new Stomp1_0(),
-                                                         new Stomp1_1(),
-                                                         new Stomp1_2());
+    public static final Set<Stomp> ALL_VERSIONS = ServiceLoader.load(Stomp.class)
+                                                               .stream()
+                                                               .map(provider -> provider.get())
+                                                               .collect(Collectors.toSet());
 
     public static String acceptedVersions(Set<Stomp> versions) {
         return versions.stream()

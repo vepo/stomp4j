@@ -13,7 +13,7 @@ import dev.vepo.stomp4j.protocol.Command;
 import dev.vepo.stomp4j.protocol.Header;
 import dev.vepo.stomp4j.protocol.MessageBuffer;
 
-public class MessageBufferTest {
+class MessageBufferTest {
 
     @Test
     void noPayloadMessageTest() {

@@ -35,7 +35,7 @@ import dev.vepo.stomp4j.protocol.transport.WebSocketTransport;
 
 public final class StompClient implements AutoCloseable, TransportListener {
 
-    private final static Logger logger = LoggerFactory.getLogger(StompClient.class);
+    private static final Logger logger = LoggerFactory.getLogger(StompClient.class);
 
     private final CountDownLatch connectedLatch;
     private final Object lock = new Object();
@@ -83,8 +83,7 @@ public final class StompClient implements AutoCloseable, TransportListener {
                     case WEB_SOCKET -> new WebSocketTransport(new URI(url), this);
                     case TCP -> new TcpTransport(new URI(url), this);
                 };
-            }
-            ;
+            }            
             this.session = Optional.empty();
             this.credentials = credentials;
             this.heartBeatService = Executors.newSingleThreadScheduledExecutor();
@@ -92,8 +91,7 @@ public final class StompClient implements AutoCloseable, TransportListener {
             this.connectedLatch = new CountDownLatch(1);
             this.subscriptIdSequence = new AtomicInteger(0);
         } catch (URISyntaxException e) {
-            logger.error("Invalid URL!", e);
-            throw new StompException("Error creating StompClient", e);
+            throw new IllegalArgumentException("Invalid URL: " + url, e);
         }
     }
 
@@ -156,7 +154,7 @@ public final class StompClient implements AutoCloseable, TransportListener {
         } else {
             subscription = findPollingSubscription(message.headers().get(Header.SUBSCRIPTION),
                                                    message.headers().get(Header.DESTINATION));
-            if (subscription.isEmpty()) {
+            if (!subscription.isEmpty()) {
                 receivedMessages.computeIfAbsent(subscription.get(), k -> new LinkedList<>())
                                 .add(message);
             } else {

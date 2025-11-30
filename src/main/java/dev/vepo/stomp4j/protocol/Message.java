@@ -2,9 +2,9 @@ package dev.vepo.stomp4j.protocol;
 
 public record Message(Command command, Headers headers, String payload) {
 
-    final static String DELIMITER = ":";
-    final static String END = "\u0000";
-    final static String NEW_LINE = "\n";
+    static final String DELIMITER = ":";
+    static final String END = "\u0000";
+    static final String NEW_LINE = "\n";
 
     public Message(Command command, Headers headers) {
         this(command, headers, "");
@@ -18,7 +18,7 @@ public record Message(Command command, Headers headers, String payload) {
 
         String command = splitMessage[0];
         Headers stompHeaders = new Headers();
-        String body = "";
+        StringBuilder body = new StringBuilder();
 
         int cursor = 1;
         for (int i = cursor; i < splitMessage.length; i++) {
@@ -36,13 +36,13 @@ public record Message(Command command, Headers headers, String payload) {
         }
 
         for (int i = cursor + 1; i < splitMessage.length; i++) {
-            body += splitMessage[i];
+            body.append(splitMessage[i]);
         }
 
         if (body.isEmpty())
             return new Message(Command.valueOf(command), stompHeaders);
         else
-            return new Message(Command.valueOf(command), stompHeaders, body.replace(Message.END, ""));
+            return new Message(Command.valueOf(command), stompHeaders, body.toString().replace(Message.END, ""));
     }
 
 
