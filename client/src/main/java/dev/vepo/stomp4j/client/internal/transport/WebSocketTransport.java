@@ -6,7 +6,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
 import java.nio.channels.Channels;
+import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.concurrent.CompletionStage;
 
@@ -101,10 +103,25 @@ public class WebSocketTransport implements Transport {
 
                       @Override
                       public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
-                          logger.info("Text data received! last={}", last);
-                          // listener.messageReceived(data.toString());
+                          logger.info("Binary data received! last={}", last);
+                          try {
+                               byteChannel.write(StandardCharsets.UTF_8.encode(CharBuffer.wrap(data)));
+                          } catch (IOException e) {
+                              throw new RuntimeException(e);
+                          }
+                          var value = ByteBuffer.wrap(byteArrayOutputStream.toByteArray());
+                          byteArrayOutputStream.reset();
+                          buffer.append(new String(value.array()));
+
+                          if (last) {
+                              listener.onMessage(Message.readMessage(buffer.toString()));
+                              buffer.setLength(0);
+                          } else {
+                              logger.info("Data until now: {}", buffer.toString());
+                          }
                           webSocket.request(1);
                           return null;
+
                       }
 
                       @Override

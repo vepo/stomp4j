@@ -16,6 +16,11 @@
 
     <dependencies>
         <dependency>
+            <groupId>io.vertx</groupId>
+            <artifactId>vertx-web</artifactId>
+            <version>5.0.5</version>
+        </dependency>
+        <dependency>
             <groupId>dev.vepo</groupId>
             <artifactId>stomp4j-commons</artifactId>
             <version>${project.version}</version>

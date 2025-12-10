@@ -20,6 +20,7 @@ public class StompServer implements AutoCloseable {
         private Set<TransportChannel> channels;
         private StompAuthenticator authenticator;
         private MessageHandler messageHandler;
+        private SubscriptionHandler subscriptionHandler;
 
         private Builder() {
             this.channels = new HashSet<>();
@@ -42,6 +43,11 @@ public class StompServer implements AutoCloseable {
             return this;
         }
 
+        public Builder subscription(SubscriptionHandler subscriptionHandler) {
+            this.subscriptionHandler = subscriptionHandler;
+            return this;
+        }
+
         public StompServer start() {
             var server = new StompServer(this);
             server.start();
@@ -53,7 +59,12 @@ public class StompServer implements AutoCloseable {
 
         @Override
         public void messageReceived(Message message) {
-            StompServer.this.messageHandler.process(message.headers().destination().orElse(""), message.body(), null);
+            messageHandler.process(message.headers().destination().orElse(""), message.body(), null);
+        }
+
+        @Override
+        public boolean subscriptionRequested(String topic) {
+            return subscriptionHandler.accept(topic);
         }
     }
 
@@ -79,6 +90,7 @@ public class StompServer implements AutoCloseable {
     private final AtomicBoolean running;
     private List<Channel> activeChannels;
     private MessageHandler messageHandler;
+    private SubscriptionHandler subscriptionHandler;
     private final ChannelListener listener;
     private final OutboundChannel outboundChannel;
 
@@ -98,6 +110,7 @@ public class StompServer implements AutoCloseable {
         this.running = new AtomicBoolean(false);
         this.activeChannels = null;
         this.messageHandler = builder.messageHandler;
+        this.subscriptionHandler = builder.subscriptionHandler;
         this.listener = new ServerChannelListener();
         this.outboundChannel = new AllChannelsOutbound();
     }
@@ -109,6 +122,16 @@ public class StompServer implements AutoCloseable {
 
     public StompServer withAuthenticator(StompAuthenticator authenticator) {
         this.authenticator = authenticator;
+        return this;
+    }
+
+    public StompServer withMessage(MessageHandler messageHandler) {
+        this.messageHandler = messageHandler;
+        return this;
+    }
+
+    public StompServer withSubscription(SubscriptionHandler subscriptionHandler) {
+        this.subscriptionHandler = subscriptionHandler;
         return this;
     }
 

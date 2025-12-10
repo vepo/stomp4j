@@ -47,9 +47,8 @@ public class TcpChannel implements Channel {
         public void send(Message message) {
             try {
                 this.channel.write(ByteBuffer.wrap(message.encode().getBytes()));
-            } catch (IOException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
+            } catch (IOException ex) {
+                logger.error("Error sending message: %s".formatted(message), ex);
             }
         }
 
@@ -65,6 +64,7 @@ public class TcpChannel implements Channel {
     private final Set<Session> activeSessions;
     private final TcpExternalOutboundChannel outboundChannel;
     private Selector selector;
+    private ServerSocketChannel channel;
 
     public TcpChannel(int port, ChannelListener listener) {
         this.port = port;
@@ -75,30 +75,45 @@ public class TcpChannel implements Channel {
         this.outboundChannel = new TcpExternalOutboundChannel();
         this.activeSessions = Collections.newSetFromMap(new WeakHashMap<>());
         this.selector = null;
+        this.channel = null;
     }
 
     @Override
-    public void start() {
-        logger.info("Starting TCP Channel at port {}", port);
-        try {
-            this.selector = Selector.open();
-            ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
-            serverSocketChannel.configureBlocking(false);
-            serverSocketChannel.bind(new InetSocketAddress(port));
-            serverSocketChannel.register(selector, SelectionKey.OP_ACCEPT);
+    public synchronized void start() {
+        if (Objects.isNull(selector)) {
+            logger.info("Starting TCP Channel at port {}", port);
+            try {
+                this.selector = Selector.open();
+                this.channel = ServerSocketChannel.open();
+                channel.configureBlocking(false);
+                channel.bind(new InetSocketAddress(port));
+                channel.register(selector, SelectionKey.OP_ACCEPT);
 
-            this.running.set(true);
-            this.threadPool.submit(this::accept);
-        } catch (IOException e) {}
+                this.running.set(true);
+                this.threadPool.submit(this::accept);
+                logger.info("TCP Channel started! port={}", port);
+            } catch (IOException ex) {
+                logger.error("Could not start channel!!!", ex);
+            }
+        } else {
+            logger.warn("Channel already started");
+        }
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
         logger.info("Closing channel... port={}", port);
         this.running.set(false);
         try {
-            selector.close();
-            threadPool.close();
+            if (Objects.nonNull(selector)) {
+                selector.close();
+                selector = null;
+            }
+            if (Objects.nonNull(channel)) {
+                channel.close();
+                channel = null;
+            }
+            threadPool.shutdown();
             threadPool.awaitTermination(1, TimeUnit.SECONDS);
         } catch (InterruptedException ex) {
             logger.error("Thread killed!!!", ex);

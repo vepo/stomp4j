@@ -60,16 +60,20 @@ public class Session {
                         break;
                     case SUBSCRIBE:
                         logger.info("Subscribing: {}", message);
-                        this.subscriptions.add(new Subscription(message.headers().destination().orElse(""),
-                                                                message.headers().get(Header.ID).orElse("0")));
+                        var topic = message.headers().destination().orElse("");
+                        var id = message.headers().get(Header.ID).orElse("0");
+                        if (this.listener.subscriptionRequested(topic)) {
+                            this.subscriptions.add(new Subscription(topic, id));
+                        }
                         break;
                     default:
                         logger.warn("Command not implemented! {}", message);
                         break;
                 }
+                break;
             case END:
             default:
-                throw new IllegalStateException("State not implemented!");
+                throw new IllegalStateException("State not implemented! state=%s".formatted(status));
         }
     }
 
@@ -83,6 +87,7 @@ public class Session {
                                                                .destination()
                                                                .orElseThrow(() -> new IllegalStateException("'destination' is a required header for a SEND command! command=%s".formatted(message)))))
                                   .forEachOrdered(subscription -> {
+                                      logger.info("Sending message to channel! message={}", message);
                                       this.channel.send(MessageBuilder.builder(Command.MESSAGE)
                                                                       .header(Header.SUBSCRIPTION, subscription.id())
                                                                       .header(Header.MESSAGE_ID, message.headers().get(Header.MESSAGE_ID).orElse(""))
@@ -96,6 +101,11 @@ public class Session {
                 break;
         }
 
+    }
+
+    @Override
+    public String toString() {
+        return "Session[status=%s]".formatted(status);
     }
 
 }

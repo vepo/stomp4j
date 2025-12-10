@@ -6,4 +6,5 @@ public interface ChannelListener {
 
     void messageReceived(Message message);
 
+    boolean subscriptionRequested(String topic);
 }

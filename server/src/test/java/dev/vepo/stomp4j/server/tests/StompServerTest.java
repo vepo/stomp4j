@@ -4,10 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
 import java.util.LinkedList;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import dev.vepo.stomp4j.client.StompClient;
 import dev.vepo.stomp4j.commons.TransportType;
@@ -20,10 +22,11 @@ import dev.vepo.stomp4j.server.StompServer;
 class StompServerTest {
     private record ReceivedMessage(String topic, String message) {}
 
-    @Test
+    @ParameterizedTest
+    @ValueSource(strings = { "stomp://localhost:5500", "ws://localhost:5501" })
     @DisplayName("A server should be able to read a message from clients")
     @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    void receiveMessageTest() {
+    void receiveMessageTest(String url) {
         var receiveMessages = new LinkedList<ReceivedMessage>();
         try (var server = StompServer.builder()
                                      .channel(TransportType.TCP, 5500)
@@ -31,7 +34,7 @@ class StompServerTest {
                                      .authenticator(credentials -> true)
                                      .handler((topic, message, writer) -> receiveMessages.offer(new ReceivedMessage(topic, message)))
                                      .start();
-                var tcpClient = StompClient.create("stomp://localhost:5500")) {
+                var tcpClient = StompClient.create(url)) {
             tcpClient.connect();
             var subscription = tcpClient.subscribe("topic-1");
             assertThat(subscription.hasData()).isFalse();
@@ -42,19 +45,23 @@ class StompServerTest {
         }
     }
 
-    @Test
+    @ParameterizedTest
+    @ValueSource(strings = { "stomp://localhost:5500", "ws://localhost:5501" })
     @DisplayName("A server should be able to read a message from clients")
     @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    void sendMessageTest() {
+    void sendMessageTest(String url) {
+        var subscribed = new AtomicBoolean(false);
         try (var server = StompServer.builder()
-                                     .channel(TransportType.TCP, 5510)
-                                     .channel(TransportType.WEB_SOCKET, 5511)
+                                     .channel(TransportType.TCP, 5500)
+                                     .channel(TransportType.WEB_SOCKET, 5501)
                                      .authenticator(credentials -> true)
+                                     .subscription((topic) -> subscribed.compareAndSet(false, true))
                                      .start();
-                var tcpClient = StompClient.create("stomp://localhost:5510")) {
+                var tcpClient = StompClient.create(url)) {
             tcpClient.connect();
             var subscription = tcpClient.subscribe("topic-1");
             assertThat(subscription.hasData()).isFalse();
+            await().until(subscribed::get);
             server.outboundChannel()
                   .send(new Message(Command.SEND, Headers.builder().with(Header.DESTINATION, "topic-1").build(), "MESSAGE-1"));
             await().until(() -> subscription.hasData());

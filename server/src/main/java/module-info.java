@@ -3,6 +3,8 @@ module stomp4j.server {
     requires java.base;
     requires java.net.http;
     requires java.naming;
+    requires io.vertx.core;
+    requires io.vertx.web;
 
     requires org.slf4j;
     requires org.apache.commons.codec;
