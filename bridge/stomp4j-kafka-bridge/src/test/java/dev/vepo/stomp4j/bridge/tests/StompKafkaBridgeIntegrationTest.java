@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
+import java.io.IOException;
+import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
@@ -133,7 +135,11 @@ class StompKafkaBridgeIntegrationTest {
     }
 
     private int randomPort() {
-        return 16000 + (int) (Math.random() * 2000);
+        try (var socket = new ServerSocket(0)) {
+            return socket.getLocalPort();
+        } catch (IOException ex) {
+            throw new IllegalStateException("Unable to allocate ephemeral TCP port", ex);
+        }
     }
 
     private StompKafkaBridge startBridge(int tcpPort) {

@@ -532,6 +532,8 @@ public class StompClientImpl implements StompClient {
         this.selectedProtocol.get().unsubscribe(subscription, transport);
         this.consumers.remove(subscription);
         this.deliveryConsumers.remove(subscription);
+        this.polling.remove(subscription);
+        this.receivedMessages.remove(subscription);
         return this;
     }
 }
