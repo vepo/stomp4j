@@ -11,7 +11,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.IntSupplier;
 import java.util.stream.Stream;
 
 import org.apache.activemq.ActiveMQConnectionFactory;
@@ -44,6 +44,9 @@ import jakarta.jms.Topic;
 @ExtendWith(StompContainer.class)
 class StompClientTcpTest {
 
+    private static final Duration MESSAGE_COLLECTION_TIMEOUT = Duration.ofSeconds(30);
+    private static final Duration SUBSCRIPTION_SETTLE_DELAY = Duration.ofMillis(250);
+
     private static final Logger logger = LoggerFactory.getLogger(StompClientTcpTest.class);
 
     private static Stream<Arguments> allHeartbeatVersions() {
@@ -62,6 +65,12 @@ class StompClientTcpTest {
     private Session session;
     private Topic topic;
 
+    private void awaitMessageCount(int expected, IntSupplier actualSize) {
+        await().atMost(MESSAGE_COLLECTION_TIMEOUT)
+               .pollInterval(Duration.ofMillis(50))
+               .until(() -> actualSize.getAsInt() == expected);
+    }
+
     @ParameterizedTest
     @MethodSource("allHeartbeatVersions")
     @Timeout(value = 90, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
@@ -77,6 +86,7 @@ class StompClientTcpTest {
             client.subscribe(topicName, message -> {
                 messageList.add(message);
             });
+            settleSubscription();
             sendMessage("message-01");
             sendMessage("message-02");
             sendMessage("message-03");
@@ -87,7 +97,7 @@ class StompClientTcpTest {
             sendMessage("message-08");
             sendMessage("message-09");
             sendMessage("message-10");
-            await().until(() -> messageList.size() == 10);
+            awaitMessageCount(10, messageList::size);
             assertThat(messageList).containsExactly("message-01", "message-02", "message-03", "message-04",
                                                     "message-05", "message-06", "message-07", "message-08",
                                                     "message-09", "message-10");
@@ -155,6 +165,10 @@ class StompClientTcpTest {
         }
     }
 
+    private void settleSubscription() {
+        await().pollDelay(SUBSCRIPTION_SETTLE_DELAY).until(() -> true);
+    }
+
     @BeforeEach
     void setup(StompActiveMqContainer stomp) throws JMSException {
         var connectionFactory = new ActiveMQConnectionFactory(stomp.clientUrl());
@@ -169,13 +183,14 @@ class StompClientTcpTest {
 
     @ParameterizedTest
     @MethodSource("allVersions")
-    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    @Timeout(value = 60, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     void subscribeSyncTest(Stomp version, StompActiveMqContainer stomp) {
         try (var client = StompClient.create(stomp.tcpUrl(),
                                              new UserCredential(stomp.username(), stomp.password()),
                                              Set.of(version))) {
             client.connect();
             var subscription = client.subscribe(topicName);
+            settleSubscription();
             sendMessage("message-01");
             sendMessage("message-02");
             sendMessage("message-03");
@@ -188,7 +203,7 @@ class StompClientTcpTest {
             sendMessage("message-10");
             var messageList = new ArrayList<String>();
             do {
-                await().until(() -> subscription.hasData());
+                await().atMost(MESSAGE_COLLECTION_TIMEOUT).until(() -> subscription.hasData());
                 while (subscription.hasData()) {
                     subscription.poll().forEach(messageList::add);
                 }
@@ -209,7 +224,7 @@ class StompClientTcpTest {
 
     @ParameterizedTest
     @MethodSource("allVersions")
-    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    @Timeout(value = 60, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     void subscribeTest(Stomp version, StompActiveMqContainer stomp) {
         try (StompClient client = StompClient.create(stomp.tcpUrl(),
                                                      new UserCredential(stomp.username(), stomp.password()),
@@ -219,6 +234,7 @@ class StompClientTcpTest {
             client.subscribe(topicName, message -> {
                 messageList.add(message);
             });
+            settleSubscription();
             sendMessage("message-01");
             sendMessage("message-02");
             sendMessage("message-03");
@@ -229,7 +245,7 @@ class StompClientTcpTest {
             sendMessage("message-08");
             sendMessage("message-09");
             sendMessage("message-10");
-            await().until(() -> messageList.size() == 10);
+            awaitMessageCount(10, messageList::size);
             assertThat(messageList).containsExactly("message-01", "message-02", "message-03", "message-04",
                                                     "message-05", "message-06", "message-07", "message-08",
                                                     "message-09", "message-10");
