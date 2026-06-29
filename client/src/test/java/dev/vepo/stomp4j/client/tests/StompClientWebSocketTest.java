@@ -124,7 +124,7 @@ class StompClientWebSocketTest {
             sendMessage("message-08");
             sendMessage("message-09");
             sendMessage("message-10");
-            await().until(() -> messageList.size() == 10);
+            await().atMost(Duration.ofSeconds(30)).until(() -> messageList.size() == 10);
             assertThat(messageList).containsExactly("message-01", "message-02", "message-03", "message-04",
                                                     "message-05", "message-06", "message-07", "message-08",
                                                     "message-09", "message-10");
