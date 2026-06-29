@@ -13,6 +13,10 @@
     <artifactId>stomp4j-kafka-bridge-runner</artifactId>
     <name>Stomp4J :: Kafka Bridge Runner</name>
 
+    <properties>
+        <maven.javadoc.skip>true</maven.javadoc.skip>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>dev.vepo</groupId>

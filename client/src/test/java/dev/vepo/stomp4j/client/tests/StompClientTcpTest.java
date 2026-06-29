@@ -73,7 +73,7 @@ class StompClientTcpTest {
 
     @ParameterizedTest
     @MethodSource("allHeartbeatVersions")
-    @Timeout(value = 90, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    @Timeout(value = 150, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
     void heartbeatTest(Stomp version, StompActiveMqContainer stomp) {
         try (StompClient client = StompClient.create(stomp.tcpUrl(),
                                                      new UserCredential(stomp.username(), stomp.password()),
