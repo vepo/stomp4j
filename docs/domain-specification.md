@@ -47,6 +47,19 @@ STOMP protocol vocabulary and library-specific terms. Agents must align code and
 | **UserCredential** | Login/passcode (or env-derived) for `CONNECT` |
 | **Callback subscription** | `subscribe(destination, Consumer<String>)` — push delivery |
 | **Polling subscription** | `subscribe(destination)` then `hasData()` / `poll()` |
+| **AckMode** | `AUTO`, `CLIENT`, `CLIENT_INDIVIDUAL` — `ack` header on `SUBSCRIBE` |
+| **StompDelivery** | Inbound `MESSAGE` with `ack()` / `nack()` for manual acknowledgement |
+| **StompReceipt** | Correlates producer `SEND` with broker `RECEIPT` frame |
+| **SubscriberAckListener** | Server callback when a client ACKs/NACKs an outbound `MESSAGE` |
+
+### Spring Boot (optional)
+
+| Term | Meaning |
+|------|---------|
+| **StompListener** | Declarative consumer method (`destination`, `ackMode`) |
+| **Acknowledgment** | Spring-facing manual ack/nack for `@StompListener` methods |
+| **StompClientTemplate** | High-level client send API with lifecycle managed by Spring |
+| **StompOutboundTemplate** | Embedded server outbound push with optional subscriber ACK callbacks |
 
 ## Invariants
 

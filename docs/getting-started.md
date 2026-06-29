@@ -34,6 +34,10 @@ Check [GitHub Releases](https://github.com/vepo/stomp4j/releases) or [Maven Cent
 
 `stomp4j-commons` is pulled in automatically. You rarely need to declare it explicitly.
 
+### Spring Boot
+
+Optional starters and runnable samples (Spring Boot and plain Java) — see [spring-guide.md](spring-guide.md) and [samples/README.md](../samples/README.md).
+
 ## First STOMP client
 
 This example connects to a broker, subscribes with a callback, and blocks until the client is closed.

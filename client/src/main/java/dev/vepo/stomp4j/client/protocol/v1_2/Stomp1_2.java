@@ -5,6 +5,7 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import dev.vepo.stomp4j.client.AckMode;
 import dev.vepo.stomp4j.client.Subscription;
 import dev.vepo.stomp4j.client.protocol.Stomp;
 import dev.vepo.stomp4j.client.transport.Transport;
@@ -14,7 +15,7 @@ import dev.vepo.stomp4j.commons.protocol.Message;
 import dev.vepo.stomp4j.commons.protocol.MessageBuilder;
 
 public class Stomp1_2 extends Stomp {
-    private static Logger logger = LoggerFactory.getLogger(Stomp1_2.class);
+    private static final Logger logger = LoggerFactory.getLogger(Stomp1_2.class);
 
     @Override
     public String version() {
@@ -28,29 +29,32 @@ public class Stomp1_2 extends Stomp {
 
     @Override
     public void onMessage(Message message, Optional<String> session, Transport transport) {
-        logger.info("Handling message: {}", message);
-        switch (message.command()) {
-            case CONNECTED:
-                break;
-            case MESSAGE:
-                transport.send(MessageBuilder.builder(Command.ACK)
-                                             .headerIfPresent(Header.ID, message.headers().get(Header.MESSAGE_ID))
-                                             .build());
-                break;
-            case ERROR:
-                break;
-            default:
-                break;
-        }
+        logger.debug("Received protocol message: {}", message.command());
     }
 
     @Override
-    public void subscribe(Subscription subscription, Optional<String> session, Transport transport) {
-        transport.send(MessageBuilder.builder(Command.SUBSCRIBE)
-                                     .header(Header.ID, Integer.toString(subscription.id()))
-                                     .header(Header.DESTINATION, subscription.topic())
-                                     .header(Header.ACK, "client")
-                                     .headerIfPresent(Header.SESSION, session)
+    public void subscribe(Subscription subscription, Optional<String> session, Transport transport, AckMode ackMode) {
+        var builder = MessageBuilder.builder(Command.SUBSCRIBE)
+                                    .header(Header.ID, Integer.toString(subscription.id()))
+                                    .header(Header.DESTINATION, subscription.topic())
+                                    .headerIfPresent(Header.SESSION, session);
+        if (ackMode != AckMode.AUTO) {
+            builder.header(Header.ACK, ackMode.wireValue());
+        }
+        transport.send(builder.build());
+    }
+
+    @Override
+    public void acknowledge(Message message, Optional<String> session, Transport transport) {
+        transport.send(MessageBuilder.builder(Command.ACK)
+                                     .headerIfPresent(Header.ID, message.headers().get(Header.MESSAGE_ID))
+                                     .build());
+    }
+
+    @Override
+    public void negativeAcknowledge(Message message, Optional<String> session, Transport transport) {
+        transport.send(MessageBuilder.builder(Command.NACK)
+                                     .headerIfPresent(Header.ID, message.headers().get(Header.MESSAGE_ID))
                                      .build());
     }
 
@@ -63,6 +67,22 @@ public class Stomp1_2 extends Stomp {
                                      .headerIfPresent(Header.SESSION, session)
                                      .body(content)
                                      .build());
+    }
+
+    @Override
+    public void send(String destination,
+                     String content,
+                     String contentType,
+                     Optional<String> session,
+                     Transport transport,
+                     Optional<String> receiptId) {
+        var builder = MessageBuilder.builder(Command.SEND)
+                                    .header(Header.DESTINATION, destination)
+                                    .header(Header.CONTENT_TYPE, contentType)
+                                    .header(Header.CONTENT_LENGTH, Integer.toString(content.length()))
+                                    .headerIfPresent(Header.SESSION, session);
+        receiptId.ifPresent(id -> builder.header(Header.RECEIPT, id));
+        transport.send(builder.body(content).build());
     }
 
     @Override

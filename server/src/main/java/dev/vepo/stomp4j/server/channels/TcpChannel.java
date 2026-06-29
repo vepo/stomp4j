@@ -26,7 +26,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import dev.vepo.stomp4j.commons.protocol.Message;
+import dev.vepo.stomp4j.server.AcknowledgedOutboundChannel;
 import dev.vepo.stomp4j.server.OutboundChannel;
+import dev.vepo.stomp4j.server.SubscriberAckListener;
 import dev.vepo.stomp4j.server.session.Session;
 import dev.vepo.stomp4j.server.session.SessionCloser;
 import dev.vepo.stomp4j.server.session.Status;
@@ -34,15 +36,21 @@ import dev.vepo.stomp4j.server.session.Status;
 public class TcpChannel implements Channel {
     private record SessionAttachment(Session session, SocketChannel socket) {}
 
-    private class TcpExternalOutboundChannel implements OutboundChannel {
+    private class TcpExternalOutboundChannel implements AcknowledgedOutboundChannel {
 
         @Override
         public void send(Message message) {
+            send(message, null);
+        }
+
+        @Override
+        public void send(Message message, SubscriberAckListener listener) {
             logger.debug("Sending message to all active sessions: count={}", sessionAttachments.size());
+            var ackListener = java.util.Optional.ofNullable(listener);
             sessionAttachments.values()
                               .stream()
                               .map(SessionAttachment::session)
-                              .forEach(session -> session.handle(message));
+                              .forEach(session -> session.handle(message, ackListener));
         }
     }
 

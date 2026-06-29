@@ -9,6 +9,7 @@ public enum Command {
     ERROR,
     ACK,
     NACK,
+    RECEIPT,
     UNSUBSCRIBE,
     DISCONNECT,
     HEARTBEAT

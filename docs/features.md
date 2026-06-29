@@ -11,7 +11,7 @@ When you add, change, or remove user-visible behaviour, **update this page** in 
 | **Client** | TCP & WebSocket, TLS, STOMP 1.0–1.2, subscribe/send, callback & polling |
 | **Server** | Embeddable TCP & WebSocket, handlers, auth, outbound push, TLS |
 | **Commons** | Frame encode/decode, headers, commands |
-| **Platform** | Java 21, JPMS modules, SLF4J, no application framework |
+| **Platform** | Java 21, JPMS modules, SLF4J, optional Spring Boot starters |
 
 ## Client (`stomp4j-client`)
 
@@ -25,8 +25,10 @@ When you add, change, or remove user-visible behaviour, **update this page** in 
 | TLS (`stomps://`, `wss://`) | Supported | Pass `SSLContext` to `StompClient.create` — [advanced-topics.md#tls](advanced-topics.md#tls) |
 | `CONNECT` with login / passcode | Supported | `UserCredential` — [client-guide.md#creating-a-client](client-guide.md#creating-a-client) |
 | `SUBSCRIBE` / `UNSUBSCRIBE` | Supported | Callback or polling — [client-guide.md#subscriptions](client-guide.md#subscriptions) |
-| `SEND` | Supported | `sendPlain(destination, body, contentType)` |
-| Client-side `ACK` on `MESSAGE` | Supported | Automatic for negotiated 1.1+ sessions |
+| `SEND` | Supported | `sendPlain(...)` and `send(..., SendOptions)` with optional receipt |
+| Manual consumer `ACK` / `NACK` | Supported | `subscribe(topic, AckMode, Consumer<StompDelivery>)` |
+| Producer `SEND` receipt | Supported | `SendOptions.receipt(true)` → `StompReceipt` |
+| Client-side auto `ACK` on `MESSAGE` | Supported | Legacy `subscribe` callbacks and `AckMode.AUTO` |
 | Heart-beats | Supported | Sent on `CONNECT` when version supports them (1.1, 1.2) |
 | `DISCONNECT` on close | Supported | `AutoCloseable` / try-with-resources |
 | Restrict offered protocol versions | Supported | `Set<Stomp>` on `create` |
@@ -51,6 +53,7 @@ When you add, change, or remove user-visible behaviour, **update this page** in 
 | Inbound `SEND` handling | Supported | `MessageHandler` — [server-guide.md#messagehandler--inbound-send](server-guide.md#messagehandler--inbound-send) |
 | `CONNECT` authentication | Supported | Optional `StompAuthenticator` |
 | Outbound broadcast | Supported | `StompServer.outboundChannel()` |
+| Subscriber ACK/NACK callbacks | Supported | `AcknowledgedOutboundChannel.send(..., SubscriberAckListener)` |
 | Per-session reply | Supported | `StompMessage.sessionChannel()` |
 | Connection lifecycle hooks | Supported | `StompConnectionListener` |
 | Heart-beat negotiation | Supported | `.heartbeat(Duration)` on builder |
@@ -74,8 +77,10 @@ When you add, change, or remove user-visible behaviour, **update this page** in 
 | Java 21+ | Required | Records, modules, modern APIs |
 | JPMS modules | Supported | Each artifact has `module-info.java` — [advanced-topics.md#jpms-java-modules](advanced-topics.md#jpms-java-modules) |
 | SLF4J logging | Supported | You provide the binding (e.g. Logback) |
-| Spring / Quarkus / Jakarta EE | Not required | Plain Java library |
-| Maven artifacts on Maven Central | Supported | `dev.vepo:stomp4j-client`, `stomp4j-server`, `stomp4j-commons` |
+| Spring Boot client starter | Supported | [spring-guide.md](spring-guide.md) — `@StompListener`, `StompClientTemplate` |
+| Spring Boot server starter | Supported | [spring-guide.md](spring-guide.md) — `StompInboundHandler`, `StompOutboundTemplate` |
+| Spring / Quarkus / Jakarta EE | Not required | Plain Java library; Spring Boot is optional |
+| Maven artifacts on Maven Central | Supported | `stomp4j-client`, `stomp4j-server`, `stomp4j-commons`, Spring starters |
 
 ## STOMP commands (summary)
 
@@ -85,7 +90,8 @@ When you add, change, or remove user-visible behaviour, **update this page** in 
 | `SUBSCRIBE` / `UNSUBSCRIBE` | Sends | Accepts (with policy) |
 | `SEND` | Sends | Receives via handler |
 | `MESSAGE` | Receives | Sends (outbound) |
-| `ACK` / `NACK` | Auto-ACK on receive (1.1+) | — |
+| `ACK` / `NACK` | Manual or auto (see client guide) | Subscriber ACK callbacks on outbound |
+| `RECEIPT` | Producer send confirmation | — |
 | `DISCONNECT` | On `close()` | Session teardown |
 | `BEGIN` / `COMMIT` / `ABORT` | — | Not supported |
 
@@ -97,6 +103,7 @@ Normative behaviour: [STOMP specification](https://stomp.github.io/). Library te
 |------|----------|
 | First working client or server | [getting-started.md](getting-started.md) |
 | Client API in depth | [client-guide.md](client-guide.md) |
+| Spring Boot integration | [spring-guide.md](spring-guide.md) |
 | Embedded server patterns | [server-guide.md](server-guide.md) |
 | SPI, TLS, wire format | [advanced-topics.md](advanced-topics.md) |
 | Design philosophy | [overview.md](overview.md) |

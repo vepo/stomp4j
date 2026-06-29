@@ -11,7 +11,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import dev.vepo.stomp4j.commons.protocol.Message;
+import dev.vepo.stomp4j.server.AcknowledgedOutboundChannel;
 import dev.vepo.stomp4j.server.OutboundChannel;
+import dev.vepo.stomp4j.server.SubscriberAckListener;
 import dev.vepo.stomp4j.server.session.Session;
 import dev.vepo.stomp4j.server.session.SessionCloser;
 import dev.vepo.stomp4j.server.session.Status;
@@ -22,12 +24,18 @@ import io.vertx.core.http.ServerWebSocket;
 import io.vertx.core.net.PfxOptions;
 
 public class WebSocketChannel implements Channel {
-    private class WebSocketExternalOutboundChannel implements OutboundChannel {
+    private class WebSocketExternalOutboundChannel implements AcknowledgedOutboundChannel {
 
         @Override
         public void send(Message message) {
+            send(message, null);
+        }
+
+        @Override
+        public void send(Message message, SubscriberAckListener listener) {
             logger.debug("Sending message to all active sessions: count={}", activeSessions.size());
-            activeSessions.keySet().forEach(session -> session.handle(message));
+            var ackListener = java.util.Optional.ofNullable(listener);
+            activeSessions.keySet().forEach(session -> session.handle(message, ackListener));
         }
     }
 

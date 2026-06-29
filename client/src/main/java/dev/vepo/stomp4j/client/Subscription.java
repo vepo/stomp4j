@@ -7,6 +7,12 @@ public interface Subscription {
 
     int id();
 
+    AckMode ackMode();
+
+    boolean requiresManualAcknowledgement();
+
+    boolean autoAckAfterDelivery();
+
     boolean hasData();
 
     List<String> poll();

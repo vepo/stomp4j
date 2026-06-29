@@ -11,6 +11,8 @@ public enum Header {
     MESSAGE("message"),
     MESSAGE_ID("message-id"),
     PASSCODE("passcode"),
+    RECEIPT("receipt"),
+    RECEIPT_ID("receipt-id"),
     SERVER("server"),
     SESSION("session"),
     VERSION("version"),

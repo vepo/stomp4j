@@ -295,5 +295,10 @@
         <module>commons</module>
         <module>client</module>
         <module>server</module>
+        <module>spring</module>
+        <module>samples/spring-client-sample</module>
+        <module>samples/spring-server-sample</module>
+        <module>samples/plain-client-sample</module>
+        <module>samples/plain-server-sample</module>
     </modules>
 </project>
