@@ -16,23 +16,8 @@ final class StompReceiptImpl implements StompReceipt {
     }
 
     @Override
-    public String receiptId() {
-        return receiptId;
-    }
-
-    @Override
     public CompletableFuture<Void> completion() {
         return completion;
-    }
-
-    @Override
-    public String toString() {
-        return "StompReceipt[receiptId=%s]".formatted(receiptId);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(receiptId);
     }
 
     @Override
@@ -44,5 +29,20 @@ final class StompReceiptImpl implements StompReceipt {
             return false;
         }
         return Objects.equals(receiptId, ((StompReceiptImpl) obj).receiptId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(receiptId);
+    }
+
+    @Override
+    public String receiptId() {
+        return receiptId;
+    }
+
+    @Override
+    public String toString() {
+        return "StompReceipt[receiptId=%s]".formatted(receiptId);
     }
 }

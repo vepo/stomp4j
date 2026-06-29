@@ -56,3 +56,25 @@ services:
     ports:
       - "5510:5510"
       - "5511:5511"
+
+  quarkus-client-sample:
+    build:
+      context: ..
+      dockerfile: samples/quarkus-client-sample/Dockerfile
+    depends_on:
+      - artemis
+    environment:
+      STOMP4J_CLIENT_URL: stomp://artemis:61613
+      STOMP4J_CLIENT_USERNAME: user
+      STOMP4J_CLIENT_PASSWORD: passwd
+    ports:
+      - "8083:8083"
+
+  quarkus-server-sample:
+    build:
+      context: ..
+      dockerfile: samples/quarkus-server-sample/Dockerfile
+    ports:
+      - "8084:8084"
+      - "5520:5520"
+      - "5521:5521"

@@ -4,7 +4,7 @@ import dev.vepo.stomp4j.server.StompMessage;
 
 public interface StompInboundHandler {
 
-    boolean supports(String destination);
-
     void onSend(StompMessage message);
+
+    boolean supports(String destination);
 }

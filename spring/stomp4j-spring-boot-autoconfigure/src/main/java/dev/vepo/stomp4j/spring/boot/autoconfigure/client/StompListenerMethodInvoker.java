@@ -24,6 +24,30 @@ public class StompListenerMethodInvoker {
         this.taskExecutor = taskExecutor;
     }
 
+    private void applyAckRules(AckMode ackMode,
+                               StompDelivery delivery,
+                               Acknowledgment acknowledgment,
+                               boolean threw) {
+        if (delivery.acknowledged()) {
+            return;
+        }
+        if (ackMode.requiresManualAcknowledgement()) {
+            if (threw) {
+                acknowledgment.nack();
+            }
+            return;
+        }
+        acknowledgment.acknowledge();
+    }
+
+    private java.util.Optional<String> headerValue(Headers headers, String name) {
+        var byEnum = Arrays.stream(Header.values())
+                           .filter(header -> header.value().equals(name))
+                           .findFirst()
+                           .flatMap(headers::get);
+        return byEnum.isPresent() ? byEnum : headers.get(name);
+    }
+
     public void invoke(StompListenerEndpointRegistrar.RegisteredEndpoint endpoint, StompDelivery delivery) {
         taskExecutor.execute(() -> invokeOnExecutor(endpoint, delivery));
     }
@@ -43,15 +67,6 @@ public class StompListenerMethodInvoker {
         }
     }
 
-    private Object[] resolveArguments(Method method, StompDelivery delivery, Acknowledgment acknowledgment) {
-        var parameters = method.getParameters();
-        var args = new Object[parameters.length];
-        for (var index = 0; index < parameters.length; index++) {
-            args[index] = resolveArgument(parameters[index], delivery, acknowledgment);
-        }
-        return args;
-    }
-
     private Object resolveArgument(Parameter parameter, StompDelivery delivery, Acknowledgment acknowledgment) {
         if (parameter.getType().equals(StompDelivery.class)) {
             return delivery;
@@ -69,27 +84,12 @@ public class StompListenerMethodInvoker {
         throw new IllegalStateException("Unsupported @StompListener parameter type: %s".formatted(parameter.getType()));
     }
 
-    private java.util.Optional<String> headerValue(Headers headers, String name) {
-        var byEnum = Arrays.stream(Header.values())
-                           .filter(header -> header.value().equals(name))
-                           .findFirst()
-                           .flatMap(headers::get);
-        return byEnum.isPresent() ? byEnum : headers.get(name);
-    }
-
-    private void applyAckRules(AckMode ackMode,
-                               StompDelivery delivery,
-                               Acknowledgment acknowledgment,
-                               boolean threw) {
-        if (delivery.acknowledged()) {
-            return;
+    private Object[] resolveArguments(Method method, StompDelivery delivery, Acknowledgment acknowledgment) {
+        var parameters = method.getParameters();
+        var args = new Object[parameters.length];
+        for (var index = 0; index < parameters.length; index++) {
+            args[index] = resolveArgument(parameters[index], delivery, acknowledgment);
         }
-        if (ackMode.requiresManualAcknowledgement()) {
-            if (threw) {
-                acknowledgment.nack();
-            }
-            return;
-        }
-        acknowledgment.acknowledge();
+        return args;
     }
 }

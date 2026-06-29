@@ -16,7 +16,7 @@ Stomp4J is a **Java 21 library** (not a runnable application) that implements th
 | License | Apache 2.0 |
 | Logging | SLF4J (consumer provides implementation) |
 
-Published artifacts: `stomp4j-commons`, `stomp4j-client`, `stomp4j-server`, `stomp4j-spring-boot-autoconfigure`, `stomp4j-spring-boot-starter-client`, `stomp4j-spring-boot-starter-server`.
+Published artifacts: `stomp4j-commons`, `stomp4j-client`, `stomp4j-server`, `stomp4j-spring-boot-autoconfigure`, `stomp4j-spring-boot-starter-client`, `stomp4j-spring-boot-starter-server`, `stomp4j-quarkus-cdi`, `stomp4j-quarkus-client`, `stomp4j-quarkus-client-deployment`, `stomp4j-quarkus-server`, `stomp4j-quarkus-server-deployment`.
 
 ## 2. Module dependency graph
 
@@ -30,9 +30,17 @@ stomp4j-parent
         ├── stomp4j-spring-boot-autoconfigure → client, server (optional)
         ├── stomp4j-spring-boot-starter-client
         └── stomp4j-spring-boot-starter-server
+    └── stomp4j-quarkus     → optional Quarkus 3.17 layer (no JPMS)
+        ├── stomp4j-quarkus-cdi               → shared @StompSync / @StompAsync
+        ├── stomp4j-quarkus-client            → runtime extension
+        ├── stomp4j-quarkus-client-deployment → build-time processor
+        ├── stomp4j-quarkus-client-integration-tests
+        ├── stomp4j-quarkus-server
+        ├── stomp4j-quarkus-server-deployment
+        └── stomp4j-quarkus-server-integration-tests
 ```
 
-Dependencies flow **downward only**: `client` and `server` depend on `commons`; `server` tests may use `client` but production `server` does not depend on `client`.
+Dependencies flow **downward only**: `client` and `server` depend on `commons`; `server` tests may use `client` but production `server` does not depend on `client`. Quarkus extensions depend on `client` or `server` respectively, not on each other.
 
 ## 3. Module responsibilities
 
@@ -120,6 +128,21 @@ StompServer.builder()
         → SEND inbound → MessageHandler.onSend(StompMessage)
         → outboundChannel().send() → broadcast to subscribed sessions
 ```
+
+### 3.4 Quarkus extensions (`stomp4j-quarkus-*`)
+
+Optional Quarkus 3.17 layer using CDI Events (no `*Template` APIs). No `module-info.java` — classpath + Jandex index on runtime modules.
+
+| Module | Role |
+|--------|------|
+| `stomp4j-quarkus-cdi` | Shared qualifiers `@StompSync`, `@StompAsync` |
+| `stomp4j-quarkus-client` | Client runtime: `StompSession`, outbound/inbound events, `@StompDestination` |
+| `stomp4j-quarkus-client-deployment` | Build-time inbound observer scan, `ConfigMapping`, `AdditionalBeanBuildItem` |
+| `stomp4j-quarkus-server` | Server runtime: `StompServer` producer, outbound observers |
+| `stomp4j-quarkus-server-deployment` | Server `ConfigMapping`, bean registration |
+| `*-integration-tests` | `@QuarkusTest` with Testcontainers (Artemis) or embedded server |
+
+User guide: [docs/quarkus-guide.md](docs/quarkus-guide.md).
 
 ## 4. Public API entry points
 

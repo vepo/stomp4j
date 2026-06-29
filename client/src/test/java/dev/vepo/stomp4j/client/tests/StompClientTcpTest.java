@@ -46,14 +46,14 @@ class StompClientTcpTest {
 
     private static final Logger logger = LoggerFactory.getLogger(StompClientTcpTest.class);
 
-    private static Stream<Arguments> allVersions() {
-        return Stream.of(Arguments.of(new Stomp1_0()),
-                         Arguments.of(new Stomp1_1()),
+    private static Stream<Arguments> allHeartbeatVersions() {
+        return Stream.of(Arguments.of(new Stomp1_1()),
                          Arguments.of(new Stomp1_2()));
     }
 
-    private static Stream<Arguments> allHeartbeatVersions() {
-        return Stream.of(Arguments.of(new Stomp1_1()),
+    private static Stream<Arguments> allVersions() {
+        return Stream.of(Arguments.of(new Stomp1_0()),
+                         Arguments.of(new Stomp1_1()),
                          Arguments.of(new Stomp1_2()));
     }
 
@@ -61,53 +61,6 @@ class StompClientTcpTest {
     private Connection connection;
     private Session session;
     private Topic topic;
-
-    @BeforeEach
-    void setup(StompActiveMqContainer stomp) throws JMSException {
-        var connectionFactory = new ActiveMQConnectionFactory(stomp.clientUrl());
-        connection = connectionFactory.createConnection(stomp.username(), stomp.password());
-        // topic
-        connection.start();
-        session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
-        topicName = "topic-" + UUID.randomUUID().toString();
-        topic = session.createTopic(topicName);
-        logger.info("Created topic: {}", topic);
-    }
-
-    void sendMessage(String content) {
-        try (var producer = session.createProducer(topic)) {
-            producer.setDeliveryMode(DeliveryMode.PERSISTENT);
-            producer.send(session.createTextMessage(content));
-        } catch (JMSException e) {
-            fail("Error sending message", e);
-        }
-    }
-
-    Optional<String> receiveMessage(String content, Duration timeout) {
-        try (var consumer = session.createConsumer(topic)) {
-            long startTime = System.nanoTime();
-            while (System.nanoTime() - startTime < timeout.toNanos()) {
-                logger.info("Trying to read message...");
-                var message = consumer.receive(timeout.toMillis());
-                logger.info("Message received: {}", message);
-                if (Objects.nonNull(message) && message.isBodyAssignableTo(byte[].class)) {
-                    return Optional.ofNullable(new String(message.getBody(byte[].class)));
-                } else if (Objects.nonNull(message) && message.isBodyAssignableTo(String.class)) {
-                    return Optional.ofNullable(message.getBody(String.class));
-                }
-            }
-            return Optional.empty();
-        } catch (JMSException e) {
-            fail("Error sending message", e);
-            return Optional.empty();
-        }
-    }
-
-    @AfterEach
-    void tearDown() throws JMSException {
-        session.close();
-        connection.close();
-    }
 
     @ParameterizedTest
     @MethodSource("allHeartbeatVersions")
@@ -135,6 +88,111 @@ class StompClientTcpTest {
             sendMessage("message-09");
             sendMessage("message-10");
             await().until(() -> messageList.size() == 10);
+            assertThat(messageList).containsExactly("message-01", "message-02", "message-03", "message-04",
+                                                    "message-05", "message-06", "message-07", "message-08",
+                                                    "message-09", "message-10");
+            client.unsubscribe(topicName);
+            sendMessage("message-11");
+            await().pollDelay(Durations.ONE_SECOND).until(() -> true);
+            assertThat(messageList).size().isEqualTo(10);
+            sendMessage("message-12");
+            assertThat(messageList).size().isEqualTo(10);
+            sendMessage("message-13");
+            assertThat(messageList).size().isEqualTo(10);
+        }
+    }
+
+    Optional<String> receiveMessage(String content, Duration timeout) {
+        try (var consumer = session.createConsumer(topic)) {
+            long startTime = System.nanoTime();
+            while (System.nanoTime() - startTime < timeout.toNanos()) {
+                logger.info("Trying to read message...");
+                var message = consumer.receive(timeout.toMillis());
+                logger.info("Message received: {}", message);
+                if (Objects.nonNull(message) && message.isBodyAssignableTo(byte[].class)) {
+                    return Optional.ofNullable(new String(message.getBody(byte[].class)));
+                } else if (Objects.nonNull(message) && message.isBodyAssignableTo(String.class)) {
+                    return Optional.ofNullable(message.getBody(String.class));
+                }
+            }
+            return Optional.empty();
+        } catch (JMSException e) {
+            fail("Error sending message", e);
+            return Optional.empty();
+        }
+    }
+
+    void sendMessage(String content) {
+        try (var producer = session.createProducer(topic)) {
+            producer.setDeliveryMode(DeliveryMode.PERSISTENT);
+            producer.send(session.createTextMessage(content));
+        } catch (JMSException e) {
+            fail("Error sending message", e);
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("allVersions")
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    @DisplayName("Sending message with {0}")
+    void sendMessageTest(Stomp version, StompActiveMqContainer stomp) {
+        try (var pool = Executors.newSingleThreadExecutor();
+                var client = StompClient.create(stomp.tcpUrl(), new UserCredential(stomp.username(), stomp.password()), Set.of(version))) {
+            client.connect();
+            // Queue is not durable. Start received first!
+            pool.submit(() -> {
+                try {
+                    Thread.sleep(Duration.ofMillis(100));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                client.sendPlain(topicName, "hello queue", "text/plain");
+            });
+            var message = receiveMessage(topicName, Duration.ofSeconds(15));
+            assertThat(message).as("Verifying message for %s".formatted(version))
+                               .isNotEmpty()
+                               .hasValue("hello queue");
+        }
+    }
+
+    @BeforeEach
+    void setup(StompActiveMqContainer stomp) throws JMSException {
+        var connectionFactory = new ActiveMQConnectionFactory(stomp.clientUrl());
+        connection = connectionFactory.createConnection(stomp.username(), stomp.password());
+        // topic
+        connection.start();
+        session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
+        topicName = "topic-" + UUID.randomUUID().toString();
+        topic = session.createTopic(topicName);
+        logger.info("Created topic: {}", topic);
+    }
+
+    @ParameterizedTest
+    @MethodSource("allVersions")
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void subscribeSyncTest(Stomp version, StompActiveMqContainer stomp) {
+        try (var client = StompClient.create(stomp.tcpUrl(),
+                                             new UserCredential(stomp.username(), stomp.password()),
+                                             Set.of(version))) {
+            client.connect();
+            var subscription = client.subscribe(topicName);
+            sendMessage("message-01");
+            sendMessage("message-02");
+            sendMessage("message-03");
+            sendMessage("message-04");
+            sendMessage("message-05");
+            sendMessage("message-06");
+            sendMessage("message-07");
+            sendMessage("message-08");
+            sendMessage("message-09");
+            sendMessage("message-10");
+            var messageList = new ArrayList<String>();
+            do {
+                await().until(() -> subscription.hasData());
+                while (subscription.hasData()) {
+                    subscription.poll().forEach(messageList::add);
+                }
+            } while (messageList.size() < 10);
             assertThat(messageList).containsExactly("message-01", "message-02", "message-03", "message-04",
                                                     "message-05", "message-06", "message-07", "message-08",
                                                     "message-09", "message-10");
@@ -186,67 +244,9 @@ class StompClientTcpTest {
         }
     }
 
-    @ParameterizedTest
-    @MethodSource("allVersions")
-    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    void subscribeSyncTest(Stomp version, StompActiveMqContainer stomp) {
-        try (var client = StompClient.create(stomp.tcpUrl(),
-                                             new UserCredential(stomp.username(), stomp.password()),
-                                             Set.of(version))) {
-            client.connect();
-            var subscription = client.subscribe(topicName);
-            sendMessage("message-01");
-            sendMessage("message-02");
-            sendMessage("message-03");
-            sendMessage("message-04");
-            sendMessage("message-05");
-            sendMessage("message-06");
-            sendMessage("message-07");
-            sendMessage("message-08");
-            sendMessage("message-09");
-            sendMessage("message-10");
-            var messageList = new ArrayList<String>();
-            do {
-                await().until(() -> subscription.hasData());
-                while (subscription.hasData()) {
-                    subscription.poll().forEach(messageList::add);
-                }
-            } while (messageList.size() < 10);
-            assertThat(messageList).containsExactly("message-01", "message-02", "message-03", "message-04",
-                                                    "message-05", "message-06", "message-07", "message-08",
-                                                    "message-09", "message-10");
-            client.unsubscribe(topicName);
-            sendMessage("message-11");
-            await().pollDelay(Durations.ONE_SECOND).until(() -> true);
-            assertThat(messageList).size().isEqualTo(10);
-            sendMessage("message-12");
-            assertThat(messageList).size().isEqualTo(10);
-            sendMessage("message-13");
-            assertThat(messageList).size().isEqualTo(10);
-        }
-    }
-
-    @ParameterizedTest
-    @MethodSource("allVersions")
-    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    @DisplayName("Sending message with {0}")
-    void sendMessageTest(Stomp version, StompActiveMqContainer stomp) {
-        try (var pool = Executors.newSingleThreadExecutor();
-                var client = StompClient.create(stomp.tcpUrl(), new UserCredential(stomp.username(), stomp.password()), Set.of(version))) {
-            client.connect();
-            // Queue is not durable. Start received first!
-            pool.submit(() -> {
-                try {
-                    Thread.sleep(Duration.ofMillis(100));
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-                client.sendPlain(topicName, "hello queue", "text/plain");
-            });
-            var message = receiveMessage(topicName, Duration.ofSeconds(15));
-            assertThat(message).as("Verifying message for %s".formatted(version))
-                               .isNotEmpty()
-                               .hasValue("hello queue");
-        }
+    @AfterEach
+    void tearDown() throws JMSException {
+        session.close();
+        connection.close();
     }
 }

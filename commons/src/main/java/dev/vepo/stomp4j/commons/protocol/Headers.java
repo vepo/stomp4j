@@ -17,6 +17,10 @@ public class Headers {
             this.headers = new TreeMap<>();
         }
 
+        public Headers build() {
+            return new Headers(this.headers);
+        }
+
         public HeadersBuilder with(Header key, String value) {
             Objects.requireNonNull(key);
             return with(key.value(), value);
@@ -26,10 +30,6 @@ public class Headers {
             Objects.requireNonNull(key);
             this.headers.put(key, value);
             return this;
-        }
-
-        public Headers build() {
-            return new Headers(this.headers);
         }
     }
 
@@ -64,21 +64,21 @@ public class Headers {
         return Optional.of(destination);
     }
 
-    public String version() {
-        return headers.getOrDefault("version", "1.0");
+    public Optional<String> get(Header header) {
+        return get(header.value());
     }
 
     public Optional<String> get(String key) {
         return Optional.ofNullable(headers.get(key));
     }
 
-    public Optional<String> get(Header header) {
-        return get(header.value());
-    }
-
     @Override
     public String toString() {
         return String.format("StompHeaders{headers=%s}", headers);
+    }
+
+    public String version() {
+        return headers.getOrDefault("version", "1.0");
     }
 
     public void write(StringBuilder builder) {

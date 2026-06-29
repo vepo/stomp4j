@@ -4,10 +4,6 @@ import dev.vepo.stomp4j.client.StompDelivery;
 
 public interface Acknowledgment {
 
-    void acknowledge();
-
-    void nack();
-
     static Acknowledgment of(StompDelivery delivery) {
         return new Acknowledgment() {
             @Override
@@ -25,4 +21,8 @@ public interface Acknowledgment {
             }
         };
     }
+
+    void acknowledge();
+
+    void nack();
 }

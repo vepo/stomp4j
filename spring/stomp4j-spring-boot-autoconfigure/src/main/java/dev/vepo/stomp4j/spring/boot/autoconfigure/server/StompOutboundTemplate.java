@@ -11,32 +11,32 @@ import dev.vepo.stomp4j.server.SubscriberAckListener;
 
 public class StompOutboundTemplate {
 
-    private final StompServer server;
-
-    public StompOutboundTemplate(StompServer server) {
-        this.server = server;
-    }
-
-    public void send(Message message) {
-        server.outboundChannel().send(message);
-    }
-
-    public void send(Message message, SubscriberAckCallbacks callbacks) {
-        Objects.requireNonNull(callbacks, "callbacks cannot be null");
-        acknowledgedChannel().send(message, callbacks.toListener());
-    }
-
-    public AcknowledgedOutboundChannel acknowledgedChannel() {
-        return server.acknowledgedOutboundChannel();
-    }
-
     public static final class SubscriberAckCallbacks {
-        private BiConsumer<String, StompSession> onSubscriberAck;
-        private BiConsumer<String, StompSession> onSubscriberNack;
+        public static final class Builder {
+            private final SubscriberAckCallbacks callbacks = new SubscriberAckCallbacks();
+
+            public SubscriberAckCallbacks build() {
+                return callbacks;
+            }
+
+            public Builder onSubscriberAck(BiConsumer<String, StompSession> onSubscriberAck) {
+                callbacks.onSubscriberAck = onSubscriberAck;
+                return this;
+            }
+
+            public Builder onSubscriberNack(BiConsumer<String, StompSession> onSubscriberNack) {
+                callbacks.onSubscriberNack = onSubscriberNack;
+                return this;
+            }
+        }
 
         public static Builder builder() {
             return new Builder();
         }
+
+        private BiConsumer<String, StompSession> onSubscriberAck;
+
+        private BiConsumer<String, StompSession> onSubscriberNack;
 
         public SubscriberAckListener toListener() {
             return new SubscriberAckListener() {
@@ -55,23 +55,24 @@ public class StompOutboundTemplate {
                 }
             };
         }
+    }
 
-        public static final class Builder {
-            private final SubscriberAckCallbacks callbacks = new SubscriberAckCallbacks();
+    private final StompServer server;
 
-            public Builder onSubscriberAck(BiConsumer<String, StompSession> onSubscriberAck) {
-                callbacks.onSubscriberAck = onSubscriberAck;
-                return this;
-            }
+    public StompOutboundTemplate(StompServer server) {
+        this.server = server;
+    }
 
-            public Builder onSubscriberNack(BiConsumer<String, StompSession> onSubscriberNack) {
-                callbacks.onSubscriberNack = onSubscriberNack;
-                return this;
-            }
+    public AcknowledgedOutboundChannel acknowledgedChannel() {
+        return server.acknowledgedOutboundChannel();
+    }
 
-            public SubscriberAckCallbacks build() {
-                return callbacks;
-            }
-        }
+    public void send(Message message) {
+        server.outboundChannel().send(message);
+    }
+
+    public void send(Message message, SubscriberAckCallbacks callbacks) {
+        Objects.requireNonNull(callbacks, "callbacks cannot be null");
+        acknowledgedChannel().send(message, callbacks.toListener());
     }
 }

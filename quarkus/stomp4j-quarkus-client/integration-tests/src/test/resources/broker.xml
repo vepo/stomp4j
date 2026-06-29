@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<broker xmlns="http://activemq.apache.org/schema">
+    <jaas-security domain="activemq"/>
+    <security-settings>
+        <security-setting match="#">
+            <permission type="createNonDurableQueue" roles="amq"/>
+            <permission type="deleteNonDurableQueue" roles="amq"/>
+            <permission type="createDurableQueue" roles="amq"/>
+            <permission type="deleteDurableQueue" roles="amq"/>
+            <permission type="createAddress" roles="amq"/>
+            <permission type="deleteAddress" roles="amq"/>
+            <permission type="consume" roles="amq"/>
+            <permission type="browse" roles="amq"/>
+            <permission type="send" roles="amq"/>
+            <permission type="manage" roles="amq"/>
+        </security-setting>
+    </security-settings>
+    <addresses>
+        <address name="DLQ">
+            <anycast>
+                <queue name="DLQ"/>
+            </anycast>
+        </address>
+        <address name="ExpiryQueue">
+            <anycast>
+                <queue name="ExpiryQueue"/>
+            </anycast>
+        </address>
+    </addresses>
+</broker>

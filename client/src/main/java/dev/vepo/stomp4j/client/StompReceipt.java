@@ -4,7 +4,7 @@ import java.util.concurrent.CompletableFuture;
 
 public interface StompReceipt {
 
-    String receiptId();
-
     CompletableFuture<Void> completion();
+
+    String receiptId();
 }

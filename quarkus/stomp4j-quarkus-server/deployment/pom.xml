@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>dev.vepo</groupId>
+        <artifactId>stomp4j-quarkus-server-parent</artifactId>
+        <version>1.1.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>stomp4j-quarkus-server-deployment</artifactId>
+    <name>Stomp4J :: Quarkus Server Extension Deployment</name>
+
+    <properties>
+        <jacoco.skip>true</jacoco.skip>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>dev.vepo</groupId>
+            <artifactId>stomp4j-quarkus-server</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-arc-deployment</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-core-deployment</artifactId>
+        </dependency>
+    </dependencies>
+</project>

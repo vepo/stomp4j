@@ -21,6 +21,11 @@ User-facing guides for library consumers. Maintainer references live at the repo
 1. [spring-guide.md](spring-guide.md) — starters, `@StompListener`, embedded server beans
 2. [samples/README.md](../samples/README.md) — Docker Compose demos
 
+### I use Quarkus
+
+1. [quarkus-guide.md](quarkus-guide.md) — extensions, CDI Events, `@StompDestination`
+2. [samples/README.md](../samples/README.md) — Quarkus client/server samples (ports 8083/8084)
+
 ### I am extending or integrating deeply
 
 1. [advanced-topics.md](advanced-topics.md) — SPI, JPMS modules, wire format, heart-beats
@@ -36,5 +41,6 @@ User-facing guides for library consumers. Maintainer references live at the repo
 | [getting-started.md](getting-started.md) | Beginner | Dependencies, minimal client & server |
 | [client-guide.md](client-guide.md) | Intermediate | URLs, subscriptions, send, close lifecycle |
 | [spring-guide.md](spring-guide.md) | Intermediate | Spring Boot starters, `@StompListener`, templates |
+| [quarkus-guide.md](quarkus-guide.md) | Intermediate | Quarkus extensions, CDI Events, inbound `@Observes` |
 | [advanced-topics.md](advanced-topics.md) | Advanced | Versions, SPI, TLS, commons protocol API |
 | [domain-specification.md](domain-specification.md) | Contributors | Ubiquitous language, protocol invariants |

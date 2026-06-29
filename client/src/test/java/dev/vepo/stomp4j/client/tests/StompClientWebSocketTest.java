@@ -58,25 +58,6 @@ class StompClientWebSocketTest {
 
     private Topic topic;
 
-    @BeforeEach
-    void setup(StompActiveMqContainer stomp) throws JMSException {
-        var connectionFactory = new ActiveMQConnectionFactory(stomp.clientUrl());
-        connection = connectionFactory.createConnection(stomp.username(), stomp.password());
-        // topic
-        connection.start();
-        session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
-        topicName = "topic-" + UUID.randomUUID().toString();
-        topic = session.createTopic(topicName);
-        logger.info("Created topic: {}", topic);
-    }
-
-    void sendMessage(String content) throws JMSException {
-        try (var producer = session.createProducer(topic)) {
-            producer.setDeliveryMode(DeliveryMode.PERSISTENT);
-            producer.send(session.createTextMessage(content));
-        }
-    }
-
     Optional<String> receiveMessage(String content, Duration timeout) {
         try (var consumer = session.createConsumer(topic)) {
             long startTime = System.nanoTime();
@@ -93,6 +74,50 @@ class StompClientWebSocketTest {
             fail("Error sending message", e);
             return Optional.empty();
         }
+    }
+
+    void sendMessage(String content) throws JMSException {
+        try (var producer = session.createProducer(topic)) {
+            producer.setDeliveryMode(DeliveryMode.PERSISTENT);
+            producer.send(session.createTextMessage(content));
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("allVersions")
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    @DisplayName("Sending message with {0}")
+    void sendMessageTest(Stomp version, StompActiveMqContainer stomp) {
+        try (var pool = Executors.newSingleThreadExecutor();
+                var client = StompClient.create(stomp.webSocketUrl(), new UserCredential(stomp.username(), stomp.password()), TransportType.WEB_SOCKET,
+                                                Set.of(version))) {
+            client.connect();
+            // Queue is not durable. Start received first!
+            pool.submit(() -> {
+                try {
+                    Thread.sleep(Duration.ofMillis(100));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                client.sendPlain(topicName, "hello queue", "text/plain");
+            });
+            var message = receiveMessage(topicName, Duration.ofSeconds(15));
+            assertThat(message).as("Verifying message for %s".formatted(version))
+                               .isNotEmpty()
+                               .hasValue("hello queue");
+        }
+    }
+
+    @BeforeEach
+    void setup(StompActiveMqContainer stomp) throws JMSException {
+        var connectionFactory = new ActiveMQConnectionFactory(stomp.clientUrl());
+        connection = connectionFactory.createConnection(stomp.username(), stomp.password());
+        // topic
+        connection.start();
+        session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
+        topicName = "topic-" + UUID.randomUUID().toString();
+        topic = session.createTopic(topicName);
+        logger.info("Created topic: {}", topic);
     }
 
     @AfterEach
@@ -136,31 +161,6 @@ class StompClientWebSocketTest {
             assertThat(messageList).size().isEqualTo(10);
             sendMessage("message-13");
             assertThat(messageList).size().isEqualTo(10);
-        }
-    }
-
-    @ParameterizedTest
-    @MethodSource("allVersions")
-    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    @DisplayName("Sending message with {0}")
-    void sendMessageTest(Stomp version, StompActiveMqContainer stomp) {
-        try (var pool = Executors.newSingleThreadExecutor();
-                var client = StompClient.create(stomp.webSocketUrl(), new UserCredential(stomp.username(), stomp.password()), TransportType.WEB_SOCKET,
-                                                Set.of(version))) {
-            client.connect();
-            // Queue is not durable. Start received first!
-            pool.submit(() -> {
-                try {
-                    Thread.sleep(Duration.ofMillis(100));
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-                client.sendPlain(topicName, "hello queue", "text/plain");
-            });
-            var message = receiveMessage(topicName, Duration.ofSeconds(15));
-            assertThat(message).as("Verifying message for %s".formatted(version))
-                               .isNotEmpty()
-                               .hasValue("hello queue");
         }
     }
 }

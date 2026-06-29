@@ -40,26 +40,6 @@ public class TcpTransport implements Transport {
         this.done = new CountDownLatch(1);
     }
 
-    public String host() {
-        return host;
-    };
-
-    @Override
-    public void send(Message message) {
-        logger.atDebug()
-              .addArgument(() -> Message.formatted(message.encode()))
-              .log("Sending message: {}");
-
-        try {
-            var os = socket.getOutputStream();
-            os.write(message.encode().getBytes());
-            os.write("\n".getBytes());
-            os.flush();
-        } catch (Exception e) {
-            logger.error("Error sending message", e);
-        }
-    }
-
     public void close() {
         running.set(false);
         try {
@@ -91,9 +71,9 @@ public class TcpTransport implements Transport {
         }
     }
 
-    public long silentTime() {
-        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastReceivedMessaged);
-    }
+    public String host() {
+        return host;
+    };
 
     private void readMessages() {
         this.lastReceivedMessaged = System.nanoTime();
@@ -128,6 +108,26 @@ public class TcpTransport implements Transport {
             done.countDown();
         }
         logger.info("Message reader thread finished.");
+    }
+
+    @Override
+    public void send(Message message) {
+        logger.atDebug()
+              .addArgument(() -> Message.formatted(message.encode()))
+              .log("Sending message: {}");
+
+        try {
+            var os = socket.getOutputStream();
+            os.write(message.encode().getBytes());
+            os.write("\n".getBytes());
+            os.flush();
+        } catch (Exception e) {
+            logger.error("Error sending message", e);
+        }
+    }
+
+    public long silentTime() {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastReceivedMessaged);
     }
 
     @Override

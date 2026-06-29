@@ -15,6 +15,15 @@ public class StompServerLifecycle implements SmartLifecycle {
     }
 
     @Override
+    public boolean isRunning() {
+        return running;
+    }
+
+    public StompServer server() {
+        return server;
+    }
+
+    @Override
     public void start() {
         running = true;
     }
@@ -25,14 +34,5 @@ public class StompServerLifecycle implements SmartLifecycle {
             server.close();
             running = false;
         }
-    }
-
-    @Override
-    public boolean isRunning() {
-        return running;
-    }
-
-    public StompServer server() {
-        return server;
     }
 }

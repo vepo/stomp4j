@@ -4,21 +4,21 @@ import dev.vepo.stomp4j.commons.protocol.Headers;
 
 public interface StompDelivery {
 
+    void ack();
+
+    boolean acknowledged();
+
+    void autoAcknowledgeIfNeeded();
+
     String body();
+
+    String destination();
 
     Headers headers();
 
     String messageId();
 
-    String destination();
-
-    Subscription subscription();
-
-    void ack();
-
     void nack();
 
-    boolean acknowledged();
-
-    void autoAcknowledgeIfNeeded();
+    Subscription subscription();
 }

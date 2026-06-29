@@ -15,8 +15,8 @@ import dev.vepo.stomp4j.commons.protocol.Message;
 import dev.vepo.stomp4j.server.StompServer;
 
 /**
- * Plain-Java counterpart of {@code spring-server-sample}:
- * embedded STOMP server with chat echo, subscription policy, and CONNECT auth.
+ * Plain-Java counterpart of {@code spring-server-sample}: embedded STOMP server
+ * with chat echo, subscription policy, and CONNECT auth.
  */
 public final class PlainServerSample {
 
@@ -24,7 +24,29 @@ public final class PlainServerSample {
     private static final String APP_CHAT_PREFIX = "/app/chat/";
     private static final String TOPIC_CHAT_PREFIX = "/topic/chat/";
 
-    private PlainServerSample() {}
+    private static boolean acceptSubscription(String topic) {
+        var allowed = topic.startsWith(TOPIC_CHAT_PREFIX) || topic.startsWith(APP_CHAT_PREFIX);
+        if (!allowed) {
+            logger.warn("Rejected subscription to {}", topic);
+        }
+        return allowed;
+    }
+
+    private static Message chatMessage(String appDestination, String body) {
+        var room = appDestination.substring(APP_CHAT_PREFIX.length());
+        return new Message(Command.SEND,
+                           Headers.builder().with(Header.DESTINATION, TOPIC_CHAT_PREFIX + room).build(),
+                           body);
+    }
+
+    private static void echoToTopic(String body, String appDestination) {
+        var room = appDestination.substring(APP_CHAT_PREFIX.length());
+        logger.info("Echo /app/chat/{} -> /topic/chat/{}: {}", room, room, body);
+    }
+
+    private static String env(String name, String defaultValue) {
+        return Objects.requireNonNullElse(System.getenv(name), defaultValue);
+    }
 
     public static void main(String[] args) throws InterruptedException {
         var tcpPort = Integer.parseInt(env("STOMP_TCP_PORT", "5510"));
@@ -37,21 +59,21 @@ public final class PlainServerSample {
         }));
 
         try (var server = StompServer.builder()
-                                    .serverName("plain-server-sample")
-                                    .heartbeat(Duration.ofSeconds(30))
-                                    .channel(TransportType.TCP, tcpPort)
-                                    .channel(TransportType.WEB_SOCKET, webSocketPort)
-                                    .authenticator(credentials -> "demo".equals(credentials.username()))
-                                    .subscription(PlainServerSample::acceptSubscription)
-                                    .handler(message -> {
-                                        var destination = message.destination();
-                                        if (destination.startsWith(APP_CHAT_PREFIX)) {
-                                            echoToTopic(message.body(), destination);
-                                            message.sessionChannel()
-                                                   .send(chatMessage(destination, message.body()));
-                                        }
-                                    })
-                                    .start()) {
+                                     .serverName("plain-server-sample")
+                                     .heartbeat(Duration.ofSeconds(30))
+                                     .channel(TransportType.TCP, tcpPort)
+                                     .channel(TransportType.WEB_SOCKET, webSocketPort)
+                                     .authenticator(credentials -> "demo".equals(credentials.username()))
+                                     .subscription(PlainServerSample::acceptSubscription)
+                                     .handler(message -> {
+                                         var destination = message.destination();
+                                         if (destination.startsWith(APP_CHAT_PREFIX)) {
+                                             echoToTopic(message.body(), destination);
+                                             message.sessionChannel()
+                                                    .send(chatMessage(destination, message.body()));
+                                         }
+                                     })
+                                     .start()) {
 
             logger.info("Plain server sample listening on stomp://localhost:{} and ws://localhost:{}/",
                         tcpPort,
@@ -61,27 +83,5 @@ public final class PlainServerSample {
         }
     }
 
-    private static boolean acceptSubscription(String topic) {
-        var allowed = topic.startsWith(TOPIC_CHAT_PREFIX) || topic.startsWith(APP_CHAT_PREFIX);
-        if (!allowed) {
-            logger.warn("Rejected subscription to {}", topic);
-        }
-        return allowed;
-    }
-
-    private static void echoToTopic(String body, String appDestination) {
-        var room = appDestination.substring(APP_CHAT_PREFIX.length());
-        logger.info("Echo /app/chat/{} -> /topic/chat/{}: {}", room, room, body);
-    }
-
-    private static Message chatMessage(String appDestination, String body) {
-        var room = appDestination.substring(APP_CHAT_PREFIX.length());
-        return new Message(Command.SEND,
-                           Headers.builder().with(Header.DESTINATION, TOPIC_CHAT_PREFIX + room).build(),
-                           body);
-    }
-
-    private static String env(String name, String defaultValue) {
-        return Objects.requireNonNullElse(System.getenv(name), defaultValue);
-    }
+    private PlainServerSample() {}
 }

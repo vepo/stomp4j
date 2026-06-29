@@ -14,6 +14,23 @@ public class StompClientConnectionManager implements SmartLifecycle {
         this.factory = factory;
     }
 
+    public StompClient client() {
+        if (!running || client == null) {
+            throw new IllegalStateException("Stomp client is not connected");
+        }
+        return client;
+    }
+
+    @Override
+    public int getPhase() {
+        return Integer.MAX_VALUE - 100;
+    }
+
+    @Override
+    public boolean isRunning() {
+        return running;
+    }
+
     @Override
     public void start() {
         if (!running) {
@@ -30,22 +47,5 @@ public class StompClientConnectionManager implements SmartLifecycle {
             client = null;
             running = false;
         }
-    }
-
-    @Override
-    public boolean isRunning() {
-        return running;
-    }
-
-    @Override
-    public int getPhase() {
-        return Integer.MAX_VALUE - 100;
-    }
-
-    public StompClient client() {
-        if (!running || client == null) {
-            throw new IllegalStateException("Stomp client is not connected");
-        }
-        return client;
     }
 }

@@ -8,5 +8,4 @@ import dev.vepo.stomp4j.spring.boot.autoconfigure.server.StompServerAutoConfigur
 
 @AutoConfiguration
 @Import({ StompClientAutoConfiguration.class, StompServerAutoConfiguration.class })
-public class Stomp4jAutoConfiguration {
-}
+public class Stomp4jAutoConfiguration {}

@@ -22,11 +22,8 @@ public class PublishController {
         this.stompClientTemplate = stompClientTemplate;
     }
 
-    @PostMapping("/publish")
-    public String publish(@RequestBody String body) throws Exception {
-        var receipt = stompClientTemplate.sendWithReceipt("/queue/demo.out", body);
-        receipt.completion().get();
-        return "sent";
+    public String lastInbound() {
+        return lastInbound.get();
     }
 
     @StompListener(destination = "/queue/demo.in", ackMode = AckMode.CLIENT_INDIVIDUAL)
@@ -35,7 +32,10 @@ public class PublishController {
         acknowledgment.acknowledge();
     }
 
-    public String lastInbound() {
-        return lastInbound.get();
+    @PostMapping("/publish")
+    public String publish(@RequestBody String body) throws Exception {
+        var receipt = stompClientTemplate.sendWithReceipt("/queue/demo.out", body);
+        receipt.completion().get();
+        return "sent";
     }
 }

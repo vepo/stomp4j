@@ -22,15 +22,15 @@ public class StompClientAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public StompClientFactory stompClientFactory(StompClientProperties properties,
-                                                 ObjectProvider<javax.net.ssl.SSLContext> sslContext) {
-        return new StompClientFactory(properties, sslContext.getIfAvailable());
+    public StompClientConnectionManager stompClientConnectionManager(StompClientFactory factory) {
+        return new StompClientConnectionManager(factory);
     }
 
     @Bean
     @ConditionalOnMissingBean
-    public StompClientConnectionManager stompClientConnectionManager(StompClientFactory factory) {
-        return new StompClientConnectionManager(factory);
+    public StompClientFactory stompClientFactory(StompClientProperties properties,
+                                                 ObjectProvider<javax.net.ssl.SSLContext> sslContext) {
+        return new StompClientFactory(properties, sslContext.getIfAvailable());
     }
 
     @Bean
@@ -40,16 +40,18 @@ public class StompClientAutoConfiguration {
         return new StompClientTemplate(connectionManager, properties);
     }
 
-    @Bean(name = "stompListenerTaskExecutor")
-    @ConditionalOnMissingBean(name = "stompListenerTaskExecutor")
-    public TaskExecutor stompListenerTaskExecutor() {
-        return new SimpleAsyncTaskExecutor("stomp-listener-");
+    @Bean
+    @ConditionalOnMissingBean
+    public StompListenerEndpointRegistrar stompListenerEndpointRegistrar(
+                                                                         StompClientConnectionManager connectionManager,
+                                                                         StompListenerMethodInvoker invoker) {
+        return new StompListenerEndpointRegistrar(connectionManager, invoker);
     }
 
     @Bean
     @ConditionalOnMissingBean
     public StompListenerMethodInvoker stompListenerMethodInvoker(
-            ObjectProvider<TaskExecutor> taskExecutors) {
+                                                                 ObjectProvider<TaskExecutor> taskExecutors) {
         var executor = taskExecutors.stream()
                                     .filter(bean -> !(bean instanceof org.springframework.core.task.SimpleAsyncTaskExecutor))
                                     .findFirst()
@@ -57,11 +59,9 @@ public class StompClientAutoConfiguration {
         return new StompListenerMethodInvoker(Objects.requireNonNull(executor));
     }
 
-    @Bean
-    @ConditionalOnMissingBean
-    public StompListenerEndpointRegistrar stompListenerEndpointRegistrar(
-            StompClientConnectionManager connectionManager,
-            StompListenerMethodInvoker invoker) {
-        return new StompListenerEndpointRegistrar(connectionManager, invoker);
+    @Bean(name = "stompListenerTaskExecutor")
+    @ConditionalOnMissingBean(name = "stompListenerTaskExecutor")
+    public TaskExecutor stompListenerTaskExecutor() {
+        return new SimpleAsyncTaskExecutor("stomp-listener-");
     }
 }

@@ -8,12 +8,12 @@ import dev.vepo.stomp4j.client.transport.TransportProvider;
 
 public class TcpTransportProvider implements TransportProvider {
     @Override
-    public String protocol() {
-        return "stomp";
+    public Transport getTransport(URI uri, TransportListener listener) {
+        return new TcpTransport(uri, listener);
     }
 
     @Override
-    public Transport getTransport(URI uri, TransportListener listener) {
-        return new TcpTransport(uri, listener);
+    public String protocol() {
+        return "stomp";
     }
 }

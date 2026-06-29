@@ -27,24 +27,9 @@ import dev.vepo.stomp4j.spring.boot.autoconfigure.client.StompListener;
 import dev.vepo.stomp4j.spring.boot.autoconfigure.tests.infra.StompContainer;
 
 @SpringBootTest
-@ContextConfiguration(classes = StompClientAutoConfigurationTest.TestApplication.class,
-                      initializers = StompClientAutoConfigurationTest.BrokerInitializer.class)
+@ContextConfiguration(classes = StompClientAutoConfigurationTest.TestApplication.class, initializers = StompClientAutoConfigurationTest.BrokerInitializer.class)
 @ExtendWith(StompContainer.class)
 class StompClientAutoConfigurationTest {
-
-    @Autowired
-    private StompClientTemplate stompClientTemplate;
-
-    @Autowired
-    private TestConsumer testConsumer;
-
-    @Test
-    void shouldAutoConfigureClientAndDeliverToListener() throws Exception {
-        var receipt = stompClientTemplate.sendWithReceipt("/queue/spring-test", "hello-spring");
-        receipt.completion().get();
-        await().atMost(Duration.ofSeconds(15)).until(() -> "hello-spring".equals(testConsumer.lastMessage()));
-        assertThat(testConsumer.lastMessage()).isEqualTo("hello-spring");
-    }
 
     static class BrokerInitializer implements ApplicationContextInitializer<ConfigurableApplicationContext> {
 
@@ -73,14 +58,28 @@ class StompClientAutoConfigurationTest {
 
         private final AtomicReference<String> lastMessage = new AtomicReference<>();
 
+        String lastMessage() {
+            return lastMessage.get();
+        }
+
         @StompListener(destination = "/queue/spring-test", ackMode = AckMode.CLIENT_INDIVIDUAL)
         void onMessage(StompDelivery delivery, Acknowledgment acknowledgment) {
             lastMessage.set(delivery.body());
             acknowledgment.acknowledge();
         }
+    }
 
-        String lastMessage() {
-            return lastMessage.get();
-        }
+    @Autowired
+    private StompClientTemplate stompClientTemplate;
+
+    @Autowired
+    private TestConsumer testConsumer;
+
+    @Test
+    void shouldAutoConfigureClientAndDeliverToListener() throws Exception {
+        var receipt = stompClientTemplate.sendWithReceipt("/queue/spring-test", "hello-spring");
+        receipt.completion().get();
+        await().atMost(Duration.ofSeconds(15)).until(() -> "hello-spring".equals(testConsumer.lastMessage()));
+        assertThat(testConsumer.lastMessage()).isEqualTo("hello-spring");
     }
 }

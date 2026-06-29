@@ -81,6 +81,48 @@ public class WebSocketChannel implements Channel {
     }
 
     @Override
+    public void close() {
+        logger.info("Closing WebSocket channel... port={}", port);
+        this.running.set(false);
+
+        activeSessions.forEach((session, webSocket) -> {
+            if (!webSocket.isClosed()) {
+                webSocket.close();
+            }
+        });
+        activeSessions.clear();
+
+        if (Objects.nonNull(server)) {
+            server.close()
+                  .onSuccess(v -> logger.info("WebSocket server closed"))
+                  .onFailure(error -> logger.error("Error closing WebSocket server", error));
+        }
+
+        if (Objects.nonNull(vertx)) {
+            vertx.close()
+                 .onSuccess(v -> logger.info("Vertx closed"))
+                 .onFailure(error -> logger.error("Error closing Vertx", error));
+        }
+
+        logger.info("WebSocket channel closed port={}", port);
+    }
+
+    private void closeSession(Session session) {
+        var webSocket = activeSessions.remove(session);
+        if (Objects.nonNull(webSocket) && !webSocket.isClosed()) {
+            webSocket.close();
+        }
+        if (session.status() != Status.END) {
+            listener.sessionDisconnected(session);
+        }
+    }
+
+    @Override
+    public OutboundChannel outboundChannel() {
+        return outboundChannel;
+    }
+
+    @Override
     public void start() {
         logger.info("Starting WebSocket Channel at port {}", port);
         this.running.set(true);
@@ -90,7 +132,8 @@ public class WebSocketChannel implements Channel {
         runtime.sslSettings().ifPresent(sslSettings -> {
             options.setSsl(true);
             sslSettings.keyStoreLocation().ifPresent(keyStore -> options.setKeyCertOptions(
-                    new PfxOptions().setPath(keyStore.path()).setPassword(keyStore.password())));
+                                                                                           new PfxOptions().setPath(keyStore.path())
+                                                                                                           .setPassword(keyStore.password())));
         });
 
         server = vertx.createHttpServer(options);
@@ -146,48 +189,6 @@ public class WebSocketChannel implements Channel {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while starting WebSocket server", ex);
         }
-    }
-
-    private void closeSession(Session session) {
-        var webSocket = activeSessions.remove(session);
-        if (Objects.nonNull(webSocket) && !webSocket.isClosed()) {
-            webSocket.close();
-        }
-        if (session.status() != Status.END) {
-            listener.sessionDisconnected(session);
-        }
-    }
-
-    @Override
-    public void close() {
-        logger.info("Closing WebSocket channel... port={}", port);
-        this.running.set(false);
-
-        activeSessions.forEach((session, webSocket) -> {
-            if (!webSocket.isClosed()) {
-                webSocket.close();
-            }
-        });
-        activeSessions.clear();
-
-        if (Objects.nonNull(server)) {
-            server.close()
-                  .onSuccess(v -> logger.info("WebSocket server closed"))
-                  .onFailure(error -> logger.error("Error closing WebSocket server", error));
-        }
-
-        if (Objects.nonNull(vertx)) {
-            vertx.close()
-                 .onSuccess(v -> logger.info("Vertx closed"))
-                 .onFailure(error -> logger.error("Error closing Vertx", error));
-        }
-
-        logger.info("WebSocket channel closed port={}", port);
-    }
-
-    @Override
-    public OutboundChannel outboundChannel() {
-        return outboundChannel;
     }
 
     @Override

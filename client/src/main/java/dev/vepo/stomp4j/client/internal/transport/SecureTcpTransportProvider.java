@@ -9,12 +9,12 @@ import dev.vepo.stomp4j.client.transport.TransportProvider;
 public class SecureTcpTransportProvider implements TransportProvider {
 
     @Override
-    public String protocol() {
-        return "stomps";
+    public Transport getTransport(URI uri, TransportListener listener) {
+        return new SecureTcpTransport(uri, listener);
     }
 
     @Override
-    public Transport getTransport(URI uri, TransportListener listener) {
-        return new SecureTcpTransport(uri, listener);
+    public String protocol() {
+        return "stomps";
     }
 }

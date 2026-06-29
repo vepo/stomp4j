@@ -13,7 +13,7 @@ import dev.vepo.stomp4j.client.AckMode;
 @Documented
 public @interface StompListener {
 
-    String destination();
-
     AckMode ackMode() default AckMode.AUTO;
+
+    String destination();
 }

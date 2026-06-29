@@ -12,9 +12,9 @@ public interface Channel extends AutoCloseable {
         };
     }
 
-    void start();
-
     void close();
 
     OutboundChannel outboundChannel();
+
+    void start();
 }

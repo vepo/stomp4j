@@ -39,12 +39,11 @@ public class WebSocketTransport implements Transport {
     }
 
     @Override
-    public void send(Message message) {
-        logger.atDebug()
-              .addArgument(() -> Message.formatted(message.encode()))
-              .log("Sending message: {}");
-        webSocketClient.sendText(message.encode(), true);
-        webSocketClient.request(1);
+    public void close() {
+        if (Objects.nonNull(webSocketClient)) {
+            webSocketClient.sendClose(WebSocket.NORMAL_CLOSURE, "Client closed connection");
+        }
+        httpClient.close();
     }
 
     @Override
@@ -56,24 +55,6 @@ public class WebSocketTransport implements Transport {
         httpClient.newWebSocketBuilder()
                   .header("uuid", key.toHex())
                   .buildAsync(uri, new WebSocket.Listener() {
-                      @Override
-                      public void onOpen(WebSocket webSocket) {
-                          logger.info("Connection open!");
-                          webSocketClient = webSocket;
-                          lastReceivedMessage = System.nanoTime();
-                          listener.onConnected(WebSocketTransport.this);
-                      }
-
-                      @Override
-                      public void onError(WebSocket webSocket, Throwable error) {
-                          logger.error("Error on WebSocket connection!", error);
-                          listener.onError(new Message(Command.ERROR,
-                                                       dev.vepo.stomp4j.commons.protocol.Headers.builder()
-                                                                                                .with("message", error.getMessage())
-                                                                                                .build(),
-                                                       error.getMessage()));
-                      }
-
                       @Override
                       public CompletionStage<?> onBinary(WebSocket webSocket, ByteBuffer data, boolean last) {
                           logger.info("Binary data received! last={}", last);
@@ -98,6 +79,30 @@ public class WebSocketTransport implements Transport {
                       }
 
                       @Override
+                      public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
+                          logger.warn("Connection closed! statusCode={}, reason={}", statusCode, reason);
+                          return null;
+                      }
+
+                      @Override
+                      public void onError(WebSocket webSocket, Throwable error) {
+                          logger.error("Error on WebSocket connection!", error);
+                          listener.onError(new Message(Command.ERROR,
+                                                       dev.vepo.stomp4j.commons.protocol.Headers.builder()
+                                                                                                .with("message", error.getMessage())
+                                                                                                .build(),
+                                                       error.getMessage()));
+                      }
+
+                      @Override
+                      public void onOpen(WebSocket webSocket) {
+                          logger.info("Connection open!");
+                          webSocketClient = webSocket;
+                          lastReceivedMessage = System.nanoTime();
+                          listener.onConnected(WebSocketTransport.this);
+                      }
+
+                      @Override
                       public CompletionStage<?> onPing(WebSocket webSocket, ByteBuffer message) {
                           logger.info("Ping received!");
                           webSocket.request(1);
@@ -115,7 +120,7 @@ public class WebSocketTransport implements Transport {
                       public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
                           logger.info("Binary data received! last={}", last);
                           try {
-                               byteChannel.write(StandardCharsets.UTF_8.encode(CharBuffer.wrap(data)));
+                              byteChannel.write(StandardCharsets.UTF_8.encode(CharBuffer.wrap(data)));
                           } catch (IOException e) {
                               throw new RuntimeException(e);
                           }
@@ -134,12 +139,6 @@ public class WebSocketTransport implements Transport {
                           return null;
 
                       }
-
-                      @Override
-                      public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
-                          logger.warn("Connection closed! statusCode={}, reason={}", statusCode, reason);
-                          return null;
-                      }
                   });
 
         logger.info("WebSocket connection established!");
@@ -151,11 +150,12 @@ public class WebSocketTransport implements Transport {
     }
 
     @Override
-    public void close() {
-        if (Objects.nonNull(webSocketClient)) {
-            webSocketClient.sendClose(WebSocket.NORMAL_CLOSURE, "Client closed connection");
-        }
-        httpClient.close();
+    public void send(Message message) {
+        logger.atDebug()
+              .addArgument(() -> Message.formatted(message.encode()))
+              .log("Sending message: {}");
+        webSocketClient.sendText(message.encode(), true);
+        webSocketClient.request(1);
     }
 
     @Override

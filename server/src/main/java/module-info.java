@@ -8,6 +8,7 @@ module stomp4j.server {
 
     requires org.slf4j;
     requires org.apache.commons.codec;
+
     exports dev.vepo.stomp4j.server;
     exports dev.vepo.stomp4j.server.auth;
 }

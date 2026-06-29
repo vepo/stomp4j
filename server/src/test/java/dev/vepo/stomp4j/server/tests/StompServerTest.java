@@ -32,6 +32,23 @@ class StompServerTest {
     private record ReceivedMessage(String topic, String message) {}
 
     @ParameterizedTest
+    @ValueSource(strings = { "stomp://localhost:5504" })
+    @DisplayName("Server should reject invalid credentials")
+    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void authenticationRejectionTest(String url) {
+        try (var server = StompServer.builder()
+                                     .channel(TransportType.TCP, 5504)
+                                     .authenticator(credentials -> "user".equals(credentials.username())
+                                             && "pass".equals(credentials.password()))
+                                     .subscription(topic -> true)
+                                     .handler(message -> {})
+                                     .start();
+                var client = StompClient.create(url, new UserCredential("wrong", "creds"))) {
+            assertThatThrownBy(client::connect).isInstanceOf(StompException.class);
+        }
+    }
+
+    @ParameterizedTest
     @ValueSource(strings = { "stomp://localhost:5500", "ws://localhost:5501" })
     @DisplayName("A server should be able to read a message from clients")
     @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
@@ -43,7 +60,7 @@ class StompServerTest {
                                      .authenticator(credentials -> true)
                                      .subscription(topic -> true)
                                      .handler(message -> receiveMessages.offer(
-                                             new ReceivedMessage(message.destination(), message.body())))
+                                                                               new ReceivedMessage(message.destination(), message.body())))
                                      .start();
                 var tcpClient = StompClient.create(url)) {
             tcpClient.connect();
@@ -117,47 +134,6 @@ class StompServerTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = { "stomp://localhost:5504" })
-    @DisplayName("Server should reject invalid credentials")
-    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    void authenticationRejectionTest(String url) {
-        try (var server = StompServer.builder()
-                                     .channel(TransportType.TCP, 5504)
-                                     .authenticator(credentials -> "user".equals(credentials.username())
-                                             && "pass".equals(credentials.password()))
-                                     .subscription(topic -> true)
-                                     .handler(message -> {})
-                                     .start();
-                var client = StompClient.create(url, new UserCredential("wrong", "creds"))) {
-            assertThatThrownBy(client::connect).isInstanceOf(StompException.class);
-        }
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = { "stomp://localhost:5505", "ws://localhost:5506" })
-    @DisplayName("Unsubscribe should stop message delivery")
-    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    void unsubscribeTest(String url) {
-        try (var server = StompServer.builder()
-                                     .channel(TransportType.TCP, 5505)
-                                     .channel(TransportType.WEB_SOCKET, 5506)
-                                     .subscription(topic -> true)
-                                     .handler(message -> {})
-                                     .start();
-                var client = StompClient.create(url)) {
-            client.connect();
-            var subscription = client.subscribe("topic-unsub");
-            client.unsubscribe(subscription);
-            server.outboundChannel()
-                  .send(new Message(Command.SEND,
-                                    Headers.builder().with(Header.DESTINATION, "topic-unsub").build(),
-                                    "SHOULD-NOT-ARRIVE"));
-            await().pollDelay(java.time.Duration.ofMillis(500)).until(() -> true);
-            assertThat(subscription.hasData()).isFalse();
-        }
-    }
-
-    @ParameterizedTest
     @ValueSource(strings = { "stomp://localhost:5507" })
     @DisplayName("Server should notify when subscriber acknowledges outbound message")
     @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
@@ -184,10 +160,33 @@ class StompServerTest {
                             }
 
                             @Override
-                            public void onNack(String messageId, StompSession session) {
-                            }
+                            public void onNack(String messageId, StompSession session) {}
                         });
             await().until(ackReceived::get);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "stomp://localhost:5505", "ws://localhost:5506" })
+    @DisplayName("Unsubscribe should stop message delivery")
+    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void unsubscribeTest(String url) {
+        try (var server = StompServer.builder()
+                                     .channel(TransportType.TCP, 5505)
+                                     .channel(TransportType.WEB_SOCKET, 5506)
+                                     .subscription(topic -> true)
+                                     .handler(message -> {})
+                                     .start();
+                var client = StompClient.create(url)) {
+            client.connect();
+            var subscription = client.subscribe("topic-unsub");
+            client.unsubscribe(subscription);
+            server.outboundChannel()
+                  .send(new Message(Command.SEND,
+                                    Headers.builder().with(Header.DESTINATION, "topic-unsub").build(),
+                                    "SHOULD-NOT-ARRIVE"));
+            await().pollDelay(java.time.Duration.ofMillis(500)).until(() -> true);
+            assertThat(subscription.hasData()).isFalse();
         }
     }
 }

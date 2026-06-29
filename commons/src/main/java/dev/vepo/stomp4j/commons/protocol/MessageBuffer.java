@@ -16,6 +16,10 @@ public class MessageBuffer {
         return messageLine.contains(Message.END);
     }
 
+    public boolean hasMessage() {
+        return buffer.indexOf(Message.END) > 0;
+    }
+
     public Message message() {
         int endOfMessage = buffer.indexOf(Message.END);
         if (endOfMessage > 0) {
@@ -26,9 +30,5 @@ public class MessageBuffer {
         } else {
             throw new IllegalStateException("Message not complete");
         }
-    }
-
-    public boolean hasMessage() {
-        return buffer.indexOf(Message.END) > 0;
     }
 }

@@ -6,14 +6,14 @@ import dev.vepo.stomp4j.commons.protocol.Message;
 
 public interface Transport extends Closeable {
 
-    void send(Message message);
+    @Override
+    void close();
 
     void connect();
 
     String host();
 
-    @Override
-    void close();
+    void send(Message message);
 
     long silentTime();
 }

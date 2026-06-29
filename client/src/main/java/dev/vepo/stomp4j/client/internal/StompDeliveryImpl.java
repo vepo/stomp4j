@@ -35,34 +35,6 @@ final class StompDeliveryImpl implements StompDelivery {
     }
 
     @Override
-    public String body() {
-        return message.body();
-    }
-
-    @Override
-    public Headers headers() {
-        return message.headers();
-    }
-
-    @Override
-    public String messageId() {
-        return message.headers()
-                      .get(Header.MESSAGE_ID)
-                      .or(() -> message.headers().get(Header.ID))
-                      .orElse("");
-    }
-
-    @Override
-    public String destination() {
-        return message.headers().destination().orElse(subscription.topic());
-    }
-
-    @Override
-    public Subscription subscription() {
-        return subscription;
-    }
-
-    @Override
     public void ack() {
         ensureManualAcknowledgementAllowed();
         if (acknowledged.compareAndSet(false, true)) {
@@ -71,16 +43,14 @@ final class StompDeliveryImpl implements StompDelivery {
     }
 
     @Override
-    public void nack() {
-        ensureManualAcknowledgementAllowed();
-        if (acknowledged.compareAndSet(false, true)) {
-            protocol.negativeAcknowledge(message, session, transport);
-        }
-    }
-
-    @Override
     public boolean acknowledged() {
         return acknowledged.get();
+    }
+
+    void autoAcknowledge() {
+        if (tryMarkAcknowledged()) {
+            protocol.acknowledge(message, session, transport);
+        }
     }
 
     @Override
@@ -90,41 +60,20 @@ final class StompDeliveryImpl implements StompDelivery {
         }
     }
 
+    @Override
+    public String body() {
+        return message.body();
+    }
+
+    @Override
+    public String destination() {
+        return message.headers().destination().orElse(subscription.topic());
+    }
+
     private void ensureManualAcknowledgementAllowed() {
         if (!subscription.requiresManualAcknowledgement()) {
             throw new StompException("Manual acknowledgement is not enabled for subscription %s".formatted(subscription));
         }
-    }
-
-    Message message() {
-        return message;
-    }
-
-    boolean tryMarkAcknowledged() {
-        return acknowledged.compareAndSet(false, true);
-    }
-
-    void autoAcknowledge() {
-        if (tryMarkAcknowledged()) {
-            protocol.acknowledge(message, session, transport);
-        }
-    }
-
-    boolean isAcknowledged() {
-        return acknowledged.get();
-    }
-
-    @Override
-    public String toString() {
-        return "StompDelivery[destination=%s, messageId=%s, acknowledged=%s]".formatted(
-                destination(),
-                messageId(),
-                acknowledged.get());
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(messageId(), subscription);
     }
 
     @Override
@@ -138,5 +87,56 @@ final class StompDeliveryImpl implements StompDelivery {
         var other = (StompDeliveryImpl) obj;
         return Objects.equals(messageId(), other.messageId())
                 && Objects.equals(subscription, other.subscription());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(messageId(), subscription);
+    }
+
+    @Override
+    public Headers headers() {
+        return message.headers();
+    }
+
+    boolean isAcknowledged() {
+        return acknowledged.get();
+    }
+
+    Message message() {
+        return message;
+    }
+
+    @Override
+    public String messageId() {
+        return message.headers()
+                      .get(Header.MESSAGE_ID)
+                      .or(() -> message.headers().get(Header.ID))
+                      .orElse("");
+    }
+
+    @Override
+    public void nack() {
+        ensureManualAcknowledgementAllowed();
+        if (acknowledged.compareAndSet(false, true)) {
+            protocol.negativeAcknowledge(message, session, transport);
+        }
+    }
+
+    @Override
+    public Subscription subscription() {
+        return subscription;
+    }
+
+    @Override
+    public String toString() {
+        return "StompDelivery[destination=%s, messageId=%s, acknowledged=%s]".formatted(
+                                                                                        destination(),
+                                                                                        messageId(),
+                                                                                        acknowledged.get());
+    }
+
+    boolean tryMarkAcknowledged() {
+        return acknowledged.compareAndSet(false, true);
     }
 }
