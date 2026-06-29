@@ -140,6 +140,7 @@ public class Session implements StompSession {
         }
         status = Status.END;
         stopHeartbeatTasks();
+        notifySubscriptionsRemoved();
         listener.sessionDisconnected(this);
         closer.close(this);
     }
@@ -200,6 +201,11 @@ public class Session implements StompSession {
                      .orElseThrow(() -> new IllegalStateException("No supported STOMP version in common"));
     }
 
+    private void notifySubscriptionsRemoved() {
+        subscriptions.forEach(subscription -> listener.subscriptionRemoved(this, subscription.topic()));
+        subscriptions.clear();
+    }
+
     public void offer(byte[] data, int length) {
         if (length <= 0) {
             return;
@@ -250,12 +256,17 @@ public class Session implements StompSession {
                 var ackMode = message.headers().get(Header.ACK);
                 if (listener.subscriptionRequested(this, topic)) {
                     subscriptions.add(new Subscription(topic, id, ackMode));
+                    listener.subscriptionEstablished(this, topic);
                 }
             }
             case UNSUBSCRIBE -> {
                 var id = message.headers().get(Header.ID);
                 var destination = message.headers().destination();
-                subscriptions.removeIf(subscription -> matchesUnsubscribe(subscription, id, destination));
+                var toRemove = subscriptions.stream()
+                                            .filter(subscription -> matchesUnsubscribe(subscription, id, destination))
+                                            .toList();
+                toRemove.forEach(subscription -> listener.subscriptionRemoved(this, subscription.topic()));
+                subscriptions.removeAll(toRemove);
             }
             case ACK -> acknowledgePendingMessage(message);
             case NACK -> negativeAcknowledgePendingMessage(message);

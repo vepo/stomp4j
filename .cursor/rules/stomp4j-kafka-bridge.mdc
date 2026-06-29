@@ -1,0 +1,37 @@
+---
+description: Keep Kafka Bridge code, config, and docs in sync
+alwaysApply: true
+---
+
+# Kafka Bridge — read and maintain
+
+The STOMP ↔ Kafka bridge lives in `bridge/` and [docs/kafka-bridge-guide.md](../../docs/kafka-bridge-guide.md).
+
+## Before changing bridge behaviour or public API
+
+1. Read [docs/kafka-bridge-guide.md](../../docs/kafka-bridge-guide.md) and [docs/domain-specification.md](../../docs/domain-specification.md) (Bridge terms).
+2. Place code in `bridge/stomp4j-kafka-bridge` (library) or `bridge/stomp4j-kafka-bridge-runner` (executable).
+3. Keep Kafka dependencies confined to `bridge/` modules — not in `commons`, `client`, or `server` production code.
+
+## Mandatory updates (same change)
+
+| Trigger | Action |
+|---------|--------|
+| New/changed `StompKafkaBridge` API | [kafka-bridge-guide.md](../../docs/kafka-bridge-guide.md) |
+| New/changed config keys or env vars | [kafka-bridge-guide.md](../../docs/kafka-bridge-guide.md) + runner `application.properties` |
+| New/changed mapping semantics | [kafka-bridge-guide.md](../../docs/kafka-bridge-guide.md), bridge unit tests |
+| User-visible capability add/remove/change | [features.md](../../docs/features.md) Bridge section |
+| New bridge domain terms | [domain-specification.md](../../docs/domain-specification.md) |
+| Module boundary / dependency change | [ARCHITECTURE.md](../../ARCHITECTURE.md) |
+| Subscription lifecycle used by bridge | Server tests + bridge integration tests |
+
+## Finish gate
+
+- `mvn verify` (Docker required for bridge integration tests)
+- Update [features.md](../../docs/features.md) when capabilities change
+
+## Related
+
+- [documentation.mdc](documentation.mdc)
+- [stomp4j-module-architecture.mdc](stomp4j-module-architecture.mdc)
+- [development-experience.mdc](development-experience.mdc)

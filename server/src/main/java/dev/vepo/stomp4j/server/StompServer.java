@@ -147,6 +147,16 @@ public class StompServer implements AutoCloseable {
         }
 
         @Override
+        public void subscriptionEstablished(Session session, String topic) {
+            subscriptionHandler.onSubscribed(session, topic);
+        }
+
+        @Override
+        public void subscriptionRemoved(Session session, String topic) {
+            subscriptionHandler.onUnsubscribed(session, topic);
+        }
+
+        @Override
         public boolean subscriptionRequested(Session session, String topic) {
             return subscriptionHandler.accept(topic);
         }

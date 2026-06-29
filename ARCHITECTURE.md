@@ -16,7 +16,7 @@ Stomp4J is a **Java 21 library** (not a runnable application) that implements th
 | License | Apache 2.0 |
 | Logging | SLF4J (consumer provides implementation) |
 
-Published artifacts: `stomp4j-commons`, `stomp4j-client`, `stomp4j-server`, `stomp4j-spring-boot-autoconfigure`, `stomp4j-spring-boot-starter-client`, `stomp4j-spring-boot-starter-server`, `stomp4j-quarkus-cdi`, `stomp4j-quarkus-client`, `stomp4j-quarkus-client-deployment`, `stomp4j-quarkus-server`, `stomp4j-quarkus-server-deployment`.
+Published artifacts: `stomp4j-commons`, `stomp4j-client`, `stomp4j-server`, `stomp4j-kafka-bridge`, `stomp4j-kafka-bridge-runner`, `stomp4j-spring-boot-autoconfigure`, `stomp4j-spring-boot-starter-client`, `stomp4j-spring-boot-starter-server`, `stomp4j-quarkus-cdi`, `stomp4j-quarkus-client`, `stomp4j-quarkus-client-deployment`, `stomp4j-quarkus-server`, `stomp4j-quarkus-server-deployment`.
 
 ## 2. Module dependency graph
 
@@ -38,9 +38,12 @@ stomp4j-parent
         ├── stomp4j-quarkus-server
         ├── stomp4j-quarkus-server-deployment
         └── stomp4j-quarkus-server-integration-tests
+    └── stomp4j-bridge      → optional Kafka bridge layer
+        ├── stomp4j-kafka-bridge        → server, kafka-clients
+        └── stomp4j-kafka-bridge-runner → kafka-bridge (executable)
 ```
 
-Dependencies flow **downward only**: `client` and `server` depend on `commons`; `server` tests may use `client` but production `server` does not depend on `client`. Quarkus extensions depend on `client` or `server` respectively, not on each other.
+Dependencies flow **downward only**: `client` and `server` depend on `commons`; `server` tests may use `client` but production `server` does not depend on `client`. `stomp4j-kafka-bridge` depends on `stomp4j-server` only (not `client`) in production; tests use `stomp4j-client`. Quarkus extensions depend on `client` or `server` respectively, not on each other.
 
 ## 3. Module responsibilities
 
@@ -144,9 +147,20 @@ Optional Quarkus 3.17 layer using CDI Events (no `*Template` APIs). No `module-i
 
 User guide: [docs/quarkus-guide.md](docs/quarkus-guide.md).
 
+### 3.5 Kafka bridge (`stomp4j-bridge`)
+
+Optional STOMP ↔ Kafka routing. Depends on `stomp4j-server` + `kafka-clients` only in production.
+
+| Module | Role |
+|--------|------|
+| `stomp4j-kafka-bridge` | `StompKafkaBridge`, `DestinationMapping`, `KafkaBridgeConfig` |
+| `stomp4j-kafka-bridge-runner` | `StompKafkaBridgeApplication` fat JAR |
+
+User guide: [docs/kafka-bridge-guide.md](docs/kafka-bridge-guide.md).
+
 ## 4. Public API entry points
 
-There is no `main()`. Consumers use:
+There is no `main()` in core modules. Consumers use:
 
 ### Client
 
