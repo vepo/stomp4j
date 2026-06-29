@@ -1,0 +1,50 @@
+---
+description: Core Stomp4J conventions (modules, SPI, public API)
+alwaysApply: true
+---
+
+# Stomp4J — core rules
+
+Follow [ARCHITECTURE.md](../../ARCHITECTURE.md) and existing code in the same package.
+
+## Stack
+
+- Java 21, Maven multi-module, JPMS (`module-info.java` in every module).
+- STOMP protocol library — no Spring, no Quarkus, no web UI.
+- Logging: SLF4J only. Scripts: bash or JBang — [stomp4j-tooling-languages.mdc](stomp4j-tooling-languages.mdc).
+
+## Modules
+
+| Module | Role |
+|--------|------|
+| `commons` | Wire format: `Message`, `Command`, `Headers`, `MessageBuffer` |
+| `client` | `StompClient` API, transports (TCP/WebSocket), protocol versions 1.0–1.2 |
+| `server` | `StompServer`, channels, sessions, handlers |
+
+## Public API
+
+- **Client:** `StompClient.create(url, …)` — factory methods only; implementation in `internal`.
+- **Server:** `StompServer.builder()` — configure channels, handlers, authenticator.
+- Do not expose `internal`, `channels`, or `session` packages without updating `module-info.java` deliberately.
+
+## SPI extension
+
+New transports or protocol versions:
+
+1. Implement interface (`TransportProvider` or `Stomp`).
+2. Register `provides` in `module-info.java`.
+3. Add `META-INF/services/…` file under `client/src/main/resources/`.
+
+## Never
+
+- `System.out.println` — use SLF4J.
+- Import `client.internal` or `server.channels` / `server.session` from outside their module.
+- Add a framework (Spring, Quarkus) to production dependencies.
+
+## When adding a feature
+
+ARCHITECTURE.md §13 — domain spec → correct module → SPI if needed → tests → update ARCHITECTURE.md → `mvn verify`.
+
+## When fixing a test
+
+Understand failure first; fix production code or test setup. Reuse `StompContainer` and existing test infra.

@@ -1,0 +1,32 @@
+---
+description: Avoid string concatenation — prefer formatted(), then StringBuilder
+globs: "**/*.java"
+alwaysApply: false
+---
+
+# String building
+
+Do **not** join strings with the `+` operator (including return statements, exceptions, frame bodies, and log messages).
+
+## 1. Prefer `.formatted()`
+
+```java
+// ❌
+throw new IllegalArgumentException("Invalid destination: " + dest);
+
+// ✅
+throw new IllegalArgumentException("Invalid destination: %s".formatted(dest));
+```
+
+## 2. Otherwise `StringBuilder`
+
+Use for loops, conditional segments, or incremental STOMP frame assembly.
+
+## Allowed without formatting
+
+- A single literal with no interpolation.
+- `StringBuilder.append` inside incremental wire-format building.
+
+## Never
+
+- `+` to build frame content, URLs, log messages, or exception text.

@@ -1,3 +1,5 @@
 target/
 .vscode/
+.idea/
 pom.xml.versionsBackup
+**/pom.xml.versionsBackup

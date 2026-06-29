@@ -1,0 +1,39 @@
+---
+description: Domain model conventions — STOMP ubiquitous language in code and tests
+globs:
+  - '**/src/main/java/**/*.java'
+  - '**/src/test/**/*.java'
+alwaysApply: true
+---
+
+# Domain model usage
+
+## Domain specification
+
+[docs/domain-specification.md](../../docs/domain-specification.md) defines STOMP and library terms. Read it before protocol, client, or server changes.
+
+## Pre-change checklist
+
+1. Read the domain specification (Ubiquitous Language).
+2. Ask: does this change new commands, transports, handlers, or invariants?
+3. Extend the spec first if new vocabulary is introduced.
+
+## Coding rules
+
+- Use domain terms: `Destination`, `Subscription`, `Frame`, `Session`, `Transport`, not `Data`, `Handler2`, `stateFlag`.
+- Handler signatures use `topic`/`destination` and `message`/`body` consistently with existing handlers.
+
+## Testing rules
+
+Tests describe STOMP scenarios in domain terms:
+
+```java
+@Test
+void shouldDeliverMessageToSubscribedDestination() { ... }
+```
+
+## Post-change
+
+- New concepts → add to domain specification.
+- User-visible capability changes → update [docs/features.md](../../docs/features.md).
+- Boundary or SPI changes → update [ARCHITECTURE.md](../../ARCHITECTURE.md).

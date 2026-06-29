@@ -1,0 +1,34 @@
+---
+description: Java import hygiene — required on every Java edit
+globs: "**/*.java"
+alwaysApply: true
+---
+
+# Java formatting and imports
+
+This project does not yet use Spotless or a shared `formatter.xml`. Follow consistent style from existing files (4 spaces, K&R braces, ~120 char lines).
+
+## Imports — required
+
+1. **Every type** used in code must have an `import` (or live in the same package).
+2. **Remove unused imports** after every edit.
+3. **Never** use a fully qualified class name when a simple name works **without** a collision.
+
+## Import order
+
+`java.*` / `javax.*` → third-party → `dev.vepo.stomp4j.*`
+
+## Name collision (only exception)
+
+Import one type; use FQN for the other:
+
+```java
+import java.util.List;
+
+public void merge(List<String> ids, dev.vepo.stomp4j.server.Session session) { ... }
+```
+
+## Before finishing Java changes
+
+1. `ReadLints` on edited paths — fix unused-import warnings and unresolved types.
+2. Full gate: [static-analysis.mdc](static-analysis.mdc) (`mvn verify`).

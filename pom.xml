@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>dev.vepo</groupId>
-    <artifactId>stomp4j</artifactId>
+    <artifactId>stomp4j-parent</artifactId>
     <version>1.1.1-SNAPSHOT</version>
 
     <properties>
@@ -21,9 +21,10 @@
         <version.junit>6.0.1</version.junit>
     </properties>
 
-    <name>Stomp4J</name>
+    <name>Stomp4J :: Parent</name>
     <description>Java Library for Stomp protocol https://stomp.github.io/</description>
     <url>https://github.com/vepo/stomp4j</url>
+    <packaging>pom</packaging>
 
     <licenses>
         <license>
@@ -54,48 +55,107 @@
         </developer>
     </developers>
 
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>commons-codec</groupId>
+                <artifactId>commons-codec</artifactId>
+                <version>1.20.0</version>
+            </dependency>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>2.0.17</version>
+            </dependency>
+
+            <!-- TESTS -->
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-engine</artifactId>
+                <version>${version.junit}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-params</artifactId>
+                <version>${version.junit}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-activemq</artifactId>
+                <version>${version.testcontainers}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>ch.qos.logback</groupId>
+                <artifactId>logback-classic</artifactId>
+                <version>1.5.21</version>
+                <scope>test</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.activemq</groupId>
+                <artifactId>activemq-client</artifactId>
+                <version>6.2.0</version>
+                <scope>test</scope>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.apache.logging.log4j</groupId>
+                        <artifactId>log4j-slf4j2-impl</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+            <dependency>
+                <groupId>org.assertj</groupId>
+                <artifactId>assertj-core</artifactId>
+                <version>3.27.6</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.awaitility</groupId>
+                <artifactId>awaitility</artifactId>
+                <version>4.3.0</version>
+                <scope>test</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <dependency>
             <groupId>commons-codec</groupId>
             <artifactId>commons-codec</artifactId>
-            <version>1.20.0</version>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
-            <version>2.0.17</version>
         </dependency>
 
         <!-- TESTS -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-engine</artifactId>
-            <version>${version.junit}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-params</artifactId>
-            <version>${version.junit}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-activemq</artifactId>
-            <version>${version.testcontainers}</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>1.5.21</version>
             <scope>test</scope>
         </dependency>
 
         <dependency>
             <groupId>org.apache.activemq</groupId>
             <artifactId>activemq-client</artifactId>
-            <version>6.2.0</version>
             <scope>test</scope>
             <exclusions>
                 <exclusion>
@@ -108,13 +168,11 @@
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
             <version>3.27.6</version>
-            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.awaitility</groupId>
             <artifactId>awaitility</artifactId>
             <version>4.3.0</version>
-            <scope>test</scope>
         </dependency>
     </dependencies>
 
@@ -156,6 +214,15 @@
     </profiles>
 
     <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>versions-maven-plugin</artifactId>
+                    <version>2.18.0</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -224,4 +291,9 @@
             </plugin>
         </plugins>
     </build>
+    <modules>
+        <module>commons</module>
+        <module>client</module>
+        <module>server</module>
+    </modules>
 </project>

@@ -1,0 +1,63 @@
+---
+description: Module layers — commons, client, server responsibilities
+alwaysApply: true
+---
+
+# Module architecture
+
+Follow [ARCHITECTURE.md](../../ARCHITECTURE.md) §2–§3 and §11. Dependencies flow **downward only**:
+
+```
+commons  ←  client
+commons  ←  server
+(client used in server tests only, not production)
+```
+
+## commons — protocol kernel
+
+- `Message`, `Command`, `Header`, `Headers`, `MessageBuffer`, `TransportType`.
+- **No** dependency on `client` or `server`.
+- Wire encode/decode only — no transport or session logic.
+
+## client — STOMP client
+
+| Layer | Packages | Role |
+|-------|----------|------|
+| Public API | `dev.vepo.stomp4j.client` | `StompClient`, `Subscription`, `UserCredential` |
+| Protocol | `client.protocol`, `client.protocol.v1_*` | Version-specific STOMP commands |
+| Transport SPI | `client.transport`, `client.internal.transport` | TCP/WebSocket I/O |
+| Internal | `client.internal` | `StompClientImpl` — connection lifecycle |
+
+- **Exports** only public packages (see `module-info.java`).
+- **SPI:** `TransportProvider`, `Stomp` — register in `provides` + `META-INF/services`.
+
+## server — embeddable STOMP server
+
+| Layer | Packages | Role |
+|-------|----------|------|
+| Public API | `dev.vepo.stomp4j.server`, `server.auth` | `StompServer`, handlers, authenticator |
+| Channels | `server.channels` (internal) | TCP NIO, WebSocket (Vert.x) |
+| Session | `server.session` (internal) | Per-connection state machine |
+
+- Handlers (`MessageHandler`, `SubscriptionHandler`) are the application boundary.
+- Channel/session details stay internal.
+
+## When adding a feature
+
+1. Decide module: protocol change → `commons`; client-only → `client`; server-only → `server`.
+2. Update `module-info.java` if exports or SPI change.
+3. Add tests in the same module.
+4. Update ARCHITECTURE.md §3 / §12.
+
+## Violations
+
+```java
+// ❌ commons importing client
+import dev.vepo.stomp4j.client.StompClient;
+
+// ❌ server production code depending on client
+// (test scope only is fine)
+
+// ✅ server uses commons Message
+import dev.vepo.stomp4j.commons.protocol.Message;
+```
