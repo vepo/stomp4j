@@ -26,7 +26,7 @@ class StompServerTlsTest {
                                      .channel(TransportType.TCP, 5510)
                                      .subscription(topic -> true)
                                      .handler(message -> received.offer(
-                                             new ReceivedMessage(message.destination(), message.body())))
+                                                                        new ReceivedMessage(message.destination(), message.body())))
                                      .ssl(TestSsl.serverSslContext())
                                      .start();
                 var client = StompClient.create("stomps://localhost:5510", TestSsl.trustingClientSslContext())) {
@@ -46,7 +46,7 @@ class StompServerTlsTest {
                                      .channel(TransportType.WEB_SOCKET, 5511)
                                      .subscription(topic -> true)
                                      .handler(message -> received.offer(
-                                             new ReceivedMessage(message.destination(), message.body())))
+                                                                        new ReceivedMessage(message.destination(), message.body())))
                                      .ssl(TestSsl.serverSslContext(),
                                           TestSsl.keyStorePath(),
                                           TestSsl.keyStorePassword())

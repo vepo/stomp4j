@@ -29,12 +29,10 @@ public abstract class Stomp {
                        .collect(Collectors.joining(","));
     }
 
-    public abstract boolean hasHeartBeat();
-
     public static Message connect(String host,
-                                 UserCredential credentials,
-                                 Set<Stomp> versions,
-                                 Duration expectedHeartbeatFrequency) {
+                                  UserCredential credentials,
+                                  Set<Stomp> versions,
+                                  Duration expectedHeartbeatFrequency) {
         var builder = MessageBuilder.builder(Command.CONNECT)
                                     .header(Header.ACCEPT_VERSION, acceptedVersions(versions))
                                     .header(Header.HOST, host)
@@ -56,19 +54,17 @@ public abstract class Stomp {
                        .orElseThrow(() -> new IllegalArgumentException("Version not supported"));
     }
 
-    public abstract String version();
-
-    public abstract void onMessage(Message message, Optional<String> session, Transport transport);
-
-    public abstract void subscribe(Subscription subscription, Optional<String> session, Transport transport, AckMode ackMode);
-
-    public final void subscribe(Subscription subscription, Optional<String> session, Transport transport) {
-        subscribe(subscription, session, transport, subscription.ackMode());
-    }
-
     public abstract void acknowledge(Message message, Optional<String> session, Transport transport);
 
+    public abstract boolean hasHeartBeat();
+
+    public Message heartBeatMessage() {
+        return Message.HEARTBEAT;
+    }
+
     public abstract void negativeAcknowledge(Message message, Optional<String> session, Transport transport);
+
+    public abstract void onMessage(Message message, Optional<String> session, Transport transport);
 
     public abstract void send(String destination, String content, String contentType, Optional<String> session, Transport transport);
 
@@ -81,9 +77,13 @@ public abstract class Stomp {
         send(destination, content, contentType, session, transport);
     }
 
-    public Message heartBeatMessage() {
-        return Message.HEARTBEAT;
+    public final void subscribe(Subscription subscription, Optional<String> session, Transport transport) {
+        subscribe(subscription, session, transport, subscription.ackMode());
     }
 
+    public abstract void subscribe(Subscription subscription, Optional<String> session, Transport transport, AckMode ackMode);
+
     public abstract void unsubscribe(Subscription subscription, Transport transport);
+
+    public abstract String version();
 }

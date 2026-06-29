@@ -8,13 +8,13 @@ import dev.vepo.stomp4j.client.transport.TransportProvider;
 
 public class WebSocketTransportProvider implements TransportProvider {
     @Override
-    public String protocol() {
-        return "ws";
+    public Transport getTransport(URI uri, TransportListener listener) {
+        return new WebSocketTransport(uri, listener);
     }
 
     @Override
-    public Transport getTransport(URI uri, TransportListener listener) {
-        return new WebSocketTransport(uri, listener);
+    public String protocol() {
+        return "ws";
     }
 
 }

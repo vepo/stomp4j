@@ -15,8 +15,8 @@ import dev.vepo.stomp4j.spring.boot.autoconfigure.server.StompInboundHandler;
 public class ChatInboundHandler implements StompInboundHandler, StompAuthenticator {
 
     @Override
-    public boolean supports(String destination) {
-        return destination.startsWith("/app/chat/");
+    public boolean authenticate(Credentials credentials) {
+        return "demo".equals(credentials.username());
     }
 
     @Override
@@ -29,7 +29,7 @@ public class ChatInboundHandler implements StompInboundHandler, StompAuthenticat
     }
 
     @Override
-    public boolean authenticate(Credentials credentials) {
-        return "demo".equals(credentials.username());
+    public boolean supports(String destination) {
+        return destination.startsWith("/app/chat/");
     }
 }

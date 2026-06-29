@@ -9,12 +9,12 @@ import dev.vepo.stomp4j.client.transport.TransportProvider;
 public class SecureWebSocketTransportProvider implements TransportProvider {
 
     @Override
-    public String protocol() {
-        return "wss";
+    public Transport getTransport(URI uri, TransportListener listener) {
+        return new SecureWebSocketTransport(uri, listener);
     }
 
     @Override
-    public Transport getTransport(URI uri, TransportListener listener) {
-        return new SecureWebSocketTransport(uri, listener);
+    public String protocol() {
+        return "wss";
     }
 }

@@ -20,17 +20,6 @@ class CommandTest {
     }
 
     @Test
-    void shouldRoundTripReceiptFrame() {
-        var message = MessageBuilder.builder(Command.RECEIPT)
-                                    .header(Header.RECEIPT_ID, "receipt-42")
-                                    .build();
-        var encoded = message.encode();
-        var decoded = Message.readMessage(encoded.substring(0, encoded.length() - 1));
-        assertThat(decoded.command()).isEqualTo(Command.RECEIPT);
-        assertThat(decoded.headers().get(Header.RECEIPT_ID)).contains("receipt-42");
-    }
-
-    @Test
     void shouldRoundTripNackFrame() {
         var message = MessageBuilder.builder(Command.NACK)
                                     .header(Header.ID, "msg-1")
@@ -39,5 +28,16 @@ class CommandTest {
         var decoded = Message.readMessage(encoded.substring(0, encoded.length() - 1));
         assertThat(decoded.command()).isEqualTo(Command.NACK);
         assertThat(decoded.headers().get(Header.ID)).contains("msg-1");
+    }
+
+    @Test
+    void shouldRoundTripReceiptFrame() {
+        var message = MessageBuilder.builder(Command.RECEIPT)
+                                    .header(Header.RECEIPT_ID, "receipt-42")
+                                    .build();
+        var encoded = message.encode();
+        var decoded = Message.readMessage(encoded.substring(0, encoded.length() - 1));
+        assertThat(decoded.command()).isEqualTo(Command.RECEIPT);
+        assertThat(decoded.headers().get(Header.RECEIPT_ID)).contains("receipt-42");
     }
 }

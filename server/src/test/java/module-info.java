@@ -8,5 +8,6 @@ module stomp4j.server.test {
     requires jakarta.messaging;
     requires org.slf4j;
     requires org.junit.jupiter.params;
+
     opens dev.vepo.stomp4j.server.tests to org.junit.platform.commons;
 }

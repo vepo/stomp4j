@@ -17,6 +17,13 @@ public class StompClientFactory {
         this.sslContext = sslContext;
     }
 
+    private UserCredential buildCredentials() {
+        if (Objects.isNull(properties.getUsername())) {
+            return null;
+        }
+        return new UserCredential(properties.getUsername(), properties.getPassword());
+    }
+
     public StompClient create() {
         var credentials = buildCredentials();
         if (Objects.nonNull(properties.getTransportType()) && Objects.nonNull(credentials)) {
@@ -36,12 +43,5 @@ public class StompClientFactory {
 
     public StompClient create(String url, UserCredential credentials) {
         return StompClient.create(url, credentials);
-    }
-
-    private UserCredential buildCredentials() {
-        if (Objects.isNull(properties.getUsername())) {
-            return null;
-        }
-        return new UserCredential(properties.getUsername(), properties.getPassword());
     }
 }

@@ -11,11 +11,11 @@ public enum AckMode {
         this.wireValue = wireValue;
     }
 
-    public String wireValue() {
-        return wireValue;
-    }
-
     public boolean requiresManualAcknowledgement() {
         return this == CLIENT || this == CLIENT_INDIVIDUAL;
+    }
+
+    public String wireValue() {
+        return wireValue;
     }
 }

@@ -9,8 +9,13 @@ import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 public class MessageBuilder {
+    public static MessageBuilder builder(Command command) {
+        return new MessageBuilder(command);
+    }
+
     private final Command command;
     private Map<Header, String> headers;
+
     private String body;
 
     public MessageBuilder(Command command) {
@@ -19,22 +24,8 @@ public class MessageBuilder {
         this.body = null;
     }
 
-    public static MessageBuilder builder(Command command) {
-        return new MessageBuilder(command);
-    }
-
-    public MessageBuilder header(Header key, String value) {
-        this.headers.put(key, value);
-        return this;
-    }
-
     public MessageBuilder body(String body) {
         this.body = body;
-        return this;
-    }
-
-    public MessageBuilder headerIfPresent(Header key, Optional<String> value) {
-        value.ifPresent(v -> this.headers.put(key, v));
         return this;
     }
 
@@ -45,6 +36,16 @@ public class MessageBuilder {
                                               .collect(Collectors.toMap(entry -> entry.getKey().value(),
                                                                         Entry::getValue))),
                            body);
+    }
+
+    public MessageBuilder header(Header key, String value) {
+        this.headers.put(key, value);
+        return this;
+    }
+
+    public MessageBuilder headerIfPresent(Header key, Optional<String> value) {
+        value.ifPresent(v -> this.headers.put(key, v));
+        return this;
     }
 
 }

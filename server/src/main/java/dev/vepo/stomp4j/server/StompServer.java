@@ -29,6 +29,27 @@ import dev.vepo.stomp4j.server.session.Session;
 import dev.vepo.stomp4j.server.session.SessionConfig;
 
 public class StompServer implements AutoCloseable {
+    private class AllChannelsOutbound implements AcknowledgedOutboundChannel {
+
+        @Override
+        public void send(Message message) {
+            send(message, null);
+        }
+
+        @Override
+        public void send(Message message, SubscriberAckListener listener) {
+            logger.debug("Broadcasting message to all channels: {}", message);
+            activeChannels.forEach(channel -> {
+                var outbound = channel.outboundChannel();
+                if (outbound instanceof AcknowledgedOutboundChannel acknowledged) {
+                    acknowledged.send(message, listener);
+                } else {
+                    outbound.send(message);
+                }
+            });
+        }
+    }
+
     public static class Builder {
         private final Set<TransportChannel> channels = new HashSet<>();
         private StompAuthenticator authenticator;
@@ -42,24 +63,14 @@ public class StompServer implements AutoCloseable {
 
         private Builder() {}
 
-        public Builder channel(TransportType type, int port) {
-            Objects.requireNonNull(type, "type cannot be null!");
-            channels.add(new TransportChannel(type, port));
-            return this;
-        }
-
         public Builder authenticator(StompAuthenticator authenticator) {
             this.authenticator = authenticator;
             return this;
         }
 
-        public Builder handler(MessageHandler messageHandler) {
-            this.messageHandler = messageHandler;
-            return this;
-        }
-
-        public Builder subscription(SubscriptionHandler subscriptionHandler) {
-            this.subscriptionHandler = subscriptionHandler;
+        public Builder channel(TransportType type, int port) {
+            Objects.requireNonNull(type, "type cannot be null!");
+            channels.add(new TransportChannel(type, port));
             return this;
         }
 
@@ -68,8 +79,8 @@ public class StompServer implements AutoCloseable {
             return this;
         }
 
-        public Builder supportedVersions(String... versions) {
-            this.supportedVersions = List.of(versions);
+        public Builder handler(MessageHandler messageHandler) {
+            this.messageHandler = messageHandler;
             return this;
         }
 
@@ -102,6 +113,16 @@ public class StompServer implements AutoCloseable {
             server.start();
             return server;
         }
+
+        public Builder subscription(SubscriptionHandler subscriptionHandler) {
+            this.subscriptionHandler = subscriptionHandler;
+            return this;
+        }
+
+        public Builder supportedVersions(String... versions) {
+            this.supportedVersions = List.of(versions);
+            return this;
+        }
     }
 
     private class ServerChannelListener implements ChannelListener {
@@ -109,15 +130,10 @@ public class StompServer implements AutoCloseable {
         @Override
         public void inboundMessageReceived(Session session, Message message) {
             messageHandler.onSend(new StompMessage(
-                    message.headers().destination().orElse(""),
-                    message.body(),
-                    message.headers(),
-                    session.outboundChannel()));
-        }
-
-        @Override
-        public boolean subscriptionRequested(Session session, String topic) {
-            return subscriptionHandler.accept(topic);
+                                                   message.headers().destination().orElse(""),
+                                                   message.body(),
+                                                   message.headers(),
+                                                   session.outboundChannel()));
         }
 
         @Override
@@ -129,26 +145,10 @@ public class StompServer implements AutoCloseable {
         public void sessionDisconnected(Session session) {
             connectionListener.onDisconnected(session);
         }
-    }
-
-    private class AllChannelsOutbound implements AcknowledgedOutboundChannel {
 
         @Override
-        public void send(Message message) {
-            send(message, null);
-        }
-
-        @Override
-        public void send(Message message, SubscriberAckListener listener) {
-            logger.debug("Broadcasting message to all channels: {}", message);
-            activeChannels.forEach(channel -> {
-                var outbound = channel.outboundChannel();
-                if (outbound instanceof AcknowledgedOutboundChannel acknowledged) {
-                    acknowledged.send(message, listener);
-                } else {
-                    outbound.send(message);
-                }
-            });
+        public boolean subscriptionRequested(Session session, String topic) {
+            return subscriptionHandler.accept(topic);
         }
     }
 
@@ -177,36 +177,27 @@ public class StompServer implements AutoCloseable {
         this.subscriptionHandler = builder.subscriptionHandler;
         this.connectionListener = builder.connectionListener;
         this.sessionConfig = new SessionConfig(
-                Objects.isNull(builder.authenticator) ? java.util.Optional.empty()
-                                                      : java.util.Optional.of(builder.authenticator),
-                builder.supportedVersions,
-                builder.heartbeat,
-                builder.serverName);
+                                               Objects.isNull(builder.authenticator) ? java.util.Optional.empty()
+                                                                                     : java.util.Optional.of(builder.authenticator),
+                                               builder.supportedVersions,
+                                               builder.heartbeat,
+                                               builder.serverName);
         this.heartbeatExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
             var thread = new Thread(r, "stomp4j-server-heartbeat");
             thread.setDaemon(true);
             return thread;
         });
         this.channelRuntime = new ChannelRuntime(
-                sessionConfig,
-                Objects.isNull(builder.sslSettings) ? java.util.Optional.empty()
-                                                    : java.util.Optional.of(builder.sslSettings),
-                heartbeatExecutor);
+                                                 sessionConfig,
+                                                 Objects.isNull(builder.sslSettings) ? java.util.Optional.empty()
+                                                                                     : java.util.Optional.of(builder.sslSettings),
+                                                 heartbeatExecutor);
         this.listener = new ServerChannelListener();
         this.outboundChannel = new AllChannelsOutbound();
     }
 
-    public synchronized void start() {
-        if (!running) {
-            if (channels.isEmpty()) {
-                throw new IllegalArgumentException("No channel is defined!");
-            }
-            this.activeChannels = channels.stream()
-                                          .map(channel -> Channel.load(channel, listener, channelRuntime))
-                                          .toList();
-            this.activeChannels.forEach(Channel::start);
-            this.running = true;
-        }
+    public AcknowledgedOutboundChannel acknowledgedOutboundChannel() {
+        return outboundChannel;
     }
 
     @Override
@@ -227,7 +218,16 @@ public class StompServer implements AutoCloseable {
         return outboundChannel;
     }
 
-    public AcknowledgedOutboundChannel acknowledgedOutboundChannel() {
-        return outboundChannel;
+    public synchronized void start() {
+        if (!running) {
+            if (channels.isEmpty()) {
+                throw new IllegalArgumentException("No channel is defined!");
+            }
+            this.activeChannels = channels.stream()
+                                          .map(channel -> Channel.load(channel, listener, channelRuntime))
+                                          .toList();
+            this.activeChannels.forEach(Channel::start);
+            this.running = true;
+        }
     }
 }

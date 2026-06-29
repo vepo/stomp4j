@@ -26,6 +26,14 @@ import dev.vepo.stomp4j.commons.protocol.MessageBuffer;
 public class SecureTcpTransport implements Transport {
     private static final Logger logger = LoggerFactory.getLogger(SecureTcpTransport.class);
 
+    private static SSLContext defaultSslContext() {
+        try {
+            return SSLContext.getDefault();
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not load default SSL context", ex);
+        }
+    }
+
     private final String host;
     private final int port;
     private final TransportListener listener;
@@ -34,6 +42,7 @@ public class SecureTcpTransport implements Transport {
     private Socket socket;
     private volatile long lastReceivedMessage;
     private final AtomicBoolean running;
+
     private final CountDownLatch done;
 
     public SecureTcpTransport(URI uri, TransportListener listener) {
@@ -49,33 +58,6 @@ public class SecureTcpTransport implements Transport {
         this.lastReceivedMessage = System.nanoTime();
         this.running = new AtomicBoolean(true);
         this.done = new CountDownLatch(1);
-    }
-
-    private static SSLContext defaultSslContext() {
-        try {
-            return SSLContext.getDefault();
-        } catch (Exception ex) {
-            throw new IllegalStateException("Could not load default SSL context", ex);
-        }
-    }
-
-    @Override
-    public String host() {
-        return host;
-    }
-
-    @Override
-    public void send(Message message) {
-        logger.atDebug()
-              .addArgument(() -> Message.formatted(message.encode()))
-              .log("Sending message: {}");
-        try {
-            var os = socket.getOutputStream();
-            os.write(message.encode().getBytes());
-            os.flush();
-        } catch (Exception ex) {
-            logger.error("Error sending message", ex);
-        }
     }
 
     @Override
@@ -115,8 +97,8 @@ public class SecureTcpTransport implements Transport {
     }
 
     @Override
-    public long silentTime() {
-        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastReceivedMessage);
+    public String host() {
+        return host;
     }
 
     private void readMessages() {
@@ -141,6 +123,25 @@ public class SecureTcpTransport implements Transport {
         } finally {
             done.countDown();
         }
+    }
+
+    @Override
+    public void send(Message message) {
+        logger.atDebug()
+              .addArgument(() -> Message.formatted(message.encode()))
+              .log("Sending message: {}");
+        try {
+            var os = socket.getOutputStream();
+            os.write(message.encode().getBytes());
+            os.flush();
+        } catch (Exception ex) {
+            logger.error("Error sending message", ex);
+        }
+    }
+
+    @Override
+    public long silentTime() {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastReceivedMessage);
     }
 
     @Override

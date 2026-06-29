@@ -7,7 +7,6 @@ import dev.vepo.stomp4j.server.session.SessionConfig;
 import dev.vepo.stomp4j.server.ssl.SslSettings;
 
 public record ChannelRuntime(
-        SessionConfig sessionConfig,
-        Optional<SslSettings> sslSettings,
-        ScheduledExecutorService heartbeatExecutor
-) {}
+                             SessionConfig sessionConfig,
+                             Optional<SslSettings> sslSettings,
+                             ScheduledExecutorService heartbeatExecutor) {}

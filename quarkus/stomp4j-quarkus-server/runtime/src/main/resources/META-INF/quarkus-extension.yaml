@@ -1,0 +1,11 @@
+name: Stomp4J Server
+description: Embedded STOMP server integration for Quarkus via CDI Events
+metadata:
+  keywords:
+    - stomp
+    - messaging
+    - server
+  guide: https://github.com/vepo/stomp4j/blob/main/docs/quarkus-guide.md
+  categories:
+    - messaging
+  status: preview

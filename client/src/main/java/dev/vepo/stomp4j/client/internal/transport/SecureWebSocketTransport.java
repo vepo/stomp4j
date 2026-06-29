@@ -26,11 +26,20 @@ import dev.vepo.stomp4j.commons.protocol.Message;
 public class SecureWebSocketTransport implements Transport {
     private static final Logger logger = LoggerFactory.getLogger(SecureWebSocketTransport.class);
 
+    private static SSLContext defaultSslContext() {
+        try {
+            return SSLContext.getDefault();
+        } catch (Exception ex) {
+            throw new IllegalStateException("Could not load default SSL context", ex);
+        }
+    }
+
     private final HttpClient httpClient;
     private final ClientKey key;
     private final URI uri;
     private final TransportListener listener;
     private WebSocket webSocketClient;
+
     private volatile long lastReceivedMessage;
 
     public SecureWebSocketTransport(URI uri, TransportListener listener) {
@@ -45,21 +54,12 @@ public class SecureWebSocketTransport implements Transport {
         this.lastReceivedMessage = System.nanoTime();
     }
 
-    private static SSLContext defaultSslContext() {
-        try {
-            return SSLContext.getDefault();
-        } catch (Exception ex) {
-            throw new IllegalStateException("Could not load default SSL context", ex);
-        }
-    }
-
     @Override
-    public void send(Message message) {
-        logger.atDebug()
-              .addArgument(() -> Message.formatted(message.encode()))
-              .log("Sending message: {}");
-        webSocketClient.sendText(message.encode(), true);
-        webSocketClient.request(1);
+    public void close() {
+        if (Objects.nonNull(webSocketClient)) {
+            webSocketClient.sendClose(WebSocket.NORMAL_CLOSURE, "Client closed connection");
+        }
+        httpClient.close();
     }
 
     @Override
@@ -72,11 +72,14 @@ public class SecureWebSocketTransport implements Transport {
                   .header("uuid", key.toHex())
                   .buildAsync(uri, new WebSocket.Listener() {
                       @Override
-                      public void onOpen(WebSocket webSocket) {
-                          logger.info("Secure connection open!");
-                          webSocketClient = webSocket;
-                          lastReceivedMessage = System.nanoTime();
-                          listener.onConnected(SecureWebSocketTransport.this);
+                      public CompletionStage<?> onBinary(WebSocket webSocket, ByteBuffer data, boolean last) {
+                          return handleData(webSocket, data, last, byteArrayOutputStream, byteChannel, buffer);
+                      }
+
+                      @Override
+                      public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
+                          logger.warn("Secure connection closed! statusCode={}, reason={}", statusCode, reason);
+                          return null;
                       }
 
                       @Override
@@ -90,8 +93,11 @@ public class SecureWebSocketTransport implements Transport {
                       }
 
                       @Override
-                      public CompletionStage<?> onBinary(WebSocket webSocket, ByteBuffer data, boolean last) {
-                          return handleData(webSocket, data, last, byteArrayOutputStream, byteChannel, buffer);
+                      public void onOpen(WebSocket webSocket) {
+                          logger.info("Secure connection open!");
+                          webSocketClient = webSocket;
+                          lastReceivedMessage = System.nanoTime();
+                          listener.onConnected(SecureWebSocketTransport.this);
                       }
 
                       @Override
@@ -103,27 +109,7 @@ public class SecureWebSocketTransport implements Transport {
                           }
                           return handleBuffered(webSocket, last, byteArrayOutputStream, buffer);
                       }
-
-                      @Override
-                      public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
-                          logger.warn("Secure connection closed! statusCode={}, reason={}", statusCode, reason);
-                          return null;
-                      }
                   });
-    }
-
-    private CompletionStage<?> handleData(WebSocket webSocket,
-                                          ByteBuffer data,
-                                          boolean last,
-                                          ByteArrayOutputStream byteArrayOutputStream,
-                                          java.nio.channels.WritableByteChannel byteChannel,
-                                          StringBuffer buffer) {
-        try {
-            byteChannel.write(data);
-        } catch (IOException ex) {
-            throw new RuntimeException(ex);
-        }
-        return handleBuffered(webSocket, last, byteArrayOutputStream, buffer);
     }
 
     private CompletionStage<?> handleBuffered(WebSocket webSocket,
@@ -142,17 +128,32 @@ public class SecureWebSocketTransport implements Transport {
         return null;
     }
 
+    private CompletionStage<?> handleData(WebSocket webSocket,
+                                          ByteBuffer data,
+                                          boolean last,
+                                          ByteArrayOutputStream byteArrayOutputStream,
+                                          java.nio.channels.WritableByteChannel byteChannel,
+                                          StringBuffer buffer) {
+        try {
+            byteChannel.write(data);
+        } catch (IOException ex) {
+            throw new RuntimeException(ex);
+        }
+        return handleBuffered(webSocket, last, byteArrayOutputStream, buffer);
+    }
+
     @Override
     public String host() {
         return uri.getHost();
     }
 
     @Override
-    public void close() {
-        if (Objects.nonNull(webSocketClient)) {
-            webSocketClient.sendClose(WebSocket.NORMAL_CLOSURE, "Client closed connection");
-        }
-        httpClient.close();
+    public void send(Message message) {
+        logger.atDebug()
+              .addArgument(() -> Message.formatted(message.encode()))
+              .log("Sending message: {}");
+        webSocketClient.sendText(message.encode(), true);
+        webSocketClient.request(1);
     }
 
     @Override

@@ -23,43 +23,43 @@ public interface StompClient extends AutoCloseable {
         return new StompClientImpl(url, null, transportType, Stomp.ALL_VERSIONS, null);
     }
 
-    public static StompClient create(String url, UserCredential credentials) {
-        return new StompClientImpl(url, credentials, null, Stomp.ALL_VERSIONS, null);
-    }
-
     public static StompClient create(String url, TransportType transportType, UserCredential credentials) {
         return new StompClientImpl(url, credentials, transportType, Stomp.ALL_VERSIONS, null);
+    }
+
+    public static StompClient create(String url, UserCredential credentials) {
+        return new StompClientImpl(url, credentials, null, Stomp.ALL_VERSIONS, null);
     }
 
     public static StompClient create(String url, UserCredential credentials, Set<Stomp> protocols) {
         return new StompClientImpl(url, credentials, null, protocols, null);
     }
 
-    public static StompClient create(String url, UserCredential credentials, TransportType transportType, Set<Stomp> protocols) {
-        return new StompClientImpl(url, credentials, transportType, protocols, null);
-    }
-
     public static StompClient create(String url, UserCredential credentials, SSLContext sslContext) {
         return new StompClientImpl(url, credentials, null, Stomp.ALL_VERSIONS, sslContext);
     }
 
-    StompClient connect();
+    public static StompClient create(String url, UserCredential credentials, TransportType transportType, Set<Stomp> protocols) {
+        return new StompClientImpl(url, credentials, transportType, protocols, null);
+    }
 
-    Subscription subscribe(String topic);
+    void close();
+
+    StompClient connect();
 
     void join();
 
-    Subscription subscribe(String topic, Consumer<String> consumer);
-
-    Subscription subscribe(String topic, AckMode ackMode, Consumer<StompDelivery> consumer);
+    StompReceipt send(String destination, String body, SendOptions options);
 
     void sendPlain(String destination, String content, String contentType);
 
-    StompReceipt send(String destination, String body, SendOptions options);
+    Subscription subscribe(String topic);
 
-    StompClient unsubscribe(Subscription subscription);
+    Subscription subscribe(String topic, AckMode ackMode, Consumer<StompDelivery> consumer);
+
+    Subscription subscribe(String topic, Consumer<String> consumer);
 
     StompClient unsubscribe(String topic);
 
-    void close();
+    StompClient unsubscribe(Subscription subscription);
 }

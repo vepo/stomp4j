@@ -18,8 +18,10 @@ public class Stomp1_2 extends Stomp {
     private static final Logger logger = LoggerFactory.getLogger(Stomp1_2.class);
 
     @Override
-    public String version() {
-        return "1.2";
+    public void acknowledge(Message message, Optional<String> session, Transport transport) {
+        transport.send(MessageBuilder.builder(Command.ACK)
+                                     .headerIfPresent(Header.ID, message.headers().get(Header.MESSAGE_ID))
+                                     .build());
     }
 
     @Override
@@ -28,34 +30,15 @@ public class Stomp1_2 extends Stomp {
     }
 
     @Override
-    public void onMessage(Message message, Optional<String> session, Transport transport) {
-        logger.debug("Received protocol message: {}", message.command());
-    }
-
-    @Override
-    public void subscribe(Subscription subscription, Optional<String> session, Transport transport, AckMode ackMode) {
-        var builder = MessageBuilder.builder(Command.SUBSCRIBE)
-                                    .header(Header.ID, Integer.toString(subscription.id()))
-                                    .header(Header.DESTINATION, subscription.topic())
-                                    .headerIfPresent(Header.SESSION, session);
-        if (ackMode != AckMode.AUTO) {
-            builder.header(Header.ACK, ackMode.wireValue());
-        }
-        transport.send(builder.build());
-    }
-
-    @Override
-    public void acknowledge(Message message, Optional<String> session, Transport transport) {
-        transport.send(MessageBuilder.builder(Command.ACK)
-                                     .headerIfPresent(Header.ID, message.headers().get(Header.MESSAGE_ID))
-                                     .build());
-    }
-
-    @Override
     public void negativeAcknowledge(Message message, Optional<String> session, Transport transport) {
         transport.send(MessageBuilder.builder(Command.NACK)
                                      .headerIfPresent(Header.ID, message.headers().get(Header.MESSAGE_ID))
                                      .build());
+    }
+
+    @Override
+    public void onMessage(Message message, Optional<String> session, Transport transport) {
+        logger.debug("Received protocol message: {}", message.command());
     }
 
     @Override
@@ -86,6 +69,23 @@ public class Stomp1_2 extends Stomp {
     }
 
     @Override
+    public void subscribe(Subscription subscription, Optional<String> session, Transport transport, AckMode ackMode) {
+        var builder = MessageBuilder.builder(Command.SUBSCRIBE)
+                                    .header(Header.ID, Integer.toString(subscription.id()))
+                                    .header(Header.DESTINATION, subscription.topic())
+                                    .headerIfPresent(Header.SESSION, session);
+        if (ackMode != AckMode.AUTO) {
+            builder.header(Header.ACK, ackMode.wireValue());
+        }
+        transport.send(builder.build());
+    }
+
+    @Override
+    public String toString() {
+        return "Stomp 1.2 Implementation";
+    }
+
+    @Override
     public void unsubscribe(Subscription subscription, Transport transport) {
         transport.send(MessageBuilder.builder(Command.UNSUBSCRIBE)
                                      .header(Header.ID, Integer.toString(subscription.id()))
@@ -93,7 +93,7 @@ public class Stomp1_2 extends Stomp {
     }
 
     @Override
-    public String toString() {
-        return "Stomp 1.2 Implementation";
+    public String version() {
+        return "1.2";
     }
 }

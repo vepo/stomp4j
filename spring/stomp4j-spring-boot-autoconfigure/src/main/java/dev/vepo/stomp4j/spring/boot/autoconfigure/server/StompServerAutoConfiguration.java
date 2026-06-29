@@ -21,6 +21,12 @@ public class StompServerAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    public StompOutboundTemplate stompOutboundTemplate(StompServer server) {
+        return new StompOutboundTemplate(server);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
     public StompServer stompServer(StompServerProperties properties,
                                    ObjectProvider<StompInboundHandler> inboundHandlers,
                                    ObjectProvider<StompAuthenticator> authenticator,
@@ -52,11 +58,5 @@ public class StompServerAutoConfiguration {
     @ConditionalOnMissingBean
     public StompServerLifecycle stompServerLifecycle(StompServer server) {
         return new StompServerLifecycle(server);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public StompOutboundTemplate stompOutboundTemplate(StompServer server) {
-        return new StompOutboundTemplate(server);
     }
 }

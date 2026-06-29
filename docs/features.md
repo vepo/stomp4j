@@ -11,7 +11,7 @@ When you add, change, or remove user-visible behaviour, **update this page** in 
 | **Client** | TCP & WebSocket, TLS, STOMP 1.0–1.2, subscribe/send, callback & polling |
 | **Server** | Embeddable TCP & WebSocket, handlers, auth, outbound push, TLS |
 | **Commons** | Frame encode/decode, headers, commands |
-| **Platform** | Java 21, JPMS modules, SLF4J, optional Spring Boot starters |
+| **Platform** | Java 21, JPMS modules, SLF4J, optional Spring Boot starters, optional Quarkus extensions |
 
 ## Client (`stomp4j-client`)
 
@@ -79,8 +79,10 @@ When you add, change, or remove user-visible behaviour, **update this page** in 
 | SLF4J logging | Supported | You provide the binding (e.g. Logback) |
 | Spring Boot client starter | Supported | [spring-guide.md](spring-guide.md) — `@StompListener`, `StompClientTemplate` |
 | Spring Boot server starter | Supported | [spring-guide.md](spring-guide.md) — `StompInboundHandler`, `StompOutboundTemplate` |
-| Spring / Quarkus / Jakarta EE | Not required | Plain Java library; Spring Boot is optional |
-| Maven artifacts on Maven Central | Supported | `stomp4j-client`, `stomp4j-server`, `stomp4j-commons`, Spring starters |
+| Quarkus client extension | Supported | [quarkus-guide.md](quarkus-guide.md) — CDI Events, `@StompDestination`, `@StompSync` / `@StompAsync` |
+| Quarkus server extension | Supported | [quarkus-guide.md](quarkus-guide.md) — `StompInboundHandler`, outbound CDI Events |
+| Spring / Quarkus / Jakarta EE | Not required | Plain Java library; Spring Boot and Quarkus are optional |
+| Maven artifacts on Maven Central | Supported | `stomp4j-client`, `stomp4j-server`, `stomp4j-commons`, Spring starters, Quarkus extensions |
 
 ## STOMP commands (summary)
 
@@ -104,6 +106,7 @@ Normative behaviour: [STOMP specification](https://stomp.github.io/). Library te
 | First working client or server | [getting-started.md](getting-started.md) |
 | Client API in depth | [client-guide.md](client-guide.md) |
 | Spring Boot integration | [spring-guide.md](spring-guide.md) |
+| Quarkus integration | [quarkus-guide.md](quarkus-guide.md) |
 | Embedded server patterns | [server-guide.md](server-guide.md) |
 | SPI, TLS, wire format | [advanced-topics.md](advanced-topics.md) |
 | Design philosophy | [overview.md](overview.md) |

@@ -21,6 +21,12 @@ public class BufferPool {
                  .forEach(__ -> availableBuffers.add(ByteBuffer.allocate(bufferSize)));
     }
 
+    public synchronized void release(ByteBuffer buffer) {
+        this.activeBuffers.remove(buffer);
+        this.availableBuffers.offer(buffer);
+        this.notifyAll();
+    }
+
     public synchronized ByteBuffer request() {
         try {
             while (availableBuffers.isEmpty()) {
@@ -33,11 +39,5 @@ public class BufferPool {
             Thread.currentThread().interrupt();
             return null;
         }
-    }
-
-    public synchronized void release(ByteBuffer buffer) {
-        this.activeBuffers.remove(buffer);
-        this.availableBuffers.offer(buffer);
-        this.notifyAll();
     }
 }

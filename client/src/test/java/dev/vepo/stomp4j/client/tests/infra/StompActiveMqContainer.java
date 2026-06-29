@@ -21,34 +21,8 @@ public class StompActiveMqContainer extends GenericContainer<StompActiveMqContai
         this.password = DEFAULT_PASSWORD;
     }
 
-    public StompActiveMqContainer withUser(String username) {
-        this.username = username;
-        return this;
-    }
-
-    public StompActiveMqContainer withPassword(String password) {
-        this.password = password;
-        return this;
-    }
-
     public String clientUrl() {
         return String.format("tcp://%s:%d", getHost(), getMappedPort(61616));
-    }
-
-    public String username() {
-        return username;
-    }
-
-    public String password() {
-        return password;
-    }
-
-    public String webSocketUrl() {
-        return String.format("ws://%s:%d/stomp", getHost(), getMappedPort(61616));
-    }
-
-    public String tcpUrl() {
-        return String.format("stomp://%s:%d", getHost(), getMappedPort(61613));
     }
 
     @Override
@@ -58,5 +32,31 @@ public class StompActiveMqContainer extends GenericContainer<StompActiveMqContai
         withExposedPorts(61613, 61614, 61616);
         waitingFor(Wait.forLogMessage(".*HTTP Server started.*", 1)
                        .withStartupTimeout(Duration.ofMinutes(2)));
+    }
+
+    public String password() {
+        return password;
+    }
+
+    public String tcpUrl() {
+        return String.format("stomp://%s:%d", getHost(), getMappedPort(61613));
+    }
+
+    public String username() {
+        return username;
+    }
+
+    public String webSocketUrl() {
+        return String.format("ws://%s:%d/stomp", getHost(), getMappedPort(61616));
+    }
+
+    public StompActiveMqContainer withPassword(String password) {
+        this.password = password;
+        return this;
+    }
+
+    public StompActiveMqContainer withUser(String username) {
+        this.username = username;
+        return this;
     }
 }

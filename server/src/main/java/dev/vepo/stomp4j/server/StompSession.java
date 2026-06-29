@@ -6,7 +6,7 @@ public interface StompSession {
 
     Optional<String> login();
 
-    String version();
-
     OutboundChannel outboundChannel();
+
+    String version();
 }

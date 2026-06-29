@@ -14,6 +14,14 @@ public class StompClientTemplate {
         this.properties = properties;
     }
 
+    public StompClient client() {
+        return connectionManager.client();
+    }
+
+    public StompReceipt send(String destination, String body, SendOptions options) {
+        return client().send(destination, body, options);
+    }
+
     public void sendPlain(String destination, String body) {
         sendPlain(destination, body, "text/plain");
     }
@@ -22,18 +30,10 @@ public class StompClientTemplate {
         client().sendPlain(destination, body, contentType);
     }
 
-    public StompReceipt send(String destination, String body, SendOptions options) {
-        return client().send(destination, body, options);
-    }
-
     public StompReceipt sendWithReceipt(String destination, String body) {
         return send(destination, body, SendOptions.builder()
                                                   .receipt(true)
                                                   .receiptTimeout(properties.getReceiptTimeout())
                                                   .build());
-    }
-
-    public StompClient client() {
-        return connectionManager.client();
     }
 }

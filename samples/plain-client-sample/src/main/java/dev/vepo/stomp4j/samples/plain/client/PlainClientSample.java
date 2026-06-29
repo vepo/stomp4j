@@ -21,8 +21,9 @@ import dev.vepo.stomp4j.client.UserCredential;
 /**
  * Plain-Java counterpart of {@code spring-client-sample}:
  * <ul>
- *   <li>Consumes {@code /queue/demo.in} with manual ACK</li>
- *   <li>Exposes {@code POST /publish} to send to {@code /queue/demo.out} with broker receipt</li>
+ * <li>Consumes {@code /queue/demo.in} with manual ACK</li>
+ * <li>Exposes {@code POST /publish} to send to {@code /queue/demo.out} with
+ * broker receipt</li>
  * </ul>
  */
 public final class PlainClientSample {
@@ -31,34 +32,8 @@ public final class PlainClientSample {
     private static final String INBOUND_QUEUE = "/queue/demo.in";
     private static final String OUTBOUND_QUEUE = "/queue/demo.out";
 
-    private PlainClientSample() {}
-
-    public static void main(String[] args) throws Exception {
-        var brokerUrl = env("STOMP4J_CLIENT_URL", "stomp://localhost:61613");
-        var username = env("STOMP4J_CLIENT_USERNAME", "user");
-        var password = env("STOMP4J_CLIENT_PASSWORD", "passwd");
-        var httpPort = Integer.parseInt(env("HTTP_PORT", "8082"));
-
-        try (var client = StompClient.create(brokerUrl, new UserCredential(username, password))) {
-            client.connect();
-            client.subscribe(INBOUND_QUEUE, AckMode.CLIENT_INDIVIDUAL, delivery -> {
-                logger.info("Inbound message on {}: {}", INBOUND_QUEUE, delivery.body());
-                delivery.ack();
-            });
-
-            var httpServer = startPublishEndpoint(client, httpPort);
-            logger.info("Plain client sample ready — POST http://localhost:{}/publish", httpPort);
-            client.join();
-            httpServer.stop(0);
-        }
-    }
-
-    private static HttpServer startPublishEndpoint(StompClient client, int httpPort) throws IOException {
-        var httpServer = HttpServer.create(new InetSocketAddress(httpPort), 0);
-        httpServer.setExecutor(Executors.newCachedThreadPool());
-        httpServer.createContext("/publish", exchange -> handlePublish(client, exchange));
-        httpServer.start();
-        return httpServer;
+    private static String env(String name, String defaultValue) {
+        return Objects.requireNonNullElse(System.getenv(name), defaultValue);
     }
 
     private static void handlePublish(StompClient client, HttpExchange exchange) throws IOException {
@@ -91,7 +66,33 @@ public final class PlainClientSample {
         }
     }
 
-    private static String env(String name, String defaultValue) {
-        return Objects.requireNonNullElse(System.getenv(name), defaultValue);
+    public static void main(String[] args) throws Exception {
+        var brokerUrl = env("STOMP4J_CLIENT_URL", "stomp://localhost:61613");
+        var username = env("STOMP4J_CLIENT_USERNAME", "user");
+        var password = env("STOMP4J_CLIENT_PASSWORD", "passwd");
+        var httpPort = Integer.parseInt(env("HTTP_PORT", "8082"));
+
+        try (var client = StompClient.create(brokerUrl, new UserCredential(username, password))) {
+            client.connect();
+            client.subscribe(INBOUND_QUEUE, AckMode.CLIENT_INDIVIDUAL, delivery -> {
+                logger.info("Inbound message on {}: {}", INBOUND_QUEUE, delivery.body());
+                delivery.ack();
+            });
+
+            var httpServer = startPublishEndpoint(client, httpPort);
+            logger.info("Plain client sample ready — POST http://localhost:{}/publish", httpPort);
+            client.join();
+            httpServer.stop(0);
+        }
     }
+
+    private static HttpServer startPublishEndpoint(StompClient client, int httpPort) throws IOException {
+        var httpServer = HttpServer.create(new InetSocketAddress(httpPort), 0);
+        httpServer.setExecutor(Executors.newCachedThreadPool());
+        httpServer.createContext("/publish", exchange -> handlePublish(client, exchange));
+        httpServer.start();
+        return httpServer;
+    }
+
+    private PlainClientSample() {}
 }

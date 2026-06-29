@@ -22,6 +22,8 @@ docker compose -f samples/docker-compose.yaml up --build
 | Plain client | http://localhost:8082 | REST publish + manual ACK consumer (no Spring) |
 | Spring server | STOMP TCP `localhost:5500`, WebSocket `localhost:5501` | Embedded server via Spring starter |
 | Plain server | STOMP TCP `localhost:5510`, WebSocket `localhost:5511` | Embedded server (plain Java API) |
+| Quarkus client | http://localhost:8083 | REST publish + CDI inbound consumer |
+| Quarkus server | http://localhost:8084, STOMP TCP `localhost:5520`, WebSocket `localhost:5521` | Embedded server via Quarkus extension |
 
 ### Client sample smoke test
 
@@ -30,6 +32,7 @@ Both client samples expose `POST /publish` and consume `/queue/demo.in` with man
 ```bash
 curl -X POST http://localhost:8080/publish -H 'Content-Type: text/plain' -d 'hello-spring'
 curl -X POST http://localhost:8082/publish -H 'Content-Type: text/plain' -d 'hello-plain'
+curl -X POST http://localhost:8083/publish -H 'Content-Type: text/plain' -d 'hello-quarkus'
 ```
 
 ### Server sample
@@ -44,6 +47,7 @@ Both server samples implement the same chat echo:
 |--------|-----------|-----------|
 | Spring | `stomp://localhost:5500` | `ws://localhost:5501/` |
 | Plain | `stomp://localhost:5510` | `ws://localhost:5511/` |
+| Quarkus | `stomp://localhost:5520` | `ws://localhost:5521/` |
 
 ## Local Maven run
 
@@ -61,6 +65,15 @@ mvn -pl samples/spring-server-sample spring-boot:run
 ```
 
 See [docs/spring-guide.md](../docs/spring-guide.md) for configuration properties and API details.
+
+### Quarkus samples
+
+```bash
+mvn -pl samples/quarkus-client-sample quarkus:dev
+mvn -pl samples/quarkus-server-sample quarkus:dev
+```
+
+See [docs/quarkus-guide.md](../docs/quarkus-guide.md) for configuration properties and CDI Event patterns.
 
 ### Plain Java samples
 
