@@ -1,0 +1,45 @@
+---
+description: JUnit, Testcontainers, and integration test conventions
+globs: "**/src/test/**/*.java"
+alwaysApply: false
+---
+
+# Test conventions
+
+## Docker required
+
+Integration tests use Testcontainers (ActiveMQ Artemis). Docker must be running — see [stomp4j-test-docker.mdc](stomp4j-test-docker.mdc).
+
+## Layout
+
+| Module | Package pattern | Strategy |
+|--------|-----------------|----------|
+| `commons` | `*.tests.protocol` | Unit tests |
+| `client` | `*.tests`, `*.tests.infra` | Unit + ActiveMQ integration |
+| `server` | `*.tests` | Embedded server + `stomp4j-client` |
+
+## Infrastructure
+
+- **`StompContainer`** — JUnit 5 extension; shared ActiveMQ container; injects `tcpUrl()`, `webSocketUrl()`, credentials.
+- Reuse `StompContainer` — do not start duplicate brokers per test class unless isolation requires it.
+- Test resources: `broker.xml`, `logback.xml` under `client/src/test/resources/`.
+
+## Annotations
+
+- `@ParameterizedTest` for STOMP versions (1.0, 1.1, 1.2) and transport types.
+- JUnit 5 lifecycle (`@BeforeAll`, `@AfterAll`) via extensions where shared containers are used.
+
+## Assertions
+
+- **AssertJ** for fluent assertions.
+- **Awaitility** for async subscribe/receive flows — not `Thread.sleep()`.
+
+## URLs in tests
+
+- Use URLs from `StompContainer` or embedded `StompServer` ports — not hard-coded production hosts.
+
+## Never
+
+- `Thread.sleep()` to fix timing — use Awaitility or proper synchronization.
+- `@Disabled` / ignore failures without fixing root cause.
+- Bypass `StompContainer` with raw broker URLs when the extension is available.

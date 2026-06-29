@@ -1,0 +1,285 @@
+# Architecture & Conventions
+
+Canonical reference for developers and AI agents working on Stomp4J. For STOMP protocol terms see [docs/domain-specification.md](docs/domain-specification.md).
+
+**Last updated:** 2026-06-29
+
+## 1. Project overview
+
+Stomp4J is a **Java 21 library** (not a runnable application) that implements the [STOMP protocol](https://stomp.github.io/) for clients and an embeddable server.
+
+| Aspect | Detail |
+|--------|--------|
+| Build | Apache Maven multi-module parent (`stomp4j-parent`) |
+| Group / version | `dev.vepo` / `1.1.1-SNAPSHOT` |
+| Module system | JPMS — every module has `module-info.java` |
+| License | Apache 2.0 |
+| Logging | SLF4J (consumer provides implementation) |
+
+Published artifacts: `stomp4j-commons`, `stomp4j-client`, `stomp4j-server`.
+
+## 2. Module dependency graph
+
+```
+stomp4j-parent
+    ├── stomp4j-commons     (no internal deps)
+    ├── stomp4j-client      → commons
+    └── stomp4j-server      → commons, vertx-web
+                              (test → client)
+```
+
+Dependencies flow **downward only**: `client` and `server` depend on `commons`; `server` tests may use `client` but production `server` does not depend on `client`.
+
+## 3. Module responsibilities
+
+### 3.1 `stomp4j-commons`
+
+Shared STOMP wire-format model.
+
+| Package | Responsibility |
+|---------|----------------|
+| `dev.vepo.stomp4j.commons` | `TransportType` (`TCP`, `WEB_SOCKET`) |
+| `dev.vepo.stomp4j.commons.protocol` | `Command`, `Header`, `Headers`, `Message`, `MessageBuilder`, `MessageBuffer` |
+
+`Message` is a record with `encode()` / `readMessage()` for STOMP framing. `MessageBuffer` accumulates stream bytes until the NUL (`\u0000`) terminator.
+
+**Exports:** `commons`, `commons.protocol`
+
+### 3.2 `stomp4j-client`
+
+Full STOMP client — versions 1.0, 1.1, 1.2 over TCP and WebSocket.
+
+| Package | Visibility | Responsibility |
+|---------|-----------|----------------|
+| `dev.vepo.stomp4j.client` | **Public** | `StompClient`, `Subscription`, `UserCredential` |
+| `dev.vepo.stomp4j.client.protocol` | Public | Abstract `Stomp` + version negotiation |
+| `dev.vepo.stomp4j.client.protocol.v1_0/v1_1/v1_2` | Public | Version-specific subscribe/send/ack/unsubscribe |
+| `dev.vepo.stomp4j.client.transport` | Public | `Transport`, `TransportProvider`, `TransportListener` |
+| `dev.vepo.stomp4j.client.internal` | **Internal** | `StompClientImpl` |
+| `dev.vepo.stomp4j.client.internal.transport` | Internal | `TcpTransport`, `WebSocketTransport`, `TransportFactory`, providers |
+
+**Client lifecycle:**
+
+```
+StompClient.create(url, credentials?, transportType?, protocols?)
+    → StompClientImpl
+        → TransportFactory.create(uri)     [SPI: scheme → provider]
+        → transport.connect()
+        → onConnected → Stomp CONNECT frame
+        → CONNECTED → select protocol via ServiceLoader
+        → subscribe / send / heartbeat
+```
+
+**URL schemes:**
+
+| Scheme | Transport | Provider |
+|--------|-----------|----------|
+| `stomp://host:port` | TCP | `TcpTransportProvider` |
+| `ws://host:port/path` | WebSocket | `WebSocketTransportProvider` |
+
+**Subscription modes:**
+
+1. **Callback** — `subscribe(topic, Consumer<String>)`
+2. **Polling** — `subscribe(topic)` → `hasData()` / `poll()`
+
+### 3.3 `stomp4j-server`
+
+Embedded STOMP server (actively developed; thinner than client).
+
+| Package | Visibility | Responsibility |
+|---------|-----------|----------------|
+| `dev.vepo.stomp4j.server` | **Public** | `StompServer`, `MessageHandler`, `SubscriptionHandler`, `OutboundChannel`, `TransportChannel` |
+| `dev.vepo.stomp4j.server.auth` | Public | `StompAuthenticator`, `Credentials` |
+| `dev.vepo.stomp4j.server.channels` | Internal | `Channel`, `TcpChannel`, `WebSocketChannel`, `BufferPool`, `ChannelListener` |
+| `dev.vepo.stomp4j.server.session` | Internal | Per-connection `Session` state machine |
+
+**Server lifecycle:**
+
+```
+StompServer.builder()
+    .channel(TCP, port) / .channel(WEB_SOCKET, port)
+    .handler(MessageHandler)
+    .subscription(SubscriptionHandler)
+    .authenticator(StompAuthenticator)   // stored; not yet invoked in Session
+    .start()
+        → Channel.load(type, port) → TcpChannel | WebSocketChannel
+        → Session per connection
+        → CONNECT → CONNECTED (hardcoded version "1.2")
+        → SUBSCRIBE → SubscriptionHandler.accept(topic)
+        → SEND → MessageHandler.process(topic, body, channel)
+        → outboundChannel().send() → fan-out to subscribed sessions
+```
+
+## 4. Public API entry points
+
+There is no `main()`. Consumers use:
+
+### Client
+
+```java
+try (var client = StompClient.create(url, credentials)) {
+    client.connect();
+    client.subscribe("/topic/foo", data -> { /* ... */ });
+    client.join();          // blocks until close
+    client.sendPlain(dest, content, contentType);
+    client.unsubscribe(topic);
+}
+```
+
+### Server
+
+```java
+try (var server = StompServer.builder()
+        .channel(TransportType.TCP, 5500)
+        .channel(TransportType.WEB_SOCKET, 5501)
+        .handler((topic, message, writer) -> { /* ... */ })
+        .subscription(topic -> true)
+        .start()) {
+
+    server.outboundChannel().send(message);
+}
+```
+
+## 5. Extension points (SPI)
+
+| Feature | How to add |
+|---------|-----------|
+| New transport (e.g. `wss://`) | Implement `TransportProvider`; register in `module-info.java` `provides` + `META-INF/services` |
+| New STOMP version | Extend `Stomp`; register in SPI |
+| Server auth | Wire `StompAuthenticator` into `Session.process()` on `CONNECT` |
+| Server protocol versions | Replace hardcoded `"1.2"` in `Session` |
+| New STOMP commands | `Command` enum + client `Stomp1_x` + server `Session` |
+
+SPI registrations live in `client/src/main/resources/META-INF/services/`.
+
+## 6. Design patterns
+
+| Pattern | Where |
+|---------|-------|
+| Factory / static create | `StompClient.create()`, `TransportFactory.create()`, `Channel.load()`, `MessageBuilder.builder()` |
+| Builder | `StompServer.Builder`, `Headers.builder()` |
+| Strategy | Version-specific `Stomp1_x` subclasses |
+| SPI (ServiceLoader) | `TransportProvider`, `Stomp` protocol versions |
+| Listener / callback | `TransportListener`, `ChannelListener`, `MessageHandler`, `SubscriptionHandler` |
+| State machine | `Session.Status` (`STARTED` → `CONNECTED`) |
+| Object pool | `BufferPool` for NIO read buffers |
+| Facade | `StompClient` hides `StompClientImpl` |
+
+## 7. Technology choices
+
+| Concern | Choice |
+|---------|--------|
+| Client WebSocket | `java.net.http` (JDK) |
+| Server TCP | `java.nio` (NIO) |
+| Server WebSocket | Vert.x 5 (`vertx-web`) |
+| WebSocket handshake key | `commons-codec` (`ClientKey`) |
+| No Spring, no Quarkus | Plain Java library |
+
+## 8. Testing
+
+| Tool | Purpose |
+|------|---------|
+| JUnit 5 (6.0.1) | All tests; parameterized for protocol versions |
+| AssertJ (3.27.6) | Assertions |
+| Awaitility (4.3.0) | Async polling |
+| Testcontainers (2.0.2) | `testcontainers-activemq` — Artemis Docker image |
+| ActiveMQ client (6.2.0) | JMS side of integration tests |
+| Logback (1.5.21) | Test-scoped logging |
+| JaCoCo (0.8.12) | Coverage → SonarCloud |
+
+### Test layout
+
+| Module | Tests | Strategy |
+|--------|-------|----------|
+| `commons` | `MessageBufferTest` | Unit — protocol framing |
+| `client` | `StompClientTest` | Unit — URL validation |
+| `client` | `StompClientTcpTest`, `StompClientWebSocketTest` | Integration vs ActiveMQ (all STOMP versions) |
+| `server` | `StompServerTest` | Integration — embedded server + `stomp4j-client` |
+
+`StompContainer` JUnit 5 extension starts a shared `StompActiveMqContainer` and injects URLs/credentials into test methods.
+
+**Run:** `mvn verify` from repo root. Integration tests require **Docker** (Testcontainers).
+
+**Local broker (optional):** `docker compose -f scripts/docker/docker-compose.yaml up`
+
+## 9. CI/CD
+
+| Workflow | Trigger | Command |
+|----------|---------|---------|
+| `maven.yml` | Every push | `mvn verify jacoco:report` + SonarCloud |
+| `maven-publish.yml` | Manual (`workflow_dispatch`) | GPG sign, deploy to Maven Central |
+
+SonarCloud: org `vepo-github`, project `vepo_stomp4j`.
+
+## 10. Naming conventions
+
+| Convention | Examples |
+|------------|---------|
+| Base package | `dev.vepo.stomp4j` |
+| JPMS module names | `stomp4j.commons`, `stomp4j.client`, `stomp4j.server` |
+| Version classes | `Stomp1_0`, `Stomp1_1`, `Stomp1_2` |
+| Test packages | `*.tests`, `*.tests.infra` |
+| Internal impl | `*Impl` suffix; `internal` package (not exported) |
+| Records | `Message`, `UserCredential`, `Credentials`, `TransportChannel` |
+
+## 11. Module boundaries (JPMS)
+
+```
+PUBLIC (exported):
+  client:  StompClient, Subscription, UserCredential, protocol.*, transport interfaces
+  server:  StompServer, MessageHandler, SubscriptionHandler, OutboundChannel, auth.*
+  commons: TransportType, protocol.*
+
+INTERNAL (do not use from outside module):
+  client.internal.*
+  server.channels.*, server.session.*
+```
+
+When adding public API, update `module-info.java` `exports`. When adding SPI, update `provides` and `META-INF/services`.
+
+## 12. Known gaps / WIP
+
+- Server: `StompAuthenticator` stored but not invoked in `Session`
+- Server: always responds STOMP 1.2; no multi-version negotiation
+- Server: no UNSUBSCRIBE, DISCONNECT, heartbeat, or ERROR handling
+- Server: `MessageHandler.process()` may receive `null` for `OutboundChannel`
+- `StompException` defined but rarely thrown
+- README documents client only (no server examples)
+
+Update this section when closing gaps.
+
+## 13. Feature workflow (agents)
+
+When adding or changing behaviour:
+
+1. Read [docs/domain-specification.md](docs/domain-specification.md) — STOMP terms and invariants.
+2. Place code in the correct module and package (§3, §11).
+3. Update SPI / `module-info.java` if adding transports or protocol versions.
+4. Add or extend tests in the same module (`commons` unit, `client`/`server` integration).
+5. Update this document if architecture, boundaries, or WIP status changes.
+6. Run `mvn verify` before finishing.
+
+## 14. Useful commands
+
+```bash
+# Full build + test + coverage
+mvn verify
+
+# Single module
+mvn -pl client test
+mvn -pl server test
+mvn -pl commons test
+
+# Local Artemis broker
+docker compose -f scripts/docker/docker-compose.yaml up
+```
+
+## 15. Related docs
+
+| Document | Purpose |
+|----------|---------|
+| [README.md](README.md) | Client usage examples |
+| [docs/domain-specification.md](docs/domain-specification.md) | STOMP ubiquitous language |
+| [resources/roteiros/](resources/roteiros/) | Design rationale (Portuguese) |
+| [AGENTS.md](AGENTS.md) | Agent index and rule map |
+| [.cursor/rules/](.cursor/rules/) | Cursor rules for AI agents |

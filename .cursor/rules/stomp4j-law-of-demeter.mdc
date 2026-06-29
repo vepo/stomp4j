@@ -1,0 +1,44 @@
+---
+description: Law of Demeter — no train wrecks; talk to direct collaborators only
+globs: "**/*.java"
+alwaysApply: false
+---
+
+# Law of Demeter
+
+A method may call only on itself, objects it creates, its parameters, and **direct** components — not on objects returned by those calls.
+
+**Train wreck:** `transport.getChannel().getSession().getStatus()` for business logic.
+
+Complements [stomp4j-tell-dont-ask.mdc](stomp4j-tell-dont-ask.mdc).
+
+## Violations vs fixes
+
+```java
+// ❌
+if (client.getTransport().getListener().isConnected()) { … }
+
+// ✅
+if (client.isConnected()) { … }
+// or ask the direct collaborator only
+if (transport.isConnected()) { … }
+```
+
+## Where it applies
+
+| Layer | Rule |
+|-------|------|
+| Public API | No reaching into `internal` types from outside the module |
+| Session / StompClientImpl | Expose `isConnected()`, `getProtocolVersion()` instead of deep graphs |
+| Handlers | Receive only what they need (`topic`, `body`, `OutboundChannel`) |
+
+## Allowed
+
+- One direct component: `message.headers().get(Header.DESTINATION)`.
+- Protocol layer building frames from `Headers` and `Command`.
+- Test code accessing package-visible test helpers.
+
+## Never
+
+- Copy the same getter chain into a second class — extract a method on the owning type.
+- Use `internal` types from handler callbacks registered by consumers.

@@ -1,0 +1,38 @@
+---
+description: JPMS module boundaries and dependency rules
+alwaysApply: true
+---
+
+# Module boundaries (JPMS)
+
+Three Maven modules with explicit `module-info.java`. Full map: [ARCHITECTURE.md](../../ARCHITECTURE.md) §11.
+
+## Context map
+
+| Module | JPMS name | Packages |
+|--------|-----------|----------|
+| Commons | `stomp4j.commons` | `commons`, `commons.protocol` |
+| Client | `stomp4j.client` | `client`, `client.protocol.*`, `client.transport` (exported); `client.internal.*` (not exported) |
+| Server | `stomp4j.server` | `server`, `server.auth` (exported); `server.channels`, `server.session` (not exported) |
+
+## Dependency rules
+
+- **commons** must not require `stomp4j.client` or `stomp4j.server`.
+- **client** requires `stomp4j.commons` only (plus JDK/third-party).
+- **server** requires `stomp4j.commons` only in production; `stomp4j.client` is test-scoped.
+- Consumers of this library depend on artifact JARs — respect `exports`; do not rely on non-exported packages.
+
+## Cross-module changes
+
+- Protocol/frame format changes → `commons` first, then adapt client and server.
+- New `Command` or header → `commons` + both sides if both must handle it.
+
+## When adding code
+
+1. Place in the correct module package.
+2. Update `exports` only for intentional public API.
+3. Register SPI in `provides` + `META-INF/services` for client extensions.
+
+## Enforcement
+
+Before finishing: `mvn verify` compiles all modules with JPMS boundaries. If tests need reflective access, use `opens` in test `module-info.java` only.

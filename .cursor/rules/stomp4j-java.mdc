@@ -1,0 +1,52 @@
+---
+description: Java conventions for Stomp4J
+globs: "**/*.java"
+alwaysApply: false
+---
+
+# Java conventions
+
+## Import order
+
+1. `java.*` / `javax.*`
+2. Third-party (`org.slf4j`, `io.vertx`, `org.apache`, …)
+3. `dev.vepo.stomp4j.*`
+
+See [stomp4j-format-imports.mdc](stomp4j-format-imports.mdc).
+
+## Style
+
+- **Dead code:** remove unused locals, parameters, fields, and private methods in every change you touch.
+- String building: [stomp4j-strings.mdc](stomp4j-strings.mdc).
+- **Type names:** PascalCase — `^[A-Z][a-zA-Z0-9]*$`. Version classes: `Stomp1_0`, `Stomp1_1`, `Stomp1_2`.
+
+## `var` and local variables
+
+- Prefer **`var`** when the type is clear from the RHS.
+- **Inline** throwaway locals when each value is used once and the chain stays readable (~120 chars).
+- Keep a local when reused or when splitting aids debugging.
+
+## Functional style
+
+- Prefer streams, `Optional`, `map` / `filter` / `flatMap` for straight pipelines.
+- Use `ifPresentOrElse`, `orElseThrow`, `orElseGet` instead of `isPresent()` + `get()`.
+- Imperative code is fine for NIO loops, transport I/O, and multi-step mutations.
+
+## Logging
+
+- Always **SLF4J** — never `System.out`, `System.err`, or `java.util.logging`.
+- One static logger per class: `LoggerFactory.getLogger(MyClass.class)`.
+- Use **parameterized** messages — not concatenation.
+- Do not log secrets, passwords, or full credentials.
+
+## JPMS
+
+- Public API types must be in `exports` packages.
+- Internal implementation stays in non-exported packages (`internal`, `channels`, `session`).
+- When adding SPI, update both `module-info.java` and `META-INF/services`.
+
+## Tell, Don't Ask / Demeter / bypass
+
+- [stomp4j-tell-dont-ask.mdc](stomp4j-tell-dont-ask.mdc)
+- [stomp4j-law-of-demeter.mdc](stomp4j-law-of-demeter.mdc)
+- [stomp4j-no-method-bypass-allowed.mdc](stomp4j-no-method-bypass-allowed.mdc)

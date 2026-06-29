@@ -1,0 +1,41 @@
+---
+description: Local dev — Docker broker and integration test workflow
+alwaysApply: true
+---
+
+# Development experience
+
+Stomp4J is a library — there is no `main()` or dev server. Local validation is **build + tests** and optionally a **Docker broker**.
+
+## Quick start
+
+```bash
+mvn verify                    # full build + tests (Docker required)
+mvn -pl client test           # client module only
+docker compose -f scripts/docker/docker-compose.yaml up   # optional local Artemis
+```
+
+## When adding or changing a feature
+
+Before marking work done:
+
+1. **Unit tests** in `commons` for protocol/framing changes.
+2. **Integration tests** in `client` or `server` for end-to-end STOMP behaviour.
+3. Reuse `StompContainer` for broker-backed tests.
+4. Update [ARCHITECTURE.md](../../ARCHITECTURE.md) if module boundaries, SPI, or WIP status change.
+5. Update [docs/domain-specification.md](../../docs/domain-specification.md) for new protocol terms.
+
+## Optional manual check
+
+With `docker-compose` Artemis running, exercise client APIs from a small scratch class or existing README examples against `stomp://localhost:61613`.
+
+## Checklist before finishing
+
+- [ ] `mvn verify` passes (Docker running)
+- [ ] New behaviour has tests in the correct module
+- [ ] ARCHITECTURE.md §12 updated if gaps were closed or discovered
+
+## Never
+
+- Ship protocol changes without `commons` tests and at least one integration test when client/server behaviour changes.
+- Rely on manual-only verification when automated tests are feasible.
