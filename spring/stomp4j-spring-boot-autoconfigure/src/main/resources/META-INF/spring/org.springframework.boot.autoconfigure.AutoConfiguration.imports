@@ -1,0 +1,3 @@
+dev.vepo.stomp4j.spring.boot.autoconfigure.Stomp4jAutoConfiguration
+dev.vepo.stomp4j.spring.boot.autoconfigure.client.StompClientAutoConfiguration
+dev.vepo.stomp4j.spring.boot.autoconfigure.server.StompServerAutoConfiguration

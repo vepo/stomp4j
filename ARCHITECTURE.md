@@ -16,7 +16,7 @@ Stomp4J is a **Java 21 library** (not a runnable application) that implements th
 | License | Apache 2.0 |
 | Logging | SLF4J (consumer provides implementation) |
 
-Published artifacts: `stomp4j-commons`, `stomp4j-client`, `stomp4j-server`.
+Published artifacts: `stomp4j-commons`, `stomp4j-client`, `stomp4j-server`, `stomp4j-spring-boot-autoconfigure`, `stomp4j-spring-boot-starter-client`, `stomp4j-spring-boot-starter-server`.
 
 ## 2. Module dependency graph
 
@@ -24,8 +24,12 @@ Published artifacts: `stomp4j-commons`, `stomp4j-client`, `stomp4j-server`.
 stomp4j-parent
     ├── stomp4j-commons     (no internal deps)
     ├── stomp4j-client      → commons
-    └── stomp4j-server      → commons, vertx-web
-                              (test → client)
+    ├── stomp4j-server      → commons, vertx-web
+    │                         (test → client)
+    └── stomp4j-spring      → optional Spring Boot layer
+        ├── stomp4j-spring-boot-autoconfigure → client, server (optional)
+        ├── stomp4j-spring-boot-starter-client
+        └── stomp4j-spring-boot-starter-server
 ```
 
 Dependencies flow **downward only**: `client` and `server` depend on `commons`; `server` tests may use `client` but production `server` does not depend on `client`.

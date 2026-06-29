@@ -1,0 +1,58 @@
+services:
+  artemis:
+    image: apache/activemq-artemis:2.30.0
+    ports:
+      - "61613:61613"
+      - "8161:8161"
+    environment:
+      ARTEMIS_USER: user
+      ARTEMIS_PASSWORD: passwd
+    volumes:
+      - ../client/src/test/resources/broker.xml:/var/lib/artemis-instance/etc-override/broker.xml:ro
+
+  spring-client-sample:
+    build:
+      context: ..
+      dockerfile: samples/spring-client-sample/Dockerfile
+    depends_on:
+      - artemis
+    environment:
+      STOMP4J_CLIENT_URL: stomp://artemis:61613
+      STOMP4J_CLIENT_USERNAME: user
+      STOMP4J_CLIENT_PASSWORD: passwd
+    ports:
+      - "8080:8080"
+
+  plain-client-sample:
+    build:
+      context: ..
+      dockerfile: samples/plain-client-sample/Dockerfile
+    depends_on:
+      - artemis
+    environment:
+      STOMP4J_CLIENT_URL: stomp://artemis:61613
+      STOMP4J_CLIENT_USERNAME: user
+      STOMP4J_CLIENT_PASSWORD: passwd
+      HTTP_PORT: "8082"
+    ports:
+      - "8082:8082"
+
+  spring-server-sample:
+    build:
+      context: ..
+      dockerfile: samples/spring-server-sample/Dockerfile
+    ports:
+      - "8081:8081"
+      - "5500:5500"
+      - "5501:5501"
+
+  plain-server-sample:
+    build:
+      context: ..
+      dockerfile: samples/plain-server-sample/Dockerfile
+    environment:
+      STOMP_TCP_PORT: "5510"
+      STOMP_WS_PORT: "5511"
+    ports:
+      - "5510:5510"
+      - "5511:5511"

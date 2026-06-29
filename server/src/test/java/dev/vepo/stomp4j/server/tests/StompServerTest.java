@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
 import java.util.LinkedList;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.DisplayName;
@@ -12,6 +13,8 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import dev.vepo.stomp4j.client.UserCredential;
+import dev.vepo.stomp4j.client.AckMode;
 import dev.vepo.stomp4j.client.StompClient;
 import dev.vepo.stomp4j.client.UserCredential;
 import dev.vepo.stomp4j.client.exceptions.StompException;
@@ -20,7 +23,10 @@ import dev.vepo.stomp4j.commons.protocol.Command;
 import dev.vepo.stomp4j.commons.protocol.Header;
 import dev.vepo.stomp4j.commons.protocol.Headers;
 import dev.vepo.stomp4j.commons.protocol.Message;
+import dev.vepo.stomp4j.client.protocol.v1_2.Stomp1_2;
 import dev.vepo.stomp4j.server.StompServer;
+import dev.vepo.stomp4j.server.SubscriberAckListener;
+import dev.vepo.stomp4j.server.StompSession;
 
 class StompServerTest {
     private record ReceivedMessage(String topic, String message) {}
@@ -148,6 +154,40 @@ class StompServerTest {
                                     "SHOULD-NOT-ARRIVE"));
             await().pollDelay(java.time.Duration.ofMillis(500)).until(() -> true);
             assertThat(subscription.hasData()).isFalse();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "stomp://localhost:5507" })
+    @DisplayName("Server should notify when subscriber acknowledges outbound message")
+    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void subscriberAckListenerTest(String url) {
+        var subscribed = new AtomicBoolean(false);
+        var ackReceived = new AtomicBoolean(false);
+        try (var server = StompServer.builder()
+                                     .channel(TransportType.TCP, 5507)
+                                     .subscription(topic -> subscribed.compareAndSet(false, true))
+                                     .handler(message -> {})
+                                     .start();
+                var client = StompClient.create(url, (UserCredential) null, Set.of(new Stomp1_2()))) {
+            client.connect();
+            client.subscribe("topic-ack", AckMode.CLIENT_INDIVIDUAL, delivery -> delivery.ack());
+            await().until(subscribed::get);
+            server.acknowledgedOutboundChannel()
+                  .send(new Message(Command.SEND,
+                                    Headers.builder().with(Header.DESTINATION, "topic-ack").build(),
+                                    "ACK-ME"),
+                        new SubscriberAckListener() {
+                            @Override
+                            public void onAck(String messageId, StompSession session) {
+                                ackReceived.set(true);
+                            }
+
+                            @Override
+                            public void onNack(String messageId, StompSession session) {
+                            }
+                        });
+            await().until(ackReceived::get);
         }
     }
 }

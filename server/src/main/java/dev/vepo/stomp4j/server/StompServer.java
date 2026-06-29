@@ -20,6 +20,8 @@ import org.slf4j.LoggerFactory;
 import dev.vepo.stomp4j.commons.TransportType;
 import dev.vepo.stomp4j.commons.protocol.Message;
 import dev.vepo.stomp4j.server.auth.StompAuthenticator;
+import dev.vepo.stomp4j.server.AcknowledgedOutboundChannel;
+import dev.vepo.stomp4j.server.SubscriberAckListener;
 import dev.vepo.stomp4j.server.channels.Channel;
 import dev.vepo.stomp4j.server.channels.ChannelListener;
 import dev.vepo.stomp4j.server.channels.ChannelRuntime;
@@ -129,12 +131,24 @@ public class StompServer implements AutoCloseable {
         }
     }
 
-    private class AllChannelsOutbound implements OutboundChannel {
+    private class AllChannelsOutbound implements AcknowledgedOutboundChannel {
 
         @Override
         public void send(Message message) {
+            send(message, null);
+        }
+
+        @Override
+        public void send(Message message, SubscriberAckListener listener) {
             logger.debug("Broadcasting message to all channels: {}", message);
-            activeChannels.forEach(channel -> channel.outboundChannel().send(message));
+            activeChannels.forEach(channel -> {
+                var outbound = channel.outboundChannel();
+                if (outbound instanceof AcknowledgedOutboundChannel acknowledged) {
+                    acknowledged.send(message, listener);
+                } else {
+                    outbound.send(message);
+                }
+            });
         }
     }
 
@@ -151,7 +165,7 @@ public class StompServer implements AutoCloseable {
     private final SubscriptionHandler subscriptionHandler;
     private final StompConnectionListener connectionListener;
     private final ChannelListener listener;
-    private final OutboundChannel outboundChannel;
+    private final AcknowledgedOutboundChannel outboundChannel;
     private final ScheduledExecutorService heartbeatExecutor;
 
     private boolean running;
@@ -210,6 +224,10 @@ public class StompServer implements AutoCloseable {
     }
 
     public OutboundChannel outboundChannel() {
+        return outboundChannel;
+    }
+
+    public AcknowledgedOutboundChannel acknowledgedOutboundChannel() {
         return outboundChannel;
     }
 }

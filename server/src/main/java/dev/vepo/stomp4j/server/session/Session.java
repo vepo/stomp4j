@@ -23,13 +23,14 @@ import dev.vepo.stomp4j.commons.protocol.MessageBuffer;
 import dev.vepo.stomp4j.commons.protocol.MessageBuilder;
 import dev.vepo.stomp4j.server.OutboundChannel;
 import dev.vepo.stomp4j.server.StompSession;
+import dev.vepo.stomp4j.server.SubscriberAckListener;
 import dev.vepo.stomp4j.server.auth.Credentials;
 import dev.vepo.stomp4j.server.channels.ChannelListener;
 
 public class Session implements StompSession {
     private record Subscription(String topic, String id, Optional<String> ackMode) {}
 
-    private record PendingMessage(Message message, Subscription subscription) {}
+    private record PendingMessage(Message message, Subscription subscription, Optional<SubscriberAckListener> listener) {}
 
     private static final Logger logger = LoggerFactory.getLogger(Session.class);
     private static final double HEARTBEAT_TOLERANCE = 2.0;
@@ -194,12 +195,8 @@ public class Session implements StompSession {
                 var destination = message.headers().destination();
                 subscriptions.removeIf(subscription -> matchesUnsubscribe(subscription, id, destination));
             }
-            case ACK -> message.headers()
-                               .get(Header.ID)
-                               .ifPresent(pendingMessages::remove);
-            case NACK -> message.headers()
-                                .get(Header.ID)
-                                .ifPresent(messageId -> redeliver(messageId));
+            case ACK -> acknowledgePendingMessage(message);
+            case NACK -> negativeAcknowledgePendingMessage(message);
             case DISCONNECT -> endSession();
             default -> logger.warn("Command not implemented! {}", message);
         }
@@ -213,10 +210,39 @@ public class Session implements StompSession {
                                              .orElse(false));
     }
 
+    private void acknowledgePendingMessage(Message message) {
+        resolveAckMessageId(message).ifPresent(messageId -> {
+            var pending = pendingMessages.remove(messageId);
+            if (Objects.nonNull(pending)) {
+                pending.listener().ifPresent(listener -> listener.onAck(messageId, this));
+            }
+        });
+    }
+
+    private void negativeAcknowledgePendingMessage(Message message) {
+        resolveAckMessageId(message).ifPresent(messageId -> {
+            var pending = pendingMessages.remove(messageId);
+            if (Objects.nonNull(pending)) {
+                pending.listener().ifPresent(listener -> listener.onNack(messageId, this));
+                redeliver(messageId, pending);
+            }
+        });
+    }
+
+    private Optional<String> resolveAckMessageId(Message message) {
+        return message.headers()
+                      .get(Header.ID)
+                      .or(() -> message.headers().get(Header.MESSAGE_ID));
+    }
+
+    private void redeliver(String messageId, PendingMessage pending) {
+        deliverMessage(pending.message(), pending.subscription(), pending.listener());
+    }
+
     private void redeliver(String messageId) {
-        var pending = pendingMessages.remove(messageId);
+        var pending = pendingMessages.get(messageId);
         if (Objects.nonNull(pending)) {
-            deliverMessage(pending.message(), pending.subscription());
+            redeliver(messageId, pending);
         }
     }
 
@@ -242,16 +268,24 @@ public class Session implements StompSession {
     }
 
     public void handle(Message message) {
+        handle(message, Optional.empty());
+    }
+
+    public void handle(Message message, Optional<SubscriberAckListener> listener) {
         if (message.command() != Command.SEND) {
             return;
         }
         var destination = message.headers().destination().orElseThrow();
         subscriptions.stream()
                      .filter(subscription -> subscription.topic().equals(destination))
-                     .forEach(subscription -> deliverMessage(message, subscription));
+                     .forEach(subscription -> deliverMessage(message, subscription, listener));
     }
 
     private void deliverMessage(Message message, Subscription subscription) {
+        deliverMessage(message, subscription, Optional.empty());
+    }
+
+    private void deliverMessage(Message message, Subscription subscription, Optional<SubscriberAckListener> listener) {
         var messageId = Long.toString(messageIdSequence.incrementAndGet());
         var builder = MessageBuilder.builder(Command.MESSAGE)
                                     .header(Header.SUBSCRIPTION, subscription.id())
@@ -265,7 +299,7 @@ public class Session implements StompSession {
         channel.send(outbound);
         subscription.ackMode()
                     .filter(ack -> ack.equals("client") || ack.equals("client-individual"))
-                    .ifPresent(ack -> pendingMessages.put(messageId, new PendingMessage(message, subscription)));
+                    .ifPresent(ack -> pendingMessages.put(messageId, new PendingMessage(message, subscription, listener)));
     }
 
     private void startHeartbeatTasks() {

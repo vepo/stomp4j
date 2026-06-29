@@ -7,6 +7,7 @@ import java.util.ServiceLoader;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import dev.vepo.stomp4j.client.AckMode;
 import dev.vepo.stomp4j.client.Subscription;
 import dev.vepo.stomp4j.client.UserCredential;
 import dev.vepo.stomp4j.client.transport.Transport;
@@ -59,9 +60,26 @@ public abstract class Stomp {
 
     public abstract void onMessage(Message message, Optional<String> session, Transport transport);
 
-    public abstract void subscribe(Subscription subscription, Optional<String> session, Transport transport);
+    public abstract void subscribe(Subscription subscription, Optional<String> session, Transport transport, AckMode ackMode);
+
+    public final void subscribe(Subscription subscription, Optional<String> session, Transport transport) {
+        subscribe(subscription, session, transport, subscription.ackMode());
+    }
+
+    public abstract void acknowledge(Message message, Optional<String> session, Transport transport);
+
+    public abstract void negativeAcknowledge(Message message, Optional<String> session, Transport transport);
 
     public abstract void send(String destination, String content, String contentType, Optional<String> session, Transport transport);
+
+    public void send(String destination,
+                     String content,
+                     String contentType,
+                     Optional<String> session,
+                     Transport transport,
+                     Optional<String> receiptId) {
+        send(destination, content, contentType, session, transport);
+    }
 
     public Message heartBeatMessage() {
         return Message.HEARTBEAT;

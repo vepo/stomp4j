@@ -51,7 +51,11 @@ public interface StompClient extends AutoCloseable {
 
     Subscription subscribe(String topic, Consumer<String> consumer);
 
+    Subscription subscribe(String topic, AckMode ackMode, Consumer<StompDelivery> consumer);
+
     void sendPlain(String destination, String content, String contentType);
+
+    StompReceipt send(String destination, String body, SendOptions options);
 
     StompClient unsubscribe(Subscription subscription);
 

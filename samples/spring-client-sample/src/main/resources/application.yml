@@ -1,0 +1,8 @@
+stomp4j:
+  client:
+    url: ${STOMP4J_CLIENT_URL:stomp://localhost:61613}
+    username: ${STOMP4J_CLIENT_USERNAME:user}
+    password: ${STOMP4J_CLIENT_PASSWORD:passwd}
+
+server:
+  port: 8080

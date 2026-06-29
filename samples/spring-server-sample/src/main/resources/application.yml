@@ -1,0 +1,11 @@
+stomp4j:
+  server:
+    server-name: spring-server-sample
+    channels:
+      - type: TCP
+        port: 5500
+      - type: WEB_SOCKET
+        port: 5501
+
+server:
+  port: 8081
