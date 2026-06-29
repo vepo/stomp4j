@@ -19,6 +19,7 @@
         <sonar.coverage.jacoco.xmlReportPaths>target/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
         <version.testcontainers>2.0.2</version.testcontainers>
         <version.junit>6.0.1</version.junit>
+        <formatter.config.file>${session.topLevelProject.basedir}/resources/formatter.xml</formatter.config.file>
     </properties>
 
     <name>Stomp4J :: Parent</name>
@@ -294,7 +295,7 @@
                 <artifactId>formatter-maven-plugin</artifactId>
                 <version>2.29.0</version>
                 <configuration>
-                    <configFile>resources/formatter.xml</configFile>
+                    <configFile>${formatter.config.file}</configFile>
                 </configuration>
                 <executions>
                     <execution>
@@ -320,7 +321,7 @@
                 <configuration>
                     <java>
                         <eclipse>
-                            <file>resources/formatter.xml</file>
+                            <file>${formatter.config.file}</file>
                             <sortMembersEnabled>true</sortMembersEnabled>
                         </eclipse>
                     </java>
