@@ -5,12 +5,13 @@ Read these before changing code or tests:
 | Document | Purpose |
 |----------|---------|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Modules, patterns, SPI, testing, CI, feature workflow |
+| [docs/README.md](docs/README.md) | User documentation index and learning paths |
 | [docs/domain-specification.md](docs/domain-specification.md) | STOMP ubiquitous language and invariants |
 | [README.md](README.md) | Client usage examples |
 | [resources/roteiros/](resources/roteiros/) | Design rationale (Portuguese) |
 | [.cursor/rules/](.cursor/rules/) | Cursor rules (always-on + file-scoped) |
 
-**Workflow:** read domain spec → place code in correct module → update SPI/`module-info` if needed → test → update ARCHITECTURE.md when architecture changes → `mvn verify`.
+**Workflow:** read domain spec → place code in correct module → update SPI/`module-info` if needed → test → update docs when public API changes → update ARCHITECTURE.md when architecture changes → `mvn verify`.
 
 **Tests:** integration tests use Testcontainers (Docker required). Reuse `StompContainer` and existing test infra; do not bypass with raw sockets when the DSL exists.
 
@@ -32,5 +33,7 @@ Read these before changing code or tests:
 | `stomp4j-test-docker.mdc` | Docker for Testcontainers |
 | `development-experience.mdc` | Local broker and test infra |
 | `domain-model.mdc` | Domain language alignment |
+| `stomp-protocol-compliance.mdc` | Normative STOMP spec compliance |
+| `documentation.mdc` | Keep README and docs/ in sync with API |
 | `stomp4j-tooling-languages.mdc` | Scripts: bash/JBang only |
 | `static-analysis.mdc` | Finish gate: `mvn verify` |

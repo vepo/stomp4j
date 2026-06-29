@@ -1,0 +1,53 @@
+---
+description: Keep user-facing documentation in sync with public API and behaviour
+alwaysApply: true
+---
+
+# Documentation — read and maintain
+
+User-facing docs live in [README.md](../../README.md) and [docs/](../../docs/). Keep them accurate when behaviour or public API changes.
+
+## Before changing public API or user-visible behaviour
+
+1. Skim [docs/README.md](../../docs/README.md) — pick the doc(s) affected by your change.
+2. Prefer updating the **lowest complexity** doc that covers the feature; link from higher-level docs instead of duplicating.
+
+## After changes — update these when relevant
+
+| Change | Update |
+|--------|--------|
+| New/changed `StompClient` or `StompServer` API | [README.md](../../README.md) quick start, [client-guide.md](../../docs/client-guide.md) or [server-guide.md](../../docs/server-guide.md) |
+| New Maven module or artifact rename | [README.md](../../README.md), [overview.md](../../docs/overview.md), [getting-started.md](../../docs/getting-started.md) |
+| Purpose, philosophy, or handler boundaries | [overview.md](../../docs/overview.md) |
+| Transport schemes, TLS, versions, SPI | [advanced-topics.md](../../docs/advanced-topics.md), [client-guide.md](../../docs/client-guide.md) |
+| New doc file or learning path | [docs/README.md](../../docs/README.md), [README.md](../../README.md) doc table |
+| STOMP terms or invariants | [domain-specification.md](../../docs/domain-specification.md) |
+| Internal architecture only | [ARCHITECTURE.md](../../ARCHITECTURE.md) — not user guides |
+
+## Complexity order (do not invert)
+
+1. **README** — elevator pitch, quick start, links
+2. **overview / getting-started** — purpose, modules, first working code
+3. **client-guide / server-guide** — intermediate usage patterns
+4. **advanced-topics** — SPI, JPMS, wire format, TLS
+
+Put new detail in the deepest applicable layer; add a one-line pointer in shallower docs.
+
+## Quality bar
+
+- Examples must compile against the **current** public API (copy from tests when possible).
+- Document **released** Maven coordinates; note SNAPSHOT only for building from source.
+- No stale API names (e.g. old handler signatures) — grep docs when renaming types.
+- Cross-link between docs; avoid copying large blocks in multiple files.
+
+## What not to duplicate
+
+- **ARCHITECTURE.md** — contributors and agents; module internals, CI, JPMS map
+- **domain-specification.md** — ubiquitous language, not tutorials
+- **README** — should not grow into a full manual; link to `docs/`
+
+## Related
+
+- Agent index: [AGENTS.md](../../AGENTS.md)
+- Architecture rule: [architecture.mdc](architecture.mdc)
+- Protocol compliance: [stomp-protocol-compliance.mdc](stomp-protocol-compliance.mdc)

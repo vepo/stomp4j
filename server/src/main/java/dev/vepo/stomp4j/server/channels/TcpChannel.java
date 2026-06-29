@@ -1,6 +1,8 @@
 package dev.vepo.stomp4j.server.channels;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
@@ -17,6 +19,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import javax.net.ssl.SSLServerSocket;
+import javax.net.ssl.SSLSocket;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,7 +32,7 @@ import dev.vepo.stomp4j.server.session.SessionCloser;
 import dev.vepo.stomp4j.server.session.Status;
 
 public class TcpChannel implements Channel {
-    private record SessionAttachment(Session session, SocketChannel socket, SslEngineChannel sslChannel) {}
+    private record SessionAttachment(Session session, SocketChannel socket) {}
 
     private class TcpExternalOutboundChannel implements OutboundChannel {
 
@@ -44,22 +49,34 @@ public class TcpChannel implements Channel {
     private class TcpSessionOutboundChannel implements OutboundChannel {
 
         private final SocketChannel socket;
-        private final SslEngineChannel sslChannel;
 
-        private TcpSessionOutboundChannel(SocketChannel socket, SslEngineChannel sslChannel) {
+        private TcpSessionOutboundChannel(SocketChannel socket) {
             this.socket = socket;
-            this.sslChannel = sslChannel;
         }
 
         @Override
         public void send(Message message) {
             try {
-                var encoded = message.encode().getBytes();
-                if (Objects.nonNull(sslChannel)) {
-                    sslChannel.write(encoded);
-                } else {
-                    socket.write(ByteBuffer.wrap(encoded));
-                }
+                socket.write(ByteBuffer.wrap(message.encode().getBytes()));
+            } catch (IOException ex) {
+                logger.error("Error sending message: %s".formatted(message), ex);
+            }
+        }
+    }
+
+    private class StreamOutboundChannel implements OutboundChannel {
+
+        private final OutputStream outputStream;
+
+        private StreamOutboundChannel(OutputStream outputStream) {
+            this.outputStream = outputStream;
+        }
+
+        @Override
+        public void send(Message message) {
+            try {
+                outputStream.write(message.encode().getBytes());
+                outputStream.flush();
             } catch (IOException ex) {
                 logger.error("Error sending message: %s".formatted(message), ex);
             }
@@ -75,10 +92,12 @@ public class TcpChannel implements Channel {
     private final AtomicBoolean running;
     private final BufferPool bufferPool;
     private final Map<Session, SessionAttachment> sessionAttachments;
+    private final Map<Session, SSLSocket> sslSessions;
     private final TcpExternalOutboundChannel outboundChannel;
     private final SessionCloser sessionCloser;
     private Selector selector;
     private ServerSocketChannel channel;
+    private SSLServerSocket sslServerSocket;
 
     public TcpChannel(int port, ChannelListener listener, ChannelRuntime runtime) {
         this.port = port;
@@ -88,29 +107,38 @@ public class TcpChannel implements Channel {
         this.running = new AtomicBoolean(false);
         this.bufferPool = new BufferPool(10, 1024);
         this.sessionAttachments = new ConcurrentHashMap<>();
+        this.sslSessions = new ConcurrentHashMap<>();
         this.outboundChannel = new TcpExternalOutboundChannel();
         this.sessionCloser = this::closeSession;
     }
 
     @Override
     public synchronized void start() {
-        if (Objects.isNull(selector)) {
-            logger.info("Starting TCP Channel at port {}", port);
-            try {
+        if (running.get()) {
+            logger.warn("Channel already started");
+            return;
+        }
+        logger.info("Starting TCP Channel at port {}", port);
+        this.running.set(true);
+        try {
+            if (runtime.sslSettings().isPresent()) {
+                sslServerSocket = (SSLServerSocket) runtime.sslSettings()
+                                                           .get()
+                                                           .sslContext()
+                                                           .getServerSocketFactory()
+                                                           .createServerSocket(port);
+                threadPool.submit(this::acceptSsl);
+            } else {
                 this.selector = Selector.open();
                 this.channel = ServerSocketChannel.open();
                 channel.configureBlocking(false);
                 channel.bind(new InetSocketAddress(port));
                 channel.register(selector, SelectionKey.OP_ACCEPT);
-
-                this.running.set(true);
-                this.threadPool.submit(this::accept);
-                logger.info("TCP Channel started! port={}", port);
-            } catch (IOException ex) {
-                logger.error("Could not start channel", ex);
+                threadPool.submit(this::accept);
             }
-        } else {
-            logger.warn("Channel already started");
+            logger.info("TCP Channel started! port={}", port);
+        } catch (IOException ex) {
+            logger.error("Could not start channel", ex);
         }
     }
 
@@ -127,6 +155,18 @@ public class TcpChannel implements Channel {
                               .map(SessionAttachment::session)
                               .toList()
                               .forEach(this::closeSession);
+            sslSessions.values().forEach(socket -> {
+                try {
+                    socket.close();
+                } catch (IOException ex) {
+                    logger.debug("Error closing SSL socket", ex);
+                }
+            });
+            sslSessions.clear();
+            if (Objects.nonNull(sslServerSocket)) {
+                sslServerSocket.close();
+                sslServerSocket = null;
+            }
             if (Objects.nonNull(selector)) {
                 selector.close();
                 selector = null;
@@ -149,6 +189,53 @@ public class TcpChannel implements Channel {
     @Override
     public OutboundChannel outboundChannel() {
         return outboundChannel;
+    }
+
+    private void acceptSsl() {
+        while (running.get()) {
+            try {
+                var sslSocket = (SSLSocket) sslServerSocket.accept();
+                sslSocket.startHandshake();
+                threadPool.submit(() -> readSslSocket(sslSocket));
+            } catch (IOException ex) {
+                if (running.get()) {
+                    logger.error("SSL accept error", ex);
+                }
+            }
+        }
+    }
+
+    private void readSslSocket(SSLSocket sslSocket) {
+        Session session = null;
+        try {
+            var outbound = new StreamOutboundChannel(sslSocket.getOutputStream());
+            session = new Session(outbound,
+                                  listener,
+                                  runtime.sessionConfig(),
+                                  sessionCloser,
+                                  runtime.heartbeatExecutor());
+            sslSessions.put(session, sslSocket);
+            logger.info("SSL session started, waiting for CONNECT: {}", session);
+            var inputStream = sslSocket.getInputStream();
+            var buffer = new byte[1024];
+            int length;
+            while (running.get() && (length = inputStream.read(buffer)) != -1) {
+                if (length > 0) {
+                    session.offer(buffer, length);
+                }
+            }
+        } catch (IOException ex) {
+            logger.debug("SSL session read error", ex);
+        } finally {
+            if (Objects.nonNull(session)) {
+                closeSession(session);
+            }
+            try {
+                sslSocket.close();
+            } catch (IOException ex) {
+                logger.debug("Error closing SSL socket", ex);
+            }
+        }
     }
 
     private void accept() {
@@ -180,10 +267,6 @@ public class TcpChannel implements Channel {
 
     private void readSession(SelectionKey key) {
         var attachment = (SessionAttachment) key.attachment();
-        if (Objects.nonNull(attachment.sslChannel())) {
-            readSslSession(attachment, key);
-            return;
-        }
         var buffer = bufferPool.request();
         try {
             int length = attachment.socket().read(buffer);
@@ -204,41 +287,20 @@ public class TcpChannel implements Channel {
         }
     }
 
-    private void readSslSession(SessionAttachment attachment, SelectionKey key) {
-        try {
-            var read = attachment.sslChannel()
-                                 .read(data -> attachment.session().offer(data, data.length));
-            if (read < 0) {
-                closeSession(attachment.session());
-                key.cancel();
-            }
-        } catch (IOException ex) {
-            logger.debug("SSL read error, closing session", ex);
-            closeSession(attachment.session());
-            key.cancel();
-        }
-    }
-
     private void acceptSession(SelectionKey key) {
         try {
             ServerSocketChannel serverSocketChannel = (ServerSocketChannel) key.channel();
             SocketChannel clientChannel = serverSocketChannel.accept();
-
-            SslEngineChannel sslChannel = null;
-            if (runtime.sslSettings().isPresent()) {
-                clientChannel.configureBlocking(true);
-                sslChannel = SslEngineChannel.wrap(clientChannel, runtime.sslSettings().get().sslContext());
-            }
             clientChannel.configureBlocking(false);
 
-            var outbound = new TcpSessionOutboundChannel(clientChannel, sslChannel);
+            var outbound = new TcpSessionOutboundChannel(clientChannel);
             var session = new Session(outbound,
                                       listener,
                                       runtime.sessionConfig(),
                                       sessionCloser,
                                       runtime.heartbeatExecutor());
 
-            var attachment = new SessionAttachment(session, clientChannel, sslChannel);
+            var attachment = new SessionAttachment(session, clientChannel);
             sessionAttachments.put(session, attachment);
             clientChannel.register(selector, SelectionKey.OP_READ, attachment);
 
@@ -250,16 +312,19 @@ public class TcpChannel implements Channel {
 
     private void closeSession(Session session) {
         var attachment = sessionAttachments.remove(session);
-        if (Objects.isNull(attachment)) {
-            return;
-        }
-        if (Objects.nonNull(attachment.sslChannel())) {
-            attachment.sslChannel().close();
-        } else {
+        var sslSocket = sslSessions.remove(session);
+        if (Objects.nonNull(attachment)) {
             try {
                 attachment.socket().close();
             } catch (IOException ex) {
                 logger.debug("Error closing socket", ex);
+            }
+        }
+        if (Objects.nonNull(sslSocket)) {
+            try {
+                sslSocket.close();
+            } catch (IOException ex) {
+                logger.debug("Error closing SSL socket", ex);
             }
         }
         if (session.status() != Status.END) {

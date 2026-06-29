@@ -3,6 +3,8 @@ package dev.vepo.stomp4j.server.channels;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.slf4j.Logger;
@@ -58,6 +60,7 @@ public class WebSocketChannel implements Channel {
 
     private Vertx vertx;
     private HttpServer server;
+    private CountDownLatch listenLatch;
 
     public WebSocketChannel(int port, ChannelListener listener, ChannelRuntime runtime) {
         this.port = port;
@@ -116,12 +119,25 @@ public class WebSocketChannel implements Channel {
             logger.info("WebSocket session started, waiting for CONNECT: {}", session);
         });
 
+        listenLatch = new CountDownLatch(1);
         server.listen()
-              .onSuccess(httpServer -> logger.info("WebSocket server started on port {}", httpServer.actualPort()))
+              .onSuccess(httpServer -> {
+                  logger.info("WebSocket server started on port {}", httpServer.actualPort());
+                  listenLatch.countDown();
+              })
               .onFailure(error -> {
                   logger.error("Failed to start WebSocket server on port {}", port, error);
                   running.set(false);
+                  listenLatch.countDown();
               });
+        try {
+            if (!listenLatch.await(10, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("WebSocket server did not start in time on port %d".formatted(port));
+            }
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while starting WebSocket server", ex);
+        }
     }
 
     private void closeSession(Session session) {

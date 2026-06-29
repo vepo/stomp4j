@@ -24,11 +24,20 @@ STOMP protocol vocabulary and library-specific terms. Agents must align code and
 | **Transport** | Byte stream under STOMP (TCP or WebSocket) |
 | **TransportProvider** | SPI that maps a URL scheme to a `Transport` implementation |
 | **Channel** | Server-side transport endpoint listening on a port |
-| **OutboundChannel** | Server API to push frames to subscribed sessions |
-| **MessageHandler** | Callback invoked when a client `SEND`s to a destination |
+| **OutboundChannel** | Server API to push frames to subscribed sessions (broadcast or per-session) |
+| **StompMessage** | Inbound client `SEND` delivered to `MessageHandler` with destination, body, headers, and session channel |
+| **StompSession** | Read-only view of a connected client (`login`, negotiated `version`, `outboundChannel`) |
+| **MessageHandler** | Callback invoked when a client `SEND`s to a destination (`onSend(StompMessage)`) |
 | **SubscriptionHandler** | Predicate deciding whether a session may `SUBSCRIBE` to a destination |
 | **StompAuthenticator** | Callback validating credentials on `CONNECT` |
-| **Protocol version** | `1.0`, `1.1`, or `1.2` — selected after `CONNECTED` |
+| **Protocol version** | `1.0`, `1.1`, or `1.2` — negotiated from `accept-version` on `CONNECT` |
+
+### Transports (TLS)
+
+| Term | Meaning |
+|------|---------|
+| **stomps://** | STOMP over TLS TCP (`SecureTcpTransportProvider`) |
+| **wss://** | STOMP over TLS WebSocket (`SecureWebSocketTransportProvider`) |
 
 ### Client API
 

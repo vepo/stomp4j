@@ -1,32 +1,103 @@
 # Stomp4J
 
-Stomp client for Java.
+A **Java 21** library for the [STOMP messaging protocol](https://stomp.github.io/) — STOMP client, embeddable server, and shared wire-format model. No application framework required.
 
-## Implemented Versions
+**License:** Apache 2.0 · **Group:** `dev.vepo` · **Repository:** [github.com/vepo/stomp4j](https://github.com/vepo/stomp4j)
 
-This library can support all Stomp versions, but it was not test in others than 1.2
+## Why Stomp4J?
 
-- [X] [STOMP Protocol Specification, Version 1.2](https://stomp.github.io/stomp-specification-1.2.html)
-- [X] [STOMP Protocol Specification, Version 1.1](https://stomp.github.io/stomp-specification-1.1.html)
-- [X] [STOMP Protocol Specification, Version 1.0](https://stomp.github.io/stomp-specification-1.0.html)
+Use Stomp4J when you need to:
 
-## Possible Clients
+- Connect a Java application to any STOMP broker (ActiveMQ Artemis, RabbitMQ STOMP plugin, Network Rail feeds, etc.)
+- Embed a lightweight STOMP endpoint inside your own process for tests or small services
+- Work with STOMP frames in Java without pulling in Spring or Jakarta EE
 
-- [UK Network Rail](https://publicdatafeeds.networkrail.co.uk)
-   ```java
-   try (var client = new StompClient("ws://publicdatafeeds.networkrail.co.uk:61618", 
-                                     new UserCredential(System.getenv("USERNAME"), System.getenv("PASSWORD")))) {
-        client.connect();
-        client.subscribe("/topic/TRAIN_MVT_ALL_TOC", data -> {
-            // consume train data
-        });
-        client.join();
-        client.unsubscribe("/topic/TRAIN_MVT_ALL_TOC");
-   }
-   ```
+The library follows the official STOMP specification (versions 1.0, 1.1, and 1.2) and exposes a small, intention-revealing API.
 
-## Features
+## Quick start
 
-1. [X] Topic/Queue subscription
-2. [X] Topic/Queue unsubscription
-3. [X] Send messages
+Add the client dependency (replace the version with the [latest release](https://github.com/vepo/stomp4j/releases)):
+
+```xml
+<dependency>
+    <groupId>dev.vepo</groupId>
+    <artifactId>stomp4j-client</artifactId>
+    <version>1.1.0</version>
+</dependency>
+```
+
+Connect, subscribe, and receive messages:
+
+```java
+import dev.vepo.stomp4j.client.StompClient;
+import dev.vepo.stomp4j.client.UserCredential;
+
+try (var client = StompClient.create(
+        "stomp://localhost:61613",
+        new UserCredential("user", "pass"))) {
+
+    client.connect();
+    client.subscribe("/topic/events", body -> {
+        // handle each MESSAGE frame body
+    });
+    client.join(); // blocks until close()
+}
+```
+
+For an embedded server, add `stomp4j-server` and see [docs/getting-started.md](docs/getting-started.md#embedded-server).
+
+## Documentation
+
+Read in order of complexity — each level builds on the previous one.
+
+| Level | Document | What you learn |
+|-------|----------|----------------|
+| **Start here** | [docs/overview.md](docs/overview.md) | Purpose, modules, design philosophy |
+| **Beginner** | [docs/getting-started.md](docs/getting-started.md) | Maven setup, first client & server |
+| **Intermediate** | [docs/client-guide.md](docs/client-guide.md) | Transports, subscriptions, credentials, TLS |
+| **Intermediate** | [docs/server-guide.md](docs/server-guide.md) | Handlers, outbound push, authentication |
+| **Advanced** | [docs/advanced-topics.md](docs/advanced-topics.md) | Protocol versions, SPI, JPMS, wire format |
+
+Full index: [docs/README.md](docs/README.md)
+
+## Modules
+
+| Artifact | Use when |
+|----------|----------|
+| `stomp4j-client` | Your app talks to an external STOMP broker |
+| `stomp4j-server` | You embed a STOMP server (tests, gateways, prototypes) |
+| `stomp4j-commons` | You build on STOMP frames directly (usually pulled transitively) |
+
+Details: [docs/overview.md#modules](docs/overview.md#modules)
+
+## Protocol support
+
+| Version | Client | Server |
+|---------|--------|--------|
+| STOMP 1.2 | Supported | Supported (default) |
+| STOMP 1.1 | Supported | Configurable |
+| STOMP 1.0 | Supported | Configurable |
+
+Specification: [stomp.github.io](https://stomp.github.io/)
+
+## Requirements
+
+- Java 21+
+- SLF4J on the classpath (you provide the binding, e.g. Logback)
+- For running this project's tests: Docker (Testcontainers + ActiveMQ Artemis)
+
+## Building from source
+
+```bash
+git clone https://github.com/vepo/stomp4j.git
+cd stomp4j
+mvn verify
+```
+
+Optional local broker: `docker compose -f scripts/docker/docker-compose.yaml up`
+
+## Contributing
+
+- Architecture & conventions: [ARCHITECTURE.md](ARCHITECTURE.md)
+- Domain language: [docs/domain-specification.md](docs/domain-specification.md)
+- Agent / maintainer index: [AGENTS.md](AGENTS.md)

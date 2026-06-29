@@ -125,8 +125,8 @@ public class SecureTcpTransport implements Transport {
             var messageBuffer = new MessageBuffer();
             var inputStream = socket.getInputStream();
             var buffer = new byte[1024];
-            int length = 0;
-            while (running.get() && (inputStream.available() == 0 || (length = inputStream.read(buffer)) != -1)) {
+            int length;
+            while (running.get() && (length = inputStream.read(buffer)) != -1) {
                 if (length > 0) {
                     lastReceivedMessage = System.nanoTime();
                     if (messageBuffer.append(new String(buffer, 0, length))) {
@@ -134,12 +134,6 @@ public class SecureTcpTransport implements Transport {
                             listener.onMessage(messageBuffer.message());
                         } while (messageBuffer.hasMessage());
                     }
-                    length = 0;
-                }
-                try {
-                    TimeUnit.MILLISECONDS.sleep(100);
-                } catch (InterruptedException ex) {
-                    Thread.currentThread().interrupt();
                 }
             }
         } catch (IOException ex) {

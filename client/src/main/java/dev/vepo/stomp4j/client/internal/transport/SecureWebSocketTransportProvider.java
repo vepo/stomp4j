@@ -1,10 +1,6 @@
 package dev.vepo.stomp4j.client.internal.transport;
 
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.util.Objects;
-
-import javax.net.ssl.SSLContext;
 
 import dev.vepo.stomp4j.client.transport.Transport;
 import dev.vepo.stomp4j.client.transport.TransportListener;

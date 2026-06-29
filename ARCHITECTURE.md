@@ -75,7 +75,9 @@ StompClient.create(url, credentials?, transportType?, protocols?)
 | Scheme | Transport | Provider |
 |--------|-----------|----------|
 | `stomp://host:port` | TCP | `TcpTransportProvider` |
+| `stomps://host:port` | TLS TCP | `SecureTcpTransportProvider` |
 | `ws://host:port/path` | WebSocket | `WebSocketTransportProvider` |
+| `wss://host:port/path` | TLS WebSocket | `SecureWebSocketTransportProvider` |
 
 **Subscription modes:**
 
@@ -88,7 +90,7 @@ Embedded STOMP server (actively developed; thinner than client).
 
 | Package | Visibility | Responsibility |
 |---------|-----------|----------------|
-| `dev.vepo.stomp4j.server` | **Public** | `StompServer`, `MessageHandler`, `SubscriptionHandler`, `OutboundChannel`, `TransportChannel` |
+| `dev.vepo.stomp4j.server` | **Public** | `StompServer`, `StompMessage`, `StompSession`, `MessageHandler`, `SubscriptionHandler`, `OutboundChannel`, `TransportChannel` |
 | `dev.vepo.stomp4j.server.auth` | Public | `StompAuthenticator`, `Credentials` |
 | `dev.vepo.stomp4j.server.channels` | Internal | `Channel`, `TcpChannel`, `WebSocketChannel`, `BufferPool`, `ChannelListener` |
 | `dev.vepo.stomp4j.server.session` | Internal | Per-connection `Session` state machine |
@@ -98,16 +100,21 @@ Embedded STOMP server (actively developed; thinner than client).
 ```
 StompServer.builder()
     .channel(TCP, port) / .channel(WEB_SOCKET, port)
+    .supportedVersions("1.2", "1.1", "1.0")
+    .heartbeat(Duration.ofSeconds(30))
+    .serverName("stomp4j")
+    .ssl(SSLContext) / .ssl(SSLContext, keyStorePath, password)   // optional TLS
     .handler(MessageHandler)
     .subscription(SubscriptionHandler)
-    .authenticator(StompAuthenticator)   // stored; not yet invoked in Session
+    .authenticator(StompAuthenticator)   // optional; enforced on CONNECT
+    .connectionListener(StompConnectionListener)
     .start()
         → Channel.load(type, port) → TcpChannel | WebSocketChannel
         → Session per connection
-        → CONNECT → CONNECTED (hardcoded version "1.2")
-        → SUBSCRIBE → SubscriptionHandler.accept(topic)
-        → SEND → MessageHandler.process(topic, body, channel)
-        → outboundChannel().send() → fan-out to subscribed sessions
+        → CONNECT → auth + version negotiation → CONNECTED
+        → SUBSCRIBE / UNSUBSCRIBE / SEND / ACK / NACK / DISCONNECT
+        → SEND inbound → MessageHandler.onSend(StompMessage)
+        → outboundChannel().send() → broadcast to subscribed sessions
 ```
 
 ## 4. Public API entry points
@@ -132,8 +139,12 @@ try (var client = StompClient.create(url, credentials)) {
 try (var server = StompServer.builder()
         .channel(TransportType.TCP, 5500)
         .channel(TransportType.WEB_SOCKET, 5501)
-        .handler((topic, message, writer) -> { /* ... */ })
+        .handler(message -> {
+            // message.sessionChannel() replies to this connection only
+            // server.outboundChannel() broadcasts to all subscribed sessions
+        })
         .subscription(topic -> true)
+        .authenticator(credentials -> true)
         .start()) {
 
     server.outboundChannel().send(message);
@@ -146,9 +157,11 @@ try (var server = StompServer.builder()
 |---------|-----------|
 | New transport (e.g. `wss://`) | Implement `TransportProvider`; register in `module-info.java` `provides` + `META-INF/services` |
 | New STOMP version | Extend `Stomp`; register in SPI |
-| Server auth | Wire `StompAuthenticator` into `Session.process()` on `CONNECT` |
-| Server protocol versions | Replace hardcoded `"1.2"` in `Session` |
+| Server auth | Implemented — `StompAuthenticator` on `CONNECT` |
+| Server protocol versions | Implemented — `supportedVersions()` on builder |
 | New STOMP commands | `Command` enum + client `Stomp1_x` + server `Session` |
+| Client TLS | `stomps://` / `wss://` via SPI; optional `StompClient.create(url, SSLContext)` |
+| Server TLS | `StompServer.builder().ssl(...)` |
 
 SPI registrations live in `client/src/main/resources/META-INF/services/`.
 
@@ -251,12 +264,9 @@ When adding public API, update `module-info.java` `exports`. When adding SPI, up
 
 ## 12. Known gaps / WIP
 
-- Server: `StompAuthenticator` stored but not invoked in `Session`
-- Server: always responds STOMP 1.2; no multi-version negotiation
-- Server: no UNSUBSCRIBE, DISCONNECT, heartbeat, or ERROR handling
-- Server: `MessageHandler.process()` may receive `null` for `OutboundChannel`
-- `StompException` defined but rarely thrown
-- README documents client only (no server examples)
+- Server: no STOMP transactions (`BEGIN` / `COMMIT` / `ABORT`)
+- Server: no durable message store or queue semantics (embeddable pub/sub only)
+- Client: `StompException` thrown on `ERROR` frames and failed `CONNECT`; not yet used for all transport failures
 
 Update this section when closing gaps.
 
@@ -290,7 +300,13 @@ docker compose -f scripts/docker/docker-compose.yaml up
 
 | Document | Purpose |
 |----------|---------|
-| [README.md](README.md) | Client usage examples |
+| [README.md](README.md) | Project overview and quick start |
+| [docs/README.md](docs/README.md) | User documentation index |
+| [docs/overview.md](docs/overview.md) | Purpose, modules, design philosophy |
+| [docs/getting-started.md](docs/getting-started.md) | Maven setup, first client & server |
+| [docs/client-guide.md](docs/client-guide.md) | Client API in depth |
+| [docs/server-guide.md](docs/server-guide.md) | Embedded server API in depth |
+| [docs/advanced-topics.md](docs/advanced-topics.md) | SPI, JPMS, TLS, wire format |
 | [docs/domain-specification.md](docs/domain-specification.md) | STOMP ubiquitous language |
 | [resources/roteiros/](resources/roteiros/) | Design rationale (Portuguese) |
 | [AGENTS.md](AGENTS.md) | Agent index and rule map |
