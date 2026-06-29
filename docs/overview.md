@@ -103,6 +103,7 @@ Both `StompClient` and `StompServer` implement `AutoCloseable`. Use try-with-res
 
 | Goal | Next document |
 |------|---------------|
+| See what is supported today | [features.md](features.md) |
 | Run your first client or server | [getting-started.md](getting-started.md) |
 | Client features in depth | [client-guide.md](client-guide.md) |
 | Server features in depth | [server-guide.md](server-guide.md) |

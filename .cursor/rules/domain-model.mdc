@@ -35,4 +35,5 @@ void shouldDeliverMessageToSubscribedDestination() { ... }
 ## Post-change
 
 - New concepts → add to domain specification.
+- User-visible capability changes → update [docs/features.md](../../docs/features.md).
 - Boundary or SPI changes → update [ARCHITECTURE.md](../../ARCHITECTURE.md).

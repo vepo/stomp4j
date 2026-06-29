@@ -278,8 +278,9 @@ When adding or changing behaviour:
 2. Place code in the correct module and package (§3, §11).
 3. Update SPI / `module-info.java` if adding transports or protocol versions.
 4. Add or extend tests in the same module (`commons` unit, `client`/`server` integration).
-5. Update this document if architecture, boundaries, or WIP status changes.
-6. Run `mvn verify` before finishing.
+5. Update [docs/features.md](docs/features.md) when user-visible capabilities change; keep §12 in sync for known gaps.
+6. Update this document if architecture, boundaries, or WIP status changes.
+7. Run `mvn verify` before finishing.
 
 ## 14. Useful commands
 
@@ -302,6 +303,7 @@ docker compose -f scripts/docker/docker-compose.yaml up
 |----------|---------|
 | [README.md](README.md) | Project overview and quick start |
 | [docs/README.md](docs/README.md) | User documentation index |
+| [docs/features.md](docs/features.md) | Supported capabilities checklist |
 | [docs/overview.md](docs/overview.md) | Purpose, modules, design philosophy |
 | [docs/getting-started.md](docs/getting-started.md) | Maven setup, first client & server |
 | [docs/client-guide.md](docs/client-guide.md) | Client API in depth |

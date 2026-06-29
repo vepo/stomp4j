@@ -26,6 +26,7 @@ User-facing guides for library consumers. Maintainer references live at the repo
 
 | Document | Audience | Topics |
 |----------|----------|--------|
+| [features.md](features.md) | Everyone | Supported capabilities checklist (client, server, protocol) |
 | [overview.md](overview.md) | Everyone | Purpose, modules, design philosophy |
 | [getting-started.md](getting-started.md) | Beginner | Dependencies, minimal client & server |
 | [client-guide.md](client-guide.md) | Intermediate | URLs, subscriptions, send, close lifecycle |

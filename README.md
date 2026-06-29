@@ -53,6 +53,7 @@ Read in order of complexity — each level builds on the previous one.
 | Level | Document | What you learn |
 |-------|----------|----------------|
 | **Start here** | [docs/overview.md](docs/overview.md) | Purpose, modules, design philosophy |
+| **Reference** | [docs/features.md](docs/features.md) | Supported capabilities (client, server, protocol) |
 | **Beginner** | [docs/getting-started.md](docs/getting-started.md) | Maven setup, first client & server |
 | **Intermediate** | [docs/client-guide.md](docs/client-guide.md) | Transports, subscriptions, credentials, TLS |
 | **Intermediate** | [docs/server-guide.md](docs/server-guide.md) | Handlers, outbound push, authentication |

@@ -1,6 +1,5 @@
 package dev.vepo.stomp4j.server.session;
 
-import java.time.Duration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -181,10 +180,7 @@ public class Session implements StompSession {
 
     private void processConnected(Message message) {
         switch (message.command()) {
-            case SEND -> {
-                var destination = message.headers().destination().orElse("");
-                listener.inboundMessageReceived(this, message);
-            }
+            case SEND -> listener.inboundMessageReceived(this, message);
             case SUBSCRIBE -> {
                 var topic = message.headers().destination().orElse("");
                 var id = message.headers().get(Header.ID).orElse("0");
