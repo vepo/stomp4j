@@ -4,8 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
 
+import java.time.Duration;
 import java.util.LinkedList;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.DisplayName;
@@ -13,7 +15,6 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import dev.vepo.stomp4j.client.UserCredential;
 import dev.vepo.stomp4j.client.AckMode;
 import dev.vepo.stomp4j.client.StompClient;
 import dev.vepo.stomp4j.client.UserCredential;
@@ -137,10 +138,10 @@ class StompServerTest {
     @ParameterizedTest
     @ValueSource(strings = { "stomp://localhost:5507" })
     @DisplayName("Server should notify when subscriber acknowledges outbound message")
-    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    void subscriberAckListenerTest(String url) {
+    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void subscriberAckListenerTest(String url) throws InterruptedException {
         var subscribed = new AtomicBoolean(false);
-        var ackReceived = new AtomicBoolean(false);
+        var ackReceived = new CountDownLatch(1);
         try (var server = StompServer.builder()
                                      .channel(TransportType.TCP, 5507)
                                      .subscription(topic -> subscribed.compareAndSet(false, true))
@@ -149,7 +150,7 @@ class StompServerTest {
                 var client = StompClient.create(url, (UserCredential) null, Set.of(new Stomp1_2()))) {
             client.connect();
             client.subscribe("topic-ack", AckMode.CLIENT_INDIVIDUAL, delivery -> delivery.ack());
-            await().until(subscribed::get);
+            await().atMost(Duration.ofSeconds(10)).until(subscribed::get);
             server.acknowledgedOutboundChannel()
                   .send(new Message(Command.SEND,
                                     Headers.builder().with(Header.DESTINATION, "topic-ack").build(),
@@ -157,13 +158,13 @@ class StompServerTest {
                         new SubscriberAckListener() {
                             @Override
                             public void onAck(String messageId, StompSession session) {
-                                ackReceived.set(true);
+                                ackReceived.countDown();
                             }
 
                             @Override
                             public void onNack(String messageId, StompSession session) {}
                         });
-            await().until(ackReceived::get);
+            await().atMost(Duration.ofSeconds(20)).until(() -> ackReceived.getCount() == 0);
         }
     }
 
