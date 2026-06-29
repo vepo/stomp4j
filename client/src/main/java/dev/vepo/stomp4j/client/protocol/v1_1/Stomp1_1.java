@@ -26,7 +26,7 @@ public class Stomp1_1 extends Stomp {
     public void onMessage(Message message, Optional<String> session, Transport transport) {
         switch (message.command()) {
             case CONNECTED:
-                // do nothing
+                break;
             case MESSAGE:
                 transport.send(MessageBuilder.builder(Command.ACK)
                                              .headerIfPresent(Header.SUBSCRIPTION, message.headers().get(Header.SUBSCRIPTION))
@@ -34,7 +34,6 @@ public class Stomp1_1 extends Stomp {
                                              .build());
                 break;
             case ERROR:
-                // listener.error(message);
                 break;
             default:
                 break;

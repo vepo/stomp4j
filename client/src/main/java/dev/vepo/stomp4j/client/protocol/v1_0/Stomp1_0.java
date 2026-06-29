@@ -21,14 +21,13 @@ public class Stomp1_0 extends Stomp {
     public void onMessage(Message message, Optional<String> session, Transport transport) {
         switch (message.command()) {
             case CONNECTED:
-                // do nothin
+                break;
             case MESSAGE:
                 transport.send(MessageBuilder.builder(Command.ACK)
                                              .headerIfPresent(Header.MESSAGE_ID, message.headers().get(Header.MESSAGE_ID))
                                              .build());
                 break;
             case ERROR:
-                // listener.error(message);
                 break;
             default:
                 break;

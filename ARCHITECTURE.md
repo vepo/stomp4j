@@ -204,12 +204,24 @@ SPI registrations live in `client/src/main/resources/META-INF/services/`.
 
 ## 9. CI/CD
 
-| Workflow | Trigger | Command |
+| Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `maven.yml` | Every push | `mvn verify jacoco:report` + SonarCloud |
-| `maven-publish.yml` | Manual (`workflow_dispatch`) | GPG sign, deploy to Maven Central |
+| `maven.yml` | Push (all branches) | `mvn verify jacoco:report` + SonarCloud |
+| `prepare-release.yml` | Manual on `main` | `mvn verify`, release version bump, `v*` tag, next snapshot |
+| `release.yml` | Push `v*` tag | GPG sign, deploy to Maven Central, GitHub Release |
 
 SonarCloud: org `vepo-github`, project `vepo_stomp4j`.
+
+### Release process
+
+1. Merge changes to `main` and wait for CI to pass.
+2. Run **Prepare to release** (`prepare-release.yml`) on `main`.
+3. **Release** (`release.yml`) runs automatically when the `v*` tag is pushed.
+4. Verify artifacts on [Maven Central](https://central.sonatype.com/) (namespace `dev.vepo`).
+
+**Secrets:** `GPG_PRIVATE_KEY`, `GPG_PASSPHRASE`, `OSSRH_USERNAME`, `OSSRH_TOKEN` (release workflow only).
+
+**Branch protection:** if `main` requires pull requests, grant the GitHub Actions bot permission to push commits and tags, or provide a `RELEASE_PAT` secret with `contents: write` and use it for the prepare workflow push step.
 
 ## 10. Naming conventions
 

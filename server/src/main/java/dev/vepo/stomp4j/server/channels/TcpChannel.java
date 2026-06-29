@@ -7,11 +7,11 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.util.Collections;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.WeakHashMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -23,59 +23,73 @@ import org.slf4j.LoggerFactory;
 import dev.vepo.stomp4j.commons.protocol.Message;
 import dev.vepo.stomp4j.server.OutboundChannel;
 import dev.vepo.stomp4j.server.session.Session;
+import dev.vepo.stomp4j.server.session.SessionCloser;
+import dev.vepo.stomp4j.server.session.Status;
 
 public class TcpChannel implements Channel {
+    private record SessionAttachment(Session session, SocketChannel socket, SslEngineChannel sslChannel) {}
+
     private class TcpExternalOutboundChannel implements OutboundChannel {
 
         @Override
         public void send(Message message) {
-            logger.info("Message received! sending to all active sessions: activeSessions={} message={}", activeSessions, message);
-            activeSessions.forEach(session -> session.handle(message));
+            logger.debug("Sending message to all active sessions: count={}", sessionAttachments.size());
+            sessionAttachments.values()
+                              .stream()
+                              .map(SessionAttachment::session)
+                              .forEach(session -> session.handle(message));
         }
-
     }
 
     private class TcpSessionOutboundChannel implements OutboundChannel {
 
-        private final SocketChannel channel;
+        private final SocketChannel socket;
+        private final SslEngineChannel sslChannel;
 
-        private TcpSessionOutboundChannel(SocketChannel channel) {
-            this.channel = channel;
+        private TcpSessionOutboundChannel(SocketChannel socket, SslEngineChannel sslChannel) {
+            this.socket = socket;
+            this.sslChannel = sslChannel;
         }
 
         @Override
         public void send(Message message) {
             try {
-                this.channel.write(ByteBuffer.wrap(message.encode().getBytes()));
+                var encoded = message.encode().getBytes();
+                if (Objects.nonNull(sslChannel)) {
+                    sslChannel.write(encoded);
+                } else {
+                    socket.write(ByteBuffer.wrap(encoded));
+                }
             } catch (IOException ex) {
                 logger.error("Error sending message: %s".formatted(message), ex);
             }
         }
-
     }
 
     private static final Logger logger = LoggerFactory.getLogger(TcpChannel.class);
 
     private final int port;
     private final ChannelListener listener;
+    private final ChannelRuntime runtime;
     private final ExecutorService threadPool;
     private final AtomicBoolean running;
     private final BufferPool bufferPool;
-    private final Set<Session> activeSessions;
+    private final Map<Session, SessionAttachment> sessionAttachments;
     private final TcpExternalOutboundChannel outboundChannel;
+    private final SessionCloser sessionCloser;
     private Selector selector;
     private ServerSocketChannel channel;
 
-    public TcpChannel(int port, ChannelListener listener) {
+    public TcpChannel(int port, ChannelListener listener, ChannelRuntime runtime) {
         this.port = port;
         this.listener = listener;
+        this.runtime = runtime;
         this.threadPool = Executors.newFixedThreadPool(10);
         this.running = new AtomicBoolean(false);
         this.bufferPool = new BufferPool(10, 1024);
+        this.sessionAttachments = new ConcurrentHashMap<>();
         this.outboundChannel = new TcpExternalOutboundChannel();
-        this.activeSessions = Collections.newSetFromMap(new WeakHashMap<>());
-        this.selector = null;
-        this.channel = null;
+        this.sessionCloser = this::closeSession;
     }
 
     @Override
@@ -93,7 +107,7 @@ public class TcpChannel implements Channel {
                 this.threadPool.submit(this::accept);
                 logger.info("TCP Channel started! port={}", port);
             } catch (IOException ex) {
-                logger.error("Could not start channel!!!", ex);
+                logger.error("Could not start channel", ex);
             }
         } else {
             logger.warn("Channel already started");
@@ -106,6 +120,14 @@ public class TcpChannel implements Channel {
         this.running.set(false);
         try {
             if (Objects.nonNull(selector)) {
+                selector.wakeup();
+            }
+            sessionAttachments.values()
+                              .stream()
+                              .map(SessionAttachment::session)
+                              .toList()
+                              .forEach(this::closeSession);
+            if (Objects.nonNull(selector)) {
                 selector.close();
                 selector = null;
             }
@@ -116,58 +138,84 @@ public class TcpChannel implements Channel {
             threadPool.shutdown();
             threadPool.awaitTermination(1, TimeUnit.SECONDS);
         } catch (InterruptedException ex) {
-            logger.error("Thread killed!!!", ex);
+            Thread.currentThread().interrupt();
+            logger.error("Thread interrupted while closing channel", ex);
         } catch (IOException ex) {
-            logger.error("Error closing channel!", ex);
+            logger.error("Error closing channel", ex);
         }
-        logger.info("Channel closed!!! port={}", port);
+        logger.info("Channel closed port={}", port);
     }
 
     @Override
     public OutboundChannel outboundChannel() {
-        return this.outboundChannel;
+        return outboundChannel;
     }
 
     private void accept() {
         try {
             Objects.requireNonNull(selector, "selector cannot be null!");
-            while (this.running.get()) {
+            while (running.get()) {
                 selector.select();
                 Set<SelectionKey> selectedKeys = selector.selectedKeys();
                 Iterator<SelectionKey> keyIterator = selectedKeys.iterator();
 
                 while (keyIterator.hasNext()) {
                     SelectionKey key = keyIterator.next();
-
-                    if (key.isValid() && key.isAcceptable()) {
-                        logger.info("Accepting new connection: {}", key);
+                    if (!key.isValid()) {
+                        keyIterator.remove();
+                        continue;
+                    }
+                    if (key.isAcceptable()) {
                         acceptSession(key);
-                    } else if (key.isValid() && key.isReadable()) {
-                        logger.info("Reading from connection: {}", key);
+                    } else if (key.isReadable()) {
                         threadPool.submit(() -> readSession(key));
                     }
-
                     keyIterator.remove();
                 }
             }
-        } catch (IOException e) {}
+        } catch (IOException ex) {
+            logger.error("Accept loop error", ex);
+        }
     }
 
     private void readSession(SelectionKey key) {
-        SocketChannel client = (SocketChannel) key.channel();
-        var session = (Session) key.attachment();
+        var attachment = (SessionAttachment) key.attachment();
+        if (Objects.nonNull(attachment.sslChannel())) {
+            readSslSession(attachment, key);
+            return;
+        }
         var buffer = bufferPool.request();
         try {
-            int length = client.read(buffer);
-            if (length > 0) {
-                logger.info("Read data: length: {}", length);
-                var data = buffer.array();
-                session.offer(data, length);
+            int length = attachment.socket().read(buffer);
+            if (length < 0) {
+                closeSession(attachment.session());
+                key.cancel();
+                return;
             }
-        } catch (IOException e) {
-            // nothing
+            if (length > 0) {
+                attachment.session().offer(buffer.array(), length);
+            }
+        } catch (IOException ex) {
+            logger.debug("Read error, closing session", ex);
+            closeSession(attachment.session());
+            key.cancel();
         } finally {
             bufferPool.release(buffer);
+        }
+    }
+
+    private void readSslSession(SessionAttachment attachment, SelectionKey key) {
+        try {
+            var read = attachment.sslChannel()
+                                 .read(data -> attachment.session().offer(data, data.length));
+            if (read < 0) {
+                closeSession(attachment.session());
+                key.cancel();
+            }
+        } catch (IOException ex) {
+            logger.debug("SSL read error, closing session", ex);
+            closeSession(attachment.session());
+            key.cancel();
         }
     }
 
@@ -175,16 +223,47 @@ public class TcpChannel implements Channel {
         try {
             ServerSocketChannel serverSocketChannel = (ServerSocketChannel) key.channel();
             SocketChannel clientChannel = serverSocketChannel.accept();
+
+            SslEngineChannel sslChannel = null;
+            if (runtime.sslSettings().isPresent()) {
+                clientChannel.configureBlocking(true);
+                sslChannel = SslEngineChannel.wrap(clientChannel, runtime.sslSettings().get().sslContext());
+            }
             clientChannel.configureBlocking(false);
 
-            // Register for read operations with attachment for session data
-            var session = new Session(new TcpSessionOutboundChannel(clientChannel), this.listener);
-            this.activeSessions.add(session);
-            clientChannel.register(selector, SelectionKey.OP_READ, session);
+            var outbound = new TcpSessionOutboundChannel(clientChannel, sslChannel);
+            var session = new Session(outbound,
+                                      listener,
+                                      runtime.sessionConfig(),
+                                      sessionCloser,
+                                      runtime.heartbeatExecutor());
 
-            logger.info("Session started! Waiting conenct message... {}", session);
-        } catch (IOException e) {
-            e.printStackTrace();
+            var attachment = new SessionAttachment(session, clientChannel, sslChannel);
+            sessionAttachments.put(session, attachment);
+            clientChannel.register(selector, SelectionKey.OP_READ, attachment);
+
+            logger.info("Session started, waiting for CONNECT: {}", session);
+        } catch (IOException ex) {
+            logger.error("Error accepting session", ex);
+        }
+    }
+
+    private void closeSession(Session session) {
+        var attachment = sessionAttachments.remove(session);
+        if (Objects.isNull(attachment)) {
+            return;
+        }
+        if (Objects.nonNull(attachment.sslChannel())) {
+            attachment.sslChannel().close();
+        } else {
+            try {
+                attachment.socket().close();
+            } catch (IOException ex) {
+                logger.debug("Error closing socket", ex);
+            }
+        }
+        if (session.status() != Status.END) {
+            listener.sessionDisconnected(session);
         }
     }
 
@@ -192,5 +271,4 @@ public class TcpChannel implements Channel {
     public String toString() {
         return "TcpChannel[port=%d]".formatted(port);
     }
-
 }

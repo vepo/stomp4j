@@ -8,6 +8,7 @@ public enum Header {
     HOST("host"),
     ID("id"),
     LOGIN("login"),
+    MESSAGE("message"),
     MESSAGE_ID("message-id"),
     PASSCODE("passcode"),
     SERVER("server"),

@@ -31,14 +31,13 @@ public class Stomp1_2 extends Stomp {
         logger.info("Handling message: {}", message);
         switch (message.command()) {
             case CONNECTED:
-                // do nothing
+                break;
             case MESSAGE:
                 transport.send(MessageBuilder.builder(Command.ACK)
                                              .headerIfPresent(Header.ID, message.headers().get(Header.MESSAGE_ID))
                                              .build());
                 break;
             case ERROR:
-                // listener.error(message);
                 break;
             default:
                 break;

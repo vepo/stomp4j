@@ -23,12 +23,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
+import javax.net.ssl.SSLContext;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import dev.vepo.stomp4j.client.StompClient;
+import dev.vepo.stomp4j.client.exceptions.StompException;
 import dev.vepo.stomp4j.client.Subscription;
 import dev.vepo.stomp4j.client.UserCredential;
+import dev.vepo.stomp4j.client.internal.transport.SecureTcpTransport;
+import dev.vepo.stomp4j.client.internal.transport.SecureWebSocketTransport;
 import dev.vepo.stomp4j.client.internal.transport.TcpTransport;
 import dev.vepo.stomp4j.client.internal.transport.TransportFactory;
 import dev.vepo.stomp4j.client.internal.transport.WebSocketTransport;
@@ -36,8 +41,10 @@ import dev.vepo.stomp4j.client.protocol.Stomp;
 import dev.vepo.stomp4j.client.transport.Transport;
 import dev.vepo.stomp4j.client.transport.TransportListener;
 import dev.vepo.stomp4j.commons.TransportType;
+import dev.vepo.stomp4j.commons.protocol.Command;
 import dev.vepo.stomp4j.commons.protocol.Header;
 import dev.vepo.stomp4j.commons.protocol.Message;
+import dev.vepo.stomp4j.commons.protocol.MessageBuilder;
 
 public class StompClientImpl implements StompClient {
 
@@ -118,6 +125,9 @@ public class StompClientImpl implements StompClient {
                 case MESSAGE:
                     consumeMessage(message);
                     break;
+                case ERROR:
+                    onError(message);
+                    break;
                 default:
                     break;
             }
@@ -126,6 +136,9 @@ public class StompClientImpl implements StompClient {
         @Override
         public void onError(Message message) {
             logger.error("Error message: {}", message);
+            var errorMessage = message.headers().get(Header.MESSAGE).orElse(message.body());
+            connectionError.set(new StompException(errorMessage));
+            connectedLatch.countDown();
         }
 
     }
@@ -135,6 +148,7 @@ public class StompClientImpl implements StompClient {
     private final CountDownLatch connectedLatch;
     private final Object lock = new Object();
     private final AtomicReference<Stomp> selectedProtocol = new AtomicReference<>();
+    private final AtomicReference<StompException> connectionError = new AtomicReference<>();
     private UserCredential credentials;
     private Transport transport;
     private final Map<Subscription, Consumer<String>> consumers = new HashMap<>();
@@ -147,18 +161,21 @@ public class StompClientImpl implements StompClient {
     private Set<Stomp> protocols;
     private Optional<String> session;
 
+    private final SSLContext sslContext;
     private TransportListener listener;
 
-    public StompClientImpl(String url, UserCredential credentials, TransportType transportType, Set<Stomp> protocols) {
+    public StompClientImpl(String url, UserCredential credentials, TransportType transportType, Set<Stomp> protocols, SSLContext sslContext) {
         try {
             this.protocols = protocols;
+            this.sslContext = sslContext;
             this.listener = new ConnectionListener();
+            var uri = new URI(url);
             if (Objects.isNull(transportType)) {
-                this.transport = TransportFactory.create(new URI(url), this.listener);
+                this.transport = createTransport(uri, this.listener);
             } else {
                 this.transport = switch (transportType) {
-                    case WEB_SOCKET -> new WebSocketTransport(new URI(url), this.listener);
-                    case TCP -> new TcpTransport(new URI(url), this.listener);
+                    case WEB_SOCKET -> createWebSocketTransport(uri, this.listener);
+                    case TCP -> createTcpTransport(uri, this.listener);
                 };
             }
             this.session = Optional.empty();
@@ -181,6 +198,13 @@ public class StompClientImpl implements StompClient {
             connectedLatch.await();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        }
+        var error = connectionError.get();
+        if (Objects.nonNull(error)) {
+            throw error;
+        }
+        if (Objects.isNull(selectedProtocol.get())) {
+            throw new StompException("Connection failed");
         }
         logger.info("Client connected");
         return this;
@@ -243,9 +267,17 @@ public class StompClientImpl implements StompClient {
 
     @Override
     public void close() {
-        logger.info("Stoping Stomp client");
+        logger.info("Stopping Stomp client");
+        if (Objects.nonNull(selectedProtocol.get())) {
+            transport.send(MessageBuilder.builder(Command.DISCONNECT).build());
+            try {
+                TimeUnit.MILLISECONDS.sleep(100);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+            }
+        }
         transport.close();
-        logger.info("Stoping heart beat service");
+        logger.info("Stopping heartbeat service");
         if (Objects.nonNull(heartBeatTask)) {
             heartBeatTask.cancel(false);
         }
@@ -337,5 +369,35 @@ public class StompClientImpl implements StompClient {
         }
         connectedLatch.countDown();
         logger.info("Client connected");
+    }
+
+    private Transport createTransport(URI uri, TransportListener transportListener) {
+        var scheme = uri.getScheme();
+        if (Objects.isNull(scheme)) {
+            throw new IllegalArgumentException("No transport found for protocol null");
+        }
+        return switch (scheme) {
+            case "stomps" -> createTcpTransport(uri, transportListener);
+            case "wss" -> createWebSocketTransport(uri, transportListener);
+            default -> TransportFactory.create(uri, transportListener);
+        };
+    }
+
+    private Transport createTcpTransport(URI uri, TransportListener transportListener) {
+        if ("stomps".equals(uri.getScheme())) {
+            return Objects.isNull(sslContext)
+                    ? new SecureTcpTransport(uri, transportListener)
+                    : new SecureTcpTransport(uri, transportListener, sslContext);
+        }
+        return new TcpTransport(uri, transportListener);
+    }
+
+    private Transport createWebSocketTransport(URI uri, TransportListener transportListener) {
+        if ("wss".equals(uri.getScheme())) {
+            return Objects.isNull(sslContext)
+                    ? new SecureWebSocketTransport(uri, transportListener)
+                    : new SecureWebSocketTransport(uri, transportListener, sslContext);
+        }
+        return new WebSocketTransport(uri, transportListener);
     }
 }

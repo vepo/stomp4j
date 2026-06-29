@@ -1,2 +1,4 @@
 dev.vepo.stomp4j.client.internal.transport.TcpTransportProvider
 dev.vepo.stomp4j.client.internal.transport.WebSocketTransportProvider
+dev.vepo.stomp4j.client.internal.transport.SecureTcpTransportProvider
+dev.vepo.stomp4j.client.internal.transport.SecureWebSocketTransportProvider

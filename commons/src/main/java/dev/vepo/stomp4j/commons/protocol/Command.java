@@ -7,7 +7,9 @@ public enum Command {
     SUBSCRIBE,
     MESSAGE,
     ERROR,
-    ACK, 
+    ACK,
+    NACK,
     UNSUBSCRIBE,
+    DISCONNECT,
     HEARTBEAT
 }

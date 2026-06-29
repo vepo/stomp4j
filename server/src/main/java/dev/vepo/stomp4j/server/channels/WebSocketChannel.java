@@ -1,11 +1,8 @@
 package dev.vepo.stomp4j.server.channels;
 
-import java.util.Collections;
-import java.util.Set;
-import java.util.WeakHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.slf4j.Logger;
@@ -14,19 +11,21 @@ import org.slf4j.LoggerFactory;
 import dev.vepo.stomp4j.commons.protocol.Message;
 import dev.vepo.stomp4j.server.OutboundChannel;
 import dev.vepo.stomp4j.server.session.Session;
+import dev.vepo.stomp4j.server.session.SessionCloser;
+import dev.vepo.stomp4j.server.session.Status;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.http.ServerWebSocket;
-import io.vertx.ext.web.Router;
+import io.vertx.core.net.PfxOptions;
 
 public class WebSocketChannel implements Channel {
     private class WebSocketExternalOutboundChannel implements OutboundChannel {
+
         @Override
         public void send(Message message) {
-            logger.info("Message received! sending to all active sessions: activeSessions={} message={}",
-                        activeSessions.size(), message);
-            activeSessions.forEach(session -> session.handle(message));
+            logger.debug("Sending message to all active sessions: count={}", activeSessions.size());
+            activeSessions.keySet().forEach(session -> session.handle(message));
         }
     }
 
@@ -39,7 +38,6 @@ public class WebSocketChannel implements Channel {
 
         @Override
         public void send(Message message) {
-            logger.info("Sending message to client! message={}", message);
             try {
                 webSocket.writeFinalTextFrame(message.encode());
             } catch (Exception ex) {
@@ -52,21 +50,23 @@ public class WebSocketChannel implements Channel {
 
     private final int port;
     private final ChannelListener listener;
-    private final ExecutorService threadPool;
+    private final ChannelRuntime runtime;
     private final AtomicBoolean running;
-    private final Set<dev.vepo.stomp4j.server.session.Session> activeSessions;
+    private final Map<Session, ServerWebSocket> activeSessions;
     private final WebSocketExternalOutboundChannel outboundChannel;
+    private final SessionCloser sessionCloser;
 
     private Vertx vertx;
     private HttpServer server;
 
-    public WebSocketChannel(int port, ChannelListener listener) {
+    public WebSocketChannel(int port, ChannelListener listener, ChannelRuntime runtime) {
         this.port = port;
         this.listener = listener;
-        this.threadPool = Executors.newFixedThreadPool(10);
+        this.runtime = runtime;
         this.running = new AtomicBoolean(false);
+        this.activeSessions = new ConcurrentHashMap<>();
         this.outboundChannel = new WebSocketExternalOutboundChannel();
-        this.activeSessions = Collections.newSetFromMap(new WeakHashMap<>());
+        this.sessionCloser = this::closeSession;
     }
 
     @Override
@@ -75,61 +75,63 @@ public class WebSocketChannel implements Channel {
         this.running.set(true);
 
         vertx = Vertx.vertx();
-        Router router = Router.router(vertx);
+        var options = new HttpServerOptions().setPort(port);
+        runtime.sslSettings().ifPresent(sslSettings -> {
+            options.setSsl(true);
+            sslSettings.keyStoreLocation().ifPresent(keyStore -> options.setKeyCertOptions(
+                    new PfxOptions().setPath(keyStore.path()).setPassword(keyStore.password())));
+        });
 
-        server = vertx.createHttpServer(new HttpServerOptions().setPort(port));
+        server = vertx.createHttpServer(options);
 
         server.webSocketHandler(webSocket -> {
             if (!running.get()) {
+                webSocket.close((short) 1001, "Server stopped");
                 return;
             }
 
             logger.info("New WebSocket connection: {}", webSocket.remoteAddress());
 
-            // Create session and outbound channel
             var sessionOutboundChannel = new WebSocketSessionOutboundChannel(webSocket);
-            var session = new Session(sessionOutboundChannel, this.listener);
-            this.activeSessions.add(session);
+            var session = new Session(sessionOutboundChannel,
+                                      listener,
+                                      runtime.sessionConfig(),
+                                      sessionCloser,
+                                      runtime.heartbeatExecutor());
+            activeSessions.put(session, webSocket);
 
-            // Set up message handler
             webSocket.textMessageHandler(text -> {
-                logger.info("Received WebSocket message: {}", text);
-                process(text.getBytes(), text.length(), session);
+                var bytes = text.getBytes();
+                session.offer(bytes, bytes.length);
             });
 
-            webSocket.binaryMessageHandler(buffer -> {
-                logger.info("Received WebSocket binary message, length: {}", buffer.length());
-                session.offer(buffer.getBytes(), buffer.length());
-                process(buffer.getBytes(), buffer.length(), session);
-            });
+            webSocket.binaryMessageHandler(buffer -> session.offer(buffer.getBytes(), buffer.length()));
 
-            // Handle connection close
-            webSocket.closeHandler(v -> {
-                logger.info("WebSocket closed: {}", webSocket.remoteAddress());
-                this.activeSessions.remove(session);
-            });
-
+            webSocket.closeHandler(v -> closeSession(session));
             webSocket.exceptionHandler(ex -> {
                 logger.error("WebSocket error", ex);
-                this.activeSessions.remove(session);
+                closeSession(session);
             });
 
-            logger.info("WebSocket session started! Waiting for STOMP CONNECT message... {}", session);
+            logger.info("WebSocket session started, waiting for CONNECT: {}", session);
         });
 
-        // Start the server
         server.listen()
-              .onSuccess(httpServer -> {
-                  logger.info("WebSocket server started on port {}", httpServer.actualPort());
-              })
+              .onSuccess(httpServer -> logger.info("WebSocket server started on port {}", httpServer.actualPort()))
               .onFailure(error -> {
                   logger.error("Failed to start WebSocket server on port {}", port, error);
                   running.set(false);
               });
     }
 
-    private void process(byte[] data, int length, Session session) {
-        session.offer(data, length);
+    private void closeSession(Session session) {
+        var webSocket = activeSessions.remove(session);
+        if (Objects.nonNull(webSocket) && !webSocket.isClosed()) {
+            webSocket.close();
+        }
+        if (session.status() != Status.END) {
+            listener.sessionDisconnected(session);
+        }
     }
 
     @Override
@@ -137,41 +139,31 @@ public class WebSocketChannel implements Channel {
         logger.info("Closing WebSocket channel... port={}", port);
         this.running.set(false);
 
-        // Close all active WebSocket connections
+        activeSessions.forEach((session, webSocket) -> {
+            if (!webSocket.isClosed()) {
+                webSocket.close();
+            }
+        });
         activeSessions.clear();
 
-        // Close the HTTP server
-        if (server != null) {
+        if (Objects.nonNull(server)) {
             server.close()
                   .onSuccess(v -> logger.info("WebSocket server closed"))
                   .onFailure(error -> logger.error("Error closing WebSocket server", error));
         }
 
-        // Close Vertx instance
-        if (vertx != null) {
+        if (Objects.nonNull(vertx)) {
             vertx.close()
                  .onSuccess(v -> logger.info("Vertx closed"))
                  .onFailure(error -> logger.error("Error closing Vertx", error));
         }
 
-        // Shutdown thread pool
-        try {
-            threadPool.shutdown();
-            if (!threadPool.awaitTermination(5, TimeUnit.SECONDS)) {
-                threadPool.shutdownNow();
-            }
-        } catch (InterruptedException ex) {
-            logger.error("Thread pool shutdown interrupted", ex);
-            threadPool.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
-
-        logger.info("WebSocket channel closed!!! port={}", port);
+        logger.info("WebSocket channel closed port={}", port);
     }
 
     @Override
     public OutboundChannel outboundChannel() {
-        return this.outboundChannel;
+        return outboundChannel;
     }
 
     @Override
