@@ -59,6 +59,7 @@ Read in order of complexity — each level builds on the previous one.
 | **Intermediate** | [docs/server-guide.md](docs/server-guide.md) | Handlers, outbound push, authentication |
 | **Intermediate** | [docs/spring-guide.md](docs/spring-guide.md) | Spring Boot starters and samples |
 | **Intermediate** | [docs/quarkus-guide.md](docs/quarkus-guide.md) | Quarkus extensions and CDI Events |
+| **Intermediate** | [docs/kafka-bridge-guide.md](docs/kafka-bridge-guide.md) | STOMP ↔ Kafka bridge (library, JAR, Docker) |
 | **Advanced** | [docs/advanced-topics.md](docs/advanced-topics.md) | Protocol versions, SPI, JPMS, wire format |
 
 Full index: [docs/README.md](docs/README.md)
@@ -74,6 +75,8 @@ Full index: [docs/README.md](docs/README.md)
 | `stomp4j-spring-boot-starter-server` | Spring Boot app embedding a STOMP server |
 | `stomp4j-quarkus-client` | Quarkus app connecting to an external broker (CDI Events) |
 | `stomp4j-quarkus-server` | Quarkus app embedding a STOMP server |
+| `stomp4j-kafka-bridge` | Embed STOMP ↔ Kafka routing in your app |
+| `stomp4j-kafka-bridge-runner` | Run the bridge as a standalone process (`java -jar`) |
 
 Details: [docs/overview.md#modules](docs/overview.md#modules)
 

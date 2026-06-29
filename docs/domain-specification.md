@@ -28,7 +28,7 @@ STOMP protocol vocabulary and library-specific terms. Agents must align code and
 | **StompMessage** | Inbound client `SEND` delivered to `MessageHandler` with destination, body, headers, and session channel |
 | **StompSession** | Read-only view of a connected client (`login`, negotiated `version`, `outboundChannel`) |
 | **MessageHandler** | Callback invoked when a client `SEND`s to a destination (`onSend(StompMessage)`) |
-| **SubscriptionHandler** | Predicate deciding whether a session may `SUBSCRIBE` to a destination |
+| **SubscriptionHandler** | Predicate deciding whether a session may `SUBSCRIBE` to a destination; optional `onSubscribed` / `onUnsubscribed` lifecycle callbacks |
 | **StompAuthenticator** | Callback validating credentials on `CONNECT` |
 | **Protocol version** | `1.0`, `1.1`, or `1.2` — negotiated from `accept-version` on `CONNECT` |
 
@@ -60,6 +60,15 @@ STOMP protocol vocabulary and library-specific terms. Agents must align code and
 | **Acknowledgment** | Spring-facing manual ack/nack for `@StompListener` methods |
 | **StompClientTemplate** | High-level client send API with lifecycle managed by Spring |
 | **StompOutboundTemplate** | Embedded server outbound push with optional subscriber ACK callbacks |
+
+### Kafka bridge (optional)
+
+| Term | Meaning |
+|------|---------|
+| **Bridge** | `StompKafkaBridge` process routing STOMP traffic to Kafka and back |
+| **Destination mapping** | Rule translating a STOMP `destination` to a Kafka topic name |
+| **Topic consumer** | Kafka consumer started when the first client subscribes to a destination; stopped when the last unsubscribes |
+| **Prefix mapping** | Strip a STOMP prefix (for example `/topic/`) and map `/` to `.` in the Kafka topic |
 
 ## Invariants
 

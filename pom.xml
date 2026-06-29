@@ -119,6 +119,11 @@
                 <version>4.3.0</version>
                 <scope>test</scope>
             </dependency>
+            <dependency>
+                <groupId>org.apache.kafka</groupId>
+                <artifactId>kafka-clients</artifactId>
+                <version>3.9.0</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -335,11 +340,13 @@
         <module>server</module>
         <module>spring</module>
         <module>quarkus</module>
+        <module>bridge</module>
         <module>samples/spring-client-sample</module>
         <module>samples/spring-server-sample</module>
         <module>samples/plain-client-sample</module>
         <module>samples/plain-server-sample</module>
         <module>samples/quarkus-client-sample</module>
         <module>samples/quarkus-server-sample</module>
+        <module>samples/kafka-bridge-sample</module>
     </modules>
 </project>

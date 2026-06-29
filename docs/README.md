@@ -26,6 +26,11 @@ User-facing guides for library consumers. Maintainer references live at the repo
 1. [quarkus-guide.md](quarkus-guide.md) — extensions, CDI Events, `@StompDestination`
 2. [samples/README.md](../samples/README.md) — Quarkus client/server samples (ports 8083/8084)
 
+### I need STOMP ↔ Kafka bridging
+
+1. [kafka-bridge-guide.md](kafka-bridge-guide.md) — library API, JAR, Docker
+2. [samples/docker-compose.yaml](../samples/docker-compose.yaml) — `kafka` + `stomp-kafka-bridge` services
+
 ### I am extending or integrating deeply
 
 1. [advanced-topics.md](advanced-topics.md) — SPI, JPMS modules, wire format, heart-beats
@@ -42,5 +47,6 @@ User-facing guides for library consumers. Maintainer references live at the repo
 | [client-guide.md](client-guide.md) | Intermediate | URLs, subscriptions, send, close lifecycle |
 | [spring-guide.md](spring-guide.md) | Intermediate | Spring Boot starters, `@StompListener`, templates |
 | [quarkus-guide.md](quarkus-guide.md) | Intermediate | Quarkus extensions, CDI Events, inbound `@Observes` |
+| [kafka-bridge-guide.md](kafka-bridge-guide.md) | Intermediate | STOMP ↔ Kafka bridge, mapping, deployment |
 | [advanced-topics.md](advanced-topics.md) | Advanced | Versions, SPI, TLS, commons protocol API |
 | [domain-specification.md](domain-specification.md) | Contributors | Ubiquitous language, protocol invariants |

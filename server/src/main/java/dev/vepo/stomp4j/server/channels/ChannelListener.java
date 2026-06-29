@@ -11,5 +11,9 @@ public interface ChannelListener {
 
     void sessionDisconnected(Session session);
 
+    default void subscriptionEstablished(Session session, String topic) {}
+
+    default void subscriptionRemoved(Session session, String topic) {}
+
     boolean subscriptionRequested(Session session, String topic);
 }

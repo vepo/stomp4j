@@ -36,6 +36,7 @@ Do not duplicate tutorial content in features.md — link to the relevant guide 
 | Transport schemes, TLS, versions, SPI | [advanced-topics.md](../../docs/advanced-topics.md), [client-guide.md](../../docs/client-guide.md) |
 | New doc file or learning path | [docs/README.md](../../docs/README.md), [README.md](../../README.md) doc table |
 | STOMP terms or invariants | [domain-specification.md](../../docs/domain-specification.md) |
+| Kafka bridge API, config, mapping, deployment | [kafka-bridge-guide.md](../../docs/kafka-bridge-guide.md) — see [stomp4j-kafka-bridge.mdc](stomp4j-kafka-bridge.mdc) |
 | Internal architecture only | [ARCHITECTURE.md](../../ARCHITECTURE.md) — not user guides |
 
 ## Complexity order (do not invert)

@@ -27,6 +27,7 @@ import dev.vepo.stomp4j.client.protocol.v1_2.Stomp1_2;
 import dev.vepo.stomp4j.server.StompServer;
 import dev.vepo.stomp4j.server.SubscriberAckListener;
 import dev.vepo.stomp4j.server.StompSession;
+import dev.vepo.stomp4j.server.SubscriptionHandler;
 
 class StompServerTest {
     private record ReceivedMessage(String topic, String message) {}
@@ -163,6 +164,44 @@ class StompServerTest {
                             public void onNack(String messageId, StompSession session) {}
                         });
             await().until(ackReceived::get);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = { "stomp://localhost:5508" })
+    @DisplayName("Subscription handler should receive subscribe and unsubscribe lifecycle events")
+    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    void subscriptionLifecycleTest(String url) {
+        var subscribed = new LinkedList<String>();
+        var unsubscribed = new LinkedList<String>();
+        try (var server = StompServer.builder()
+                                     .channel(TransportType.TCP, 5508)
+                                     .subscription(new SubscriptionHandler() {
+                                         @Override
+                                         public boolean accept(String topic) {
+                                             return true;
+                                         }
+
+                                         @Override
+                                         public void onSubscribed(StompSession session, String topic) {
+                                             subscribed.add(topic);
+                                         }
+
+                                         @Override
+                                         public void onUnsubscribed(StompSession session, String topic) {
+                                             unsubscribed.add(topic);
+                                         }
+                                     })
+                                     .handler(message -> {})
+                                     .start();
+                var client = StompClient.create(url)) {
+            client.connect();
+            var subscription = client.subscribe("topic-lifecycle");
+            await().until(() -> !subscribed.isEmpty());
+            assertThat(subscribed).containsExactly("topic-lifecycle");
+            client.unsubscribe(subscription);
+            await().until(() -> !unsubscribed.isEmpty());
+            assertThat(unsubscribed).containsExactly("topic-lifecycle");
         }
     }
 

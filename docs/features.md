@@ -11,7 +11,7 @@ When you add, change, or remove user-visible behaviour, **update this page** in 
 | **Client** | TCP & WebSocket, TLS, STOMP 1.0–1.2, subscribe/send, callback & polling |
 | **Server** | Embeddable TCP & WebSocket, handlers, auth, outbound push, TLS |
 | **Commons** | Frame encode/decode, headers, commands |
-| **Platform** | Java 21, JPMS modules, SLF4J, optional Spring Boot starters, optional Quarkus extensions |
+| **Platform** | Java 21, JPMS modules, SLF4J, optional Spring Boot starters, optional Quarkus extensions, Kafka bridge |
 
 ## Client (`stomp4j-client`)
 
@@ -56,6 +56,7 @@ When you add, change, or remove user-visible behaviour, **update this page** in 
 | Subscriber ACK/NACK callbacks | Supported | `AcknowledgedOutboundChannel.send(..., SubscriberAckListener)` |
 | Per-session reply | Supported | `StompMessage.sessionChannel()` |
 | Connection lifecycle hooks | Supported | `StompConnectionListener` |
+| Subscription lifecycle hooks | Supported | `SubscriptionHandler.onSubscribed` / `onUnsubscribed` |
 | Heart-beat negotiation | Supported | `.heartbeat(Duration)` on builder |
 | Configurable server name | Supported | `.serverName(...)` on `CONNECTED` |
 | STOMP transactions (`BEGIN` / `COMMIT` / `ABORT`) | Not supported | — |
@@ -97,6 +98,26 @@ When you add, change, or remove user-visible behaviour, **update this page** in 
 | `DISCONNECT` | On `close()` | Session teardown |
 | `BEGIN` / `COMMIT` / `ABORT` | — | Not supported |
 
+## Kafka bridge (`stomp4j-kafka-bridge`)
+
+| Feature | Status | Details |
+|---------|--------|---------|
+| Embeddable bridge API | Supported | `StompKafkaBridge.builder()` — [kafka-bridge-guide.md](kafka-bridge-guide.md) |
+| Runnable fat JAR | Supported | `stomp4j-kafka-bridge-runner` |
+| Docker image / Compose | Supported | `samples/kafka-bridge-sample`, `samples/docker-compose.yaml` |
+| STOMP `SEND` → Kafka produce | Supported | Prefix and explicit destination mapping |
+| Kafka consume → STOMP `MESSAGE` | Supported | Refcounted consumer per destination |
+| Multi-subscriber fan-out | Supported | Broadcast via `OutboundChannel` |
+| STOMP TLS / auth | Supported | Reuses `StompServer` builder |
+| Kafka SASL / SSL | Supported | `bridge.kafka.property.*` / env pass-through |
+| Optional DLQ on produce failure | Supported | `bridge.dlq.topic` |
+| Client-ack ↔ Kafka offset | Not supported | `auto` ack only |
+| `/queue/` competing consumers | Not supported | Topic broadcast semantics only |
+| STOMP transactions | Not supported | — |
+| Multi-bridge replica coordination | Not supported | — |
+| Schema Registry / Avro | Not supported | — |
+| Spring Boot / Quarkus auto-config | Not supported | Use library or runner |
+
 Normative behaviour: [STOMP specification](https://stomp.github.io/). Library terms: [domain-specification.md](domain-specification.md).
 
 ## Where to go next
@@ -108,5 +129,6 @@ Normative behaviour: [STOMP specification](https://stomp.github.io/). Library te
 | Spring Boot integration | [spring-guide.md](spring-guide.md) |
 | Quarkus integration | [quarkus-guide.md](quarkus-guide.md) |
 | Embedded server patterns | [server-guide.md](server-guide.md) |
+| STOMP ↔ Kafka bridge | [kafka-bridge-guide.md](kafka-bridge-guide.md) |
 | SPI, TLS, wire format | [advanced-topics.md](advanced-topics.md) |
 | Design philosophy | [overview.md](overview.md) |

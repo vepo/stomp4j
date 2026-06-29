@@ -36,5 +36,6 @@ Read these before changing code or tests:
 | `domain-model.mdc` | Domain language alignment |
 | `stomp-protocol-compliance.mdc` | Normative STOMP spec compliance |
 | `documentation.mdc` | Keep README, features page, and docs/ in sync with API |
+| `stomp4j-kafka-bridge.mdc` | Keep Kafka bridge code, config, and docs in sync |
 | `stomp4j-tooling-languages.mdc` | Scripts: bash/JBang only |
 | `static-analysis.mdc` | Finish gate: `mvn verify` |

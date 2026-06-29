@@ -22,8 +22,13 @@ Stomp4J is a Maven multi-module project. Published artifacts on Maven Central us
 stomp4j-parent
 ├── stomp4j-commons   (wire format — frames, headers, commands)
 ├── stomp4j-client    → commons   (StompClient, transports, protocol versions)
-└── stomp4j-server    → commons   (StompServer, handlers; Vert.x for WebSocket)
+├── stomp4j-server    → commons   (StompServer, handlers; Vert.x for WebSocket)
+└── stomp4j-bridge    → server    (StompKafkaBridge — optional Kafka integration)
 ```
+
+### stomp4j-kafka-bridge (optional)
+
+Bidirectional STOMP ↔ Kafka routing. Artifacts: `stomp4j-kafka-bridge` (library), `stomp4j-kafka-bridge-runner` (fat JAR). See [kafka-bridge-guide.md](kafka-bridge-guide.md).
 
 ### stomp4j-commons
 
