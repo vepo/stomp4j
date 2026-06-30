@@ -16,6 +16,22 @@ import dev.vepo.stomp4j.commons.protocol.MessageBuffer;
 
 class MessageBufferTest {
 
+    private static Message nextFrame(MessageBuffer buffer) {
+        Message message;
+        do {
+            message = buffer.message();
+        } while (message.command() == Command.HEARTBEAT);
+        return message;
+    }
+
+    @Test
+    void crlfHeartbeatTest() {
+        var buffer = new MessageBuffer();
+        assertTrue(buffer.append("\r\n"));
+        assertEquals(Command.HEARTBEAT, buffer.message().command());
+        assertFalse(buffer.hasMessage());
+    }
+
     @Test
     void hasMessageTest() {
         var buffer = new MessageBuffer();
@@ -68,23 +84,6 @@ class MessageBufferTest {
         assertEquals(Command.MESSAGE, message.command());
         assertEquals("/topic/test", message.headers().get(Header.DESTINATION).orElse(null));
         assertEquals("Hello", message.body());
-        assertFalse(buffer.hasMessage());
-    }
-
-    @Test
-    void standaloneHeartbeatTest() {
-        var buffer = new MessageBuffer();
-        assertTrue(buffer.append("\n"));
-        assertTrue(buffer.hasMessage());
-        assertEquals(Command.HEARTBEAT, buffer.message().command());
-        assertFalse(buffer.hasMessage());
-    }
-
-    @Test
-    void crlfHeartbeatTest() {
-        var buffer = new MessageBuffer();
-        assertTrue(buffer.append("\r\n"));
-        assertEquals(Command.HEARTBEAT, buffer.message().command());
         assertFalse(buffer.hasMessage());
     }
 
@@ -258,11 +257,12 @@ class MessageBufferTest {
         assertEquals("Hello, World!", message.body());
     }
 
-    private static Message nextFrame(MessageBuffer buffer) {
-        Message message;
-        do {
-            message = buffer.message();
-        } while (message.command() == Command.HEARTBEAT);
-        return message;
+    @Test
+    void standaloneHeartbeatTest() {
+        var buffer = new MessageBuffer();
+        assertTrue(buffer.append("\n"));
+        assertTrue(buffer.hasMessage());
+        assertEquals(Command.HEARTBEAT, buffer.message().command());
+        assertFalse(buffer.hasMessage());
     }
 }

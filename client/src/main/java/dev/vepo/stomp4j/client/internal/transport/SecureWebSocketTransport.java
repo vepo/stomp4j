@@ -67,7 +67,8 @@ public class SecureWebSocketTransport implements Transport {
             try {
                 webSocketClient.sendClose(WebSocket.NORMAL_CLOSURE, "Client closed connection");
                 if (!closeLatch.await(2, TimeUnit.SECONDS)) {
-                    // Brokers often leave the WebSocket open after STOMP DISCONNECT; HttpClient.close()
+                    // Brokers often leave the WebSocket open after STOMP DISCONNECT;
+                    // HttpClient.close()
                     // blocks until the socket ends, so abort when no close frame arrives in time.
                     logger.debug("WebSocket close frame not acknowledged; aborting connection");
                     webSocketClient.abort();

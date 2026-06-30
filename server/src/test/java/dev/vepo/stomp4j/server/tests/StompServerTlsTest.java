@@ -29,7 +29,7 @@ class StompServerTlsTest {
         var received = new LinkedList<ReceivedMessage>();
         try (var fixture = EmbeddedServerFixture.builder()
                                                 .withTcp()
-                                                .subscription(topic -> true)
+                                                .subscription(t -> true)
                                                 .handler(message -> received.offer(
                                                                                    new ReceivedMessage(message.destination(), message.body())))
                                                 .ssl(TestSsl.serverSslContext())
@@ -50,7 +50,7 @@ class StompServerTlsTest {
         var received = new LinkedList<ReceivedMessage>();
         try (var fixture = EmbeddedServerFixture.builder()
                                                 .withWebSocket()
-                                                .subscription(topic -> true)
+                                                .subscription(t -> true)
                                                 .handler(message -> received.offer(
                                                                                    new ReceivedMessage(message.destination(), message.body())))
                                                 .ssl(TestSsl.serverSslContext(),

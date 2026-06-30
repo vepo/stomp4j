@@ -9,7 +9,8 @@ import static org.awaitility.Awaitility.await;
  */
 public final class ServerTestSupport {
 
-    private ServerTestSupport() {
+    public static void awaitTrue(Duration timeout, java.util.function.BooleanSupplier condition) {
+        await().atMost(timeout).until(condition::getAsBoolean);
     }
 
     public static void settleFor(Duration delay) {
@@ -18,7 +19,5 @@ public final class ServerTestSupport {
                .until(() -> true);
     }
 
-    public static void awaitTrue(Duration timeout, java.util.function.BooleanSupplier condition) {
-        await().atMost(timeout).until(condition::getAsBoolean);
-    }
+    private ServerTestSupport() {}
 }

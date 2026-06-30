@@ -27,15 +27,34 @@ public class MessageBuffer {
         return append(messageLine.getBytes(StandardCharsets.UTF_8));
     }
 
-    public boolean hasMessage() {
-        return leadingHeartbeatLength() > 0 || containsNullTerminator();
+    private void consumeLeadingBytes(int length) {
+        var frameBytes = buffer.toByteArray();
+        buffer.reset();
+        if (length < frameBytes.length) {
+            buffer.write(frameBytes, length, frameBytes.length - length);
+        }
     }
 
     private boolean containsNullTerminator() {
         return indexOfNullTerminator() > 0;
     }
 
-    // STOMP heart-beat is a lone LF or CRLF on the byte stream — not a NUL-terminated frame.
+    public boolean hasMessage() {
+        return leadingHeartbeatLength() > 0 || containsNullTerminator();
+    }
+
+    private int indexOfNullTerminator() {
+        var frameBytes = buffer.toByteArray();
+        for (int index = 0; index < frameBytes.length; index++) {
+            if (frameBytes[index] == 0) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    // STOMP heart-beat is a lone LF or CRLF on the byte stream — not a
+    // NUL-terminated frame.
     private int leadingHeartbeatLength() {
         var frameBytes = buffer.toByteArray();
         if (frameBytes.length == 0) {
@@ -48,24 +67,6 @@ public class MessageBuffer {
             return 2;
         }
         return 0;
-    }
-
-    private void consumeLeadingBytes(int length) {
-        var frameBytes = buffer.toByteArray();
-        buffer.reset();
-        if (length < frameBytes.length) {
-            buffer.write(frameBytes, length, frameBytes.length - length);
-        }
-    }
-
-    private int indexOfNullTerminator() {
-        var frameBytes = buffer.toByteArray();
-        for (int index = 0; index < frameBytes.length; index++) {
-            if (frameBytes[index] == 0) {
-                return index;
-            }
-        }
-        return -1;
     }
 
     public Message message() {

@@ -66,7 +66,7 @@ class StompServerTest {
                                                 .authenticator(credentials -> true)
                                                 .subscription(t -> true)
                                                 .handler(message -> receiveMessages.offer(
-                                                                                      new ReceivedMessage(message.destination(), message.body())))
+                                                                                          new ReceivedMessage(message.destination(), message.body())))
                                                 .start();
                 var client = StompClient.create(fixture.stompTcpUrl())) {
             client.connect();
@@ -90,7 +90,7 @@ class StompServerTest {
                                                 .authenticator(credentials -> true)
                                                 .subscription(t -> true)
                                                 .handler(message -> receiveMessages.offer(
-                                                                                      new ReceivedMessage(message.destination(), message.body())))
+                                                                                          new ReceivedMessage(message.destination(), message.body())))
                                                 .start();
                 var client = StompClient.create(fixture.webSocketUrl())) {
             client.connect();
@@ -175,7 +175,7 @@ class StompServerTest {
         var ackReceived = new CountDownLatch(1);
         try (var fixture = EmbeddedServerFixture.builder()
                                                 .withTcp()
-                                                .subscription(topic -> subscribed.compareAndSet(false, true))
+                                                .subscription(t -> subscribed.compareAndSet(false, true))
                                                 .handler(message -> {})
                                                 .start();
                 var client = StompClient.create(fixture.stompTcpUrl(), (UserCredential) null, Set.of(new Stomp1_2()))) {
