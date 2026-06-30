@@ -89,7 +89,9 @@ class StompClientTcpTest {
             client.connect();
             client.subscribe(topicName, message -> messageList.add(message));
             settleSubscription();
-            await().pollDelay(HEARTBEAT_IDLE_WAIT).until(() -> true);
+            await().atMost(HEARTBEAT_IDLE_WAIT.plusSeconds(5))
+                   .pollDelay(HEARTBEAT_IDLE_WAIT)
+                   .until(() -> true);
             sendMessage("message-01");
             sendMessage("message-02");
             sendMessage("message-03");

@@ -19,6 +19,7 @@ public class StompActiveMqContainer extends GenericContainer<StompActiveMqContai
                                                                    .get());
         this.username = DEFAULT_USER;
         this.password = DEFAULT_PASSWORD;
+        withReuse(false);
     }
 
     public String clientUrl() {
@@ -27,7 +28,6 @@ public class StompActiveMqContainer extends GenericContainer<StompActiveMqContai
 
     @Override
     protected void configure() {
-        withReuse(true);
         withEnv("ARTEMIS_USER", username);
         withEnv("ARTEMIS_PASSWORD", password);
         withExposedPorts(61613, 61614, 61616);
