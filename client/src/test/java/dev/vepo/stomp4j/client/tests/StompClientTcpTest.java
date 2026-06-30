@@ -52,6 +52,8 @@ class StompClientTcpTest {
     private static final Duration MESSAGE_COLLECTION_TIMEOUT = Duration.ofSeconds(30);
     private static final Duration SUBSCRIPTION_SETTLE_DELAY = Duration.ofMillis(250);
 
+    private static final Duration HEARTBEAT_IDLE_WAIT = Duration.ofSeconds(35);
+
     private static final Logger logger = LoggerFactory.getLogger(StompClientTcpTest.class);
 
     private static Stream<Arguments> allHeartbeatVersions() {
@@ -87,9 +89,7 @@ class StompClientTcpTest {
             client.connect();
             client.subscribe(topicName, message -> messageList.add(message));
             settleSubscription();
-            await().timeout(Durations.TWO_MINUTES)
-                   .pollDelay(Durations.ONE_MINUTE)
-                   .until(() -> true);
+            await().pollDelay(HEARTBEAT_IDLE_WAIT).until(() -> true);
             sendMessage("message-01");
             sendMessage("message-02");
             sendMessage("message-03");

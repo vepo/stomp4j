@@ -6,6 +6,8 @@ import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +25,7 @@ public class WebSocketTransport implements Transport {
     private final TransportListener listener;
     private final WebSocketInboundFramer framer = new WebSocketInboundFramer();
     private WebSocket webSocketClient;
+    private final CountDownLatch openLatch = new CountDownLatch(1);
 
     public WebSocketTransport(URI uri, TransportListener listener) {
         this.uri = uri;
@@ -63,6 +66,7 @@ public class WebSocketTransport implements Transport {
                       @Override
                       public void onError(WebSocket webSocket, Throwable error) {
                           logger.error("Error on WebSocket connection!", error);
+                          openLatch.countDown();
                           listener.onError(new Message(Command.ERROR,
                                                        dev.vepo.stomp4j.commons.protocol.Headers.builder()
                                                                                                 .with("message", error.getMessage())
@@ -74,6 +78,7 @@ public class WebSocketTransport implements Transport {
                       public void onOpen(WebSocket webSocket) {
                           logger.info("Connection open!");
                           webSocketClient = webSocket;
+                          openLatch.countDown();
                           listener.onConnected(WebSocketTransport.this);
                       }
 
@@ -96,6 +101,18 @@ public class WebSocketTransport implements Transport {
                           return null;
                       }
                   });
+        awaitWebSocketOpen();
+    }
+
+    private void awaitWebSocketOpen() {
+        try {
+            if (!openLatch.await(30, TimeUnit.SECONDS)) {
+                throw TransportFailures.connectFailed(uri.toString(), new IllegalStateException("WebSocket open timed out"));
+            }
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw TransportFailures.connectFailed(uri.toString(), ex);
+        }
     }
 
     @Override
