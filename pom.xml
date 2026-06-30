@@ -19,7 +19,7 @@
         <sonar.coverage.jacoco.xmlReportPaths>target/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
         <version.testcontainers>2.0.2</version.testcontainers>
         <version.junit>6.0.1</version.junit>
-        <formatter.config.file>${session.topLevelProject.basedir}/resources/formatter.xml</formatter.config.file>
+        <formatter.config.file>${maven.multiModuleProjectDirectory}/resources/formatter.xml</formatter.config.file>
     </properties>
 
     <name>Stomp4J :: Parent</name>
