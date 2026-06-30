@@ -9,20 +9,14 @@ import java.util.List;
 import java.util.function.IntSupplier;
 
 /**
- * Shared Awaitility patterns for broker-backed client integration tests.
- * Call {@link #settleSubscription()} after SUBSCRIBE and before SEND to avoid races with Artemis.
+ * Shared Awaitility patterns for broker-backed client integration tests. Call
+ * {@link #settleSubscription()} after SUBSCRIBE and before SEND to avoid races
+ * with Artemis.
  */
 public final class StompTestSupport {
 
     public static final Duration SUBSCRIPTION_SETTLE_DELAY = Duration.ofMillis(250);
     public static final Duration MESSAGE_COLLECTION_TIMEOUT = Duration.ofSeconds(30);
-
-    private StompTestSupport() {
-    }
-
-    public static void settleSubscription() {
-        settleFor(SUBSCRIPTION_SETTLE_DELAY);
-    }
 
     public static void awaitMessageCount(int expected, IntSupplier actualSize) {
         await().atMost(MESSAGE_COLLECTION_TIMEOUT)
@@ -36,10 +30,17 @@ public final class StompTestSupport {
                .until(() -> true);
     }
 
+    public static void settleSubscription() {
+        settleFor(SUBSCRIPTION_SETTLE_DELAY);
+    }
+
     /**
-     * Message callbacks run on the transport reader thread; use this list with {@code subscribe(topic, list::add)}.
+     * Message callbacks run on the transport reader thread; use this list with
+     * {@code subscribe(topic, list::add)}.
      */
     public static List<String> threadSafeMessageList() {
         return Collections.synchronizedList(new ArrayList<>());
     }
+
+    private StompTestSupport() {}
 }

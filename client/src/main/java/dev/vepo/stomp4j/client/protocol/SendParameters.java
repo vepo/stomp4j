@@ -4,8 +4,8 @@ import java.util.Map;
 import java.util.Optional;
 
 public record SendParameters(Map<String, String> customHeaders,
-                      Optional<String> receiptId,
-                      Optional<String> transactionId) {
+                             Optional<String> receiptId,
+                             Optional<String> transactionId) {
 
     public static SendParameters plain() {
         return new SendParameters(Map.of(), Optional.empty(), Optional.empty());
@@ -20,8 +20,8 @@ public record SendParameters(Map<String, String> customHeaders,
     }
 
     public static SendParameters of(Map<String, String> customHeaders,
-                             Optional<String> receiptId,
-                             Optional<String> transactionId) {
+                                    Optional<String> receiptId,
+                                    Optional<String> transactionId) {
         return new SendParameters(customHeaders, receiptId, transactionId);
     }
 }

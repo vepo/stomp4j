@@ -50,9 +50,9 @@ public class Stomp1_1 extends Stomp {
 
     @Override
     public void negativeAcknowledge(Message message,
-                                  Optional<String> session,
-                                  Transport transport,
-                                  Optional<String> transactionId) {
+                                    Optional<String> session,
+                                    Transport transport,
+                                    Optional<String> transactionId) {
         var builder = MessageBuilder.builder(Command.NACK)
                                     .headerIfPresent(Header.SUBSCRIPTION, message.headers().get(Header.SUBSCRIPTION))
                                     .headerIfPresent(Header.MESSAGE_ID, message.headers().get(Header.MESSAGE_ID));

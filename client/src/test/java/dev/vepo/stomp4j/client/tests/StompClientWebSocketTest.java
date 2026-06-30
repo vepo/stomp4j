@@ -43,12 +43,38 @@ class StompClientWebSocketTest {
     @ParameterizedTest
     @MethodSource("allVersions")
     @Timeout(value = 60)
+    @DisplayName("Sending message with {0}")
+    void sendMessageTest(Stomp version, StompActiveMqContainer stomp) throws Exception {
+        try (var jms = ArtemisJmsFixture.openTopic(stomp);
+                var client = StompClient.create(stomp.webSocketUrl(),
+                                                new UserCredential(stomp.username(), stomp.password()),
+                                                TransportType.WEB_SOCKET,
+                                                Set.of(version))) {
+            var topicName = jms.destinationName();
+            client.connect();
+            var message = jms.receiveTextAfter(Duration.ofSeconds(15), () -> {
+                try {
+                    Thread.sleep(Duration.ofMillis(100));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                client.sendPlain(topicName, "hello queue", "text/plain");
+            });
+            assertThat(message).as("Verifying message for %s".formatted(version))
+                               .isNotEmpty()
+                               .hasValue("hello queue");
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("allVersions")
+    @Timeout(value = 60)
     void versionTest(Stomp version, StompActiveMqContainer stomp) throws Exception {
         try (var jms = ArtemisJmsFixture.openTopic(stomp);
                 StompClient client = StompClient.create(stomp.webSocketUrl(),
-                                                     new UserCredential(stomp.username(), stomp.password()),
-                                                     TransportType.WEB_SOCKET,
-                                                     Set.of(version))) {
+                                                        new UserCredential(stomp.username(), stomp.password()),
+                                                        TransportType.WEB_SOCKET,
+                                                        Set.of(version))) {
             var topicName = jms.destinationName();
             var messageList = StompTestSupport.threadSafeMessageList();
             client.connect();
@@ -76,32 +102,6 @@ class StompClientWebSocketTest {
             assertThat(messageList).hasSize(10);
             jms.publishText("message-13");
             assertThat(messageList).hasSize(10);
-        }
-    }
-
-    @ParameterizedTest
-    @MethodSource("allVersions")
-    @Timeout(value = 60)
-    @DisplayName("Sending message with {0}")
-    void sendMessageTest(Stomp version, StompActiveMqContainer stomp) throws Exception {
-        try (var jms = ArtemisJmsFixture.openTopic(stomp);
-                var client = StompClient.create(stomp.webSocketUrl(),
-                                                new UserCredential(stomp.username(), stomp.password()),
-                                                TransportType.WEB_SOCKET,
-                                                Set.of(version))) {
-            var topicName = jms.destinationName();
-            client.connect();
-            var message = jms.receiveTextAfter(Duration.ofSeconds(15), () -> {
-                try {
-                    Thread.sleep(Duration.ofMillis(100));
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-                client.sendPlain(topicName, "hello queue", "text/plain");
-            });
-            assertThat(message).as("Verifying message for %s".formatted(version))
-                               .isNotEmpty()
-                               .hasValue("hello queue");
         }
     }
 }

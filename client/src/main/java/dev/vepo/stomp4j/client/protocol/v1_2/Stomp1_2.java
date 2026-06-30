@@ -52,9 +52,9 @@ public class Stomp1_2 extends Stomp {
 
     @Override
     public void negativeAcknowledge(Message message,
-                                  Optional<String> session,
-                                  Transport transport,
-                                  Optional<String> transactionId) {
+                                    Optional<String> session,
+                                    Transport transport,
+                                    Optional<String> transactionId) {
         var builder = MessageBuilder.builder(Command.NACK)
                                     .headerIfPresent(Header.ID, AcknowledgementIds.forStomp12(message));
         applyTransaction(builder, transactionId);

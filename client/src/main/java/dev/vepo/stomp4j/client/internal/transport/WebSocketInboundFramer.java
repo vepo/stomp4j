@@ -11,10 +11,6 @@ final class WebSocketInboundFramer {
     private final MessageBuffer messageBuffer = new MessageBuffer();
     private volatile long lastReceivedMessage = System.nanoTime();
 
-    void offer(CharSequence data, TransportListener listener) {
-        offer(data.toString().getBytes(StandardCharsets.UTF_8), listener);
-    }
-
     void offer(byte[] data, int offset, int length, TransportListener listener) {
         if (length <= 0) {
             return;
@@ -29,6 +25,10 @@ final class WebSocketInboundFramer {
 
     void offer(byte[] data, TransportListener listener) {
         offer(data, 0, data.length, listener);
+    }
+
+    void offer(CharSequence data, TransportListener listener) {
+        offer(data.toString().getBytes(StandardCharsets.UTF_8), listener);
     }
 
     long silentTime() {

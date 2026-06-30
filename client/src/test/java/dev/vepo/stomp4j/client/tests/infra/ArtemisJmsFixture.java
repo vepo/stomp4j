@@ -15,27 +15,23 @@ import jakarta.jms.Session;
 import jakarta.jms.Topic;
 
 /**
- * <p><b>Responsibilities</b></p>
+ * <p>
+ * <b>Responsibilities</b>
+ * </p>
  * <ul>
- *   <li><b>Knowing:</b> The exclusive destination name bound to this fixture.</li>
- *   <li><b>Doing:</b> Open a JMS connection to Artemis (OpenWire) and publish or receive on that destination.</li>
+ * <li><b>Knowing:</b> The exclusive destination name bound to this
+ * fixture.</li>
+ * <li><b>Doing:</b> Open a JMS connection to Artemis (OpenWire) and publish or
+ * receive on that destination.</li>
  * </ul>
- * <p><b>Collaborators:</b> {@link StompActiveMqContainer}</p>
- * <p><b>Not responsible for:</b> STOMP client lifecycle or test assertions.</p>
+ * <p>
+ * <b>Collaborators:</b> {@link StompActiveMqContainer}
+ * </p>
+ * <p>
+ * <b>Not responsible for:</b> STOMP client lifecycle or test assertions.
+ * </p>
  */
 public final class ArtemisJmsFixture implements AutoCloseable {
-
-    private final String destinationName;
-    private final Connection connection;
-    private final Session session;
-    private final Topic topic;
-
-    private ArtemisJmsFixture(String destinationName, Connection connection, Session session, Topic topic) {
-        this.destinationName = destinationName;
-        this.connection = connection;
-        this.session = session;
-        this.topic = topic;
-    }
 
     public static ArtemisJmsFixture openTopic(StompActiveMqContainer stomp) throws JMSException {
         return openTopic(stomp, TestDestinations.uniqueTopic());
@@ -48,6 +44,26 @@ public final class ArtemisJmsFixture implements AutoCloseable {
         var session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
         var topic = session.createTopic(destinationName);
         return new ArtemisJmsFixture(destinationName, connection, session, topic);
+    }
+
+    private final String destinationName;
+    private final Connection connection;
+
+    private final Session session;
+
+    private final Topic topic;
+
+    private ArtemisJmsFixture(String destinationName, Connection connection, Session session, Topic topic) {
+        this.destinationName = destinationName;
+        this.connection = connection;
+        this.session = session;
+        this.topic = topic;
+    }
+
+    @Override
+    public void close() throws JMSException {
+        session.close();
+        connection.close();
     }
 
     public String destinationName() {
@@ -68,8 +84,9 @@ public final class ArtemisJmsFixture implements AutoCloseable {
     }
 
     /**
-     * Creates the JMS consumer first, runs {@code afterConsumerReady}, then waits for a message.
-     * Use before STOMP SEND so the topic has an active subscriber when the broker routes the message.
+     * Creates the JMS consumer first, runs {@code afterConsumerReady}, then waits
+     * for a message. Use before STOMP SEND so the topic has an active subscriber
+     * when the broker routes the message.
      */
     public Optional<String> receiveTextAfter(Duration timeout, Runnable afterConsumerReady) {
         try (var consumer = session.createConsumer(topic)) {
@@ -97,11 +114,5 @@ public final class ArtemisJmsFixture implements AutoCloseable {
             fail("Error receiving JMS message", ex);
             return Optional.empty();
         }
-    }
-
-    @Override
-    public void close() throws JMSException {
-        session.close();
-        connection.close();
     }
 }

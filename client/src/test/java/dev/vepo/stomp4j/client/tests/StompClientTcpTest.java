@@ -55,8 +55,8 @@ class StompClientTcpTest {
     void heartbeatTest(Stomp version, StompActiveMqContainer stomp) throws Exception {
         try (var jms = ArtemisJmsFixture.openTopic(stomp);
                 StompClient client = StompClient.create(stomp.tcpUrl(),
-                                                     new UserCredential(stomp.username(), stomp.password()),
-                                                     Set.of(version))) {
+                                                        new UserCredential(stomp.username(), stomp.password()),
+                                                        Set.of(version))) {
             var topicName = jms.destinationName();
             var messageList = StompTestSupport.threadSafeMessageList();
             client.connect();
@@ -117,8 +117,8 @@ class StompClientTcpTest {
     void subscribeSyncTest(Stomp version, StompActiveMqContainer stomp) throws Exception {
         try (var jms = ArtemisJmsFixture.openTopic(stomp);
                 var client = StompClient.create(stomp.tcpUrl(),
-                                             new UserCredential(stomp.username(), stomp.password()),
-                                             Set.of(version))) {
+                                                new UserCredential(stomp.username(), stomp.password()),
+                                                Set.of(version))) {
             var topicName = jms.destinationName();
             client.connect();
             var subscription = client.subscribe(topicName);
@@ -160,8 +160,8 @@ class StompClientTcpTest {
     void subscribeTest(Stomp version, StompActiveMqContainer stomp) throws Exception {
         try (var jms = ArtemisJmsFixture.openTopic(stomp);
                 StompClient client = StompClient.create(stomp.tcpUrl(),
-                                                     new UserCredential(stomp.username(), stomp.password()),
-                                                     Set.of(version))) {
+                                                        new UserCredential(stomp.username(), stomp.password()),
+                                                        Set.of(version))) {
             var topicName = jms.destinationName();
             var messageList = StompTestSupport.threadSafeMessageList();
             client.connect();

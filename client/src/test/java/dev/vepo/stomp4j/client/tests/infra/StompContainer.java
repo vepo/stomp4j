@@ -8,13 +8,21 @@ import org.junit.jupiter.api.extension.ParameterResolutionException;
 import org.junit.jupiter.api.extension.ParameterResolver;
 
 /**
- * <p><b>Responsibilities</b></p>
+ * <p>
+ * <b>Responsibilities</b>
+ * </p>
  * <ul>
- *   <li><b>Knowing:</b> Whether the shared Artemis broker has been started for this JVM.</li>
- *   <li><b>Doing:</b> Start broker on demand; resolve {@link StompActiveMqContainer} test parameters.</li>
+ * <li><b>Knowing:</b> Whether the shared Artemis broker has been started for
+ * this JVM.</li>
+ * <li><b>Doing:</b> Start broker on demand; resolve
+ * {@link StompActiveMqContainer} test parameters.</li>
  * </ul>
- * <p><b>Collaborators:</b> {@link StompActiveMqContainer}</p>
- * <p><b>Not responsible for:</b> test assertions, destinations, or JMS publishing.</p>
+ * <p>
+ * <b>Collaborators:</b> {@link StompActiveMqContainer}
+ * </p>
+ * <p>
+ * <b>Not responsible for:</b> test assertions, destinations, or JMS publishing.
+ * </p>
  */
 public class StompContainer implements BeforeAllCallback, ParameterResolver {
     private static final Object LOCK = new Object();

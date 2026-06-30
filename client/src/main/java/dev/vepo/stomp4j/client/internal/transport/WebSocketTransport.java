@@ -35,16 +35,34 @@ public class WebSocketTransport implements Transport {
         this.key = new ClientKey();
     }
 
+    private void awaitWebSocketOpen() {
+        try {
+            if (!openLatch.await(30, TimeUnit.SECONDS)) {
+                throw TransportFailures.connectFailed(uri.toString(), new IllegalStateException("WebSocket open timed out"));
+            }
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw TransportFailures.connectFailed(uri.toString(), ex);
+        }
+    }
+
     @Override
     public void close() {
         if (Objects.nonNull(webSocketClient)) {
-            webSocketClient.sendClose(WebSocket.NORMAL_CLOSURE, "Client closed connection");
             try {
-                closeLatch.await(2, TimeUnit.SECONDS);
+                webSocketClient.sendClose(WebSocket.NORMAL_CLOSURE, "Client closed connection");
+                if (!closeLatch.await(2, TimeUnit.SECONDS)) {
+                    // Brokers often leave the WebSocket open after STOMP DISCONNECT; HttpClient.close()
+                    // blocks until the socket ends, so abort when no close frame arrives in time.
+                    logger.debug("WebSocket close frame not acknowledged; aborting connection");
+                    webSocketClient.abort();
+                }
             } catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();
+                webSocketClient.abort();
+            } finally {
+                webSocketClient = null;
             }
-            webSocketClient = null;
         }
         httpClient.close();
     }
@@ -54,10 +72,13 @@ public class WebSocketTransport implements Transport {
         logger.info("Open WebSocket connection with: {}", uri);
         httpClient.newWebSocketBuilder()
                   .header("uuid", key.toHex())
-                  // STOMP over WebSocket negotiates the application protocol during the HTTP upgrade
-                  // via Sec-WebSocket-Protocol (v12.stomp, v11.stomp, …), not ordinary HTTP content
+                  // STOMP over WebSocket negotiates the application protocol during the HTTP
+                  // upgrade
+                  // via Sec-WebSocket-Protocol (v12.stomp, v11.stomp, …), not ordinary HTTP
+                  // content
                   // negotiation. After the handshake, frames use the STOMP wire format — see
-                  // https://stomp.github.io/stomp-specification-1.2.html and https://stomp.github.io/
+                  // https://stomp.github.io/stomp-specification-1.2.html and
+                  // https://stomp.github.io/
                   .subprotocols("v12.stomp", "v11.stomp", "v10.stomp", "stomp")
                   .buildAsync(uri, new WebSocket.Listener() {
                       @Override
@@ -80,6 +101,7 @@ public class WebSocketTransport implements Transport {
                       public void onError(WebSocket webSocket, Throwable error) {
                           logger.error("Error on WebSocket connection!", error);
                           openLatch.countDown();
+                          closeLatch.countDown();
                           listener.onError(new Message(Command.ERROR,
                                                        dev.vepo.stomp4j.commons.protocol.Headers.builder()
                                                                                                 .with("message", error.getMessage())
@@ -116,17 +138,6 @@ public class WebSocketTransport implements Transport {
                       }
                   });
         awaitWebSocketOpen();
-    }
-
-    private void awaitWebSocketOpen() {
-        try {
-            if (!openLatch.await(30, TimeUnit.SECONDS)) {
-                throw TransportFailures.connectFailed(uri.toString(), new IllegalStateException("WebSocket open timed out"));
-            }
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            throw TransportFailures.connectFailed(uri.toString(), ex);
-        }
     }
 
     @Override

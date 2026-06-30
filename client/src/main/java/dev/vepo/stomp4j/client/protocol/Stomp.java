@@ -30,6 +30,14 @@ public abstract class Stomp {
                        .collect(Collectors.joining(","));
     }
 
+    protected static void applyCustomHeaders(MessageBuilder builder, Map<String, String> customHeaders) {
+        customHeaders.forEach(builder::header);
+    }
+
+    protected static void applyTransaction(MessageBuilder builder, Optional<String> transactionId) {
+        transactionId.ifPresent(id -> builder.header(Header.TRANSACTION, id));
+    }
+
     public static Message connect(String host,
                                   UserCredential credentials,
                                   Set<Stomp> versions,
@@ -91,9 +99,9 @@ public abstract class Stomp {
     public abstract void negativeAcknowledge(Message message, Optional<String> session, Transport transport);
 
     public void negativeAcknowledge(Message message,
-                                  Optional<String> session,
-                                  Transport transport,
-                                  Optional<String> transactionId) {
+                                    Optional<String> session,
+                                    Transport transport,
+                                    Optional<String> transactionId) {
         negativeAcknowledge(message, session, transport);
     }
 
@@ -127,12 +135,4 @@ public abstract class Stomp {
     public abstract void unsubscribe(Subscription subscription, Transport transport);
 
     public abstract String version();
-
-    protected static void applyCustomHeaders(MessageBuilder builder, Map<String, String> customHeaders) {
-        customHeaders.forEach(builder::header);
-    }
-
-    protected static void applyTransaction(MessageBuilder builder, Optional<String> transactionId) {
-        transactionId.ifPresent(id -> builder.header(Header.TRANSACTION, id));
-    }
 }

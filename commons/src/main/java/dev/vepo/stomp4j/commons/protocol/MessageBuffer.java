@@ -32,11 +32,6 @@ public class MessageBuffer {
         return indexOfNullTerminator() > 0;
     }
 
-    public boolean hasMessage() {
-        discardLeadingHeartbeats();
-        return indexOfNullTerminator() > 0;
-    }
-
     private void discardLeadingHeartbeats() {
         var frameBytes = buffer.toByteArray();
         int position = 0;
@@ -60,6 +55,11 @@ public class MessageBuffer {
         if (position < frameBytes.length) {
             buffer.write(frameBytes, position, frameBytes.length - position);
         }
+    }
+
+    public boolean hasMessage() {
+        discardLeadingHeartbeats();
+        return indexOfNullTerminator() > 0;
     }
 
     private int indexOfNullTerminator() {

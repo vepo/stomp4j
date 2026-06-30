@@ -18,15 +18,15 @@ public final class SubscribeOptions {
             return this;
         }
 
+        public SubscribeOptions build() {
+            return new SubscribeOptions(this);
+        }
+
         public Builder header(String name, String value) {
             Objects.requireNonNull(name);
             Objects.requireNonNull(value);
             headers.put(name, value);
             return this;
-        }
-
-        public SubscribeOptions build() {
-            return new SubscribeOptions(this);
         }
     }
 

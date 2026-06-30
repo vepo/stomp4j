@@ -38,26 +38,10 @@ final class StompTransactionImpl implements StompTransaction {
         finished = true;
     }
 
-    @Override
-    public String id() {
-        return transactionId;
-    }
-
-    @Override
-    public void send(String destination, String body, SendOptions options) {
-        ensureActive();
-        client.sendInTransaction(transactionId, destination, body, options);
-    }
-
     private void ensureActive() {
         if (finished) {
             throw new StompException("Transaction %s is no longer active".formatted(transactionId));
         }
-    }
-
-    @Override
-    public String toString() {
-        return "StompTransaction[id=%s, finished=%s]".formatted(transactionId, finished);
     }
 
     @Override
@@ -74,5 +58,21 @@ final class StompTransactionImpl implements StompTransaction {
     @Override
     public int hashCode() {
         return Objects.hash(transactionId);
+    }
+
+    @Override
+    public String id() {
+        return transactionId;
+    }
+
+    @Override
+    public void send(String destination, String body, SendOptions options) {
+        ensureActive();
+        client.sendInTransaction(transactionId, destination, body, options);
+    }
+
+    @Override
+    public String toString() {
+        return "StompTransaction[id=%s, finished=%s]".formatted(transactionId, finished);
     }
 }
