@@ -41,6 +41,7 @@ public class SecureTcpTransport implements Transport {
     private final ExecutorService executor;
     private Socket socket;
     private volatile long lastReceivedMessage;
+    private volatile long lastSentMessage;
     private final AtomicBoolean running;
 
     private final CountDownLatch done;
@@ -56,6 +57,7 @@ public class SecureTcpTransport implements Transport {
         this.sslContext = sslContext;
         this.executor = Executors.newSingleThreadExecutor();
         this.lastReceivedMessage = System.nanoTime();
+        this.lastSentMessage = System.nanoTime();
         this.running = new AtomicBoolean(true);
         this.done = new CountDownLatch(1);
     }
@@ -134,9 +136,15 @@ public class SecureTcpTransport implements Transport {
             var os = socket.getOutputStream();
             os.write(message.encode().getBytes());
             os.flush();
+            lastSentMessage = System.nanoTime();
         } catch (Exception ex) {
             throw TransportFailures.sendFailed(ex);
         }
+    }
+
+    @Override
+    public long outboundSilentTime() {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastSentMessage);
     }
 
     @Override

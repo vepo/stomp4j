@@ -27,6 +27,7 @@ public class TcpTransport implements Transport {
     private final ExecutorService executor;
     private Socket socket;
     private volatile long lastReceivedMessaged;
+    private volatile long lastSentMessage;
     private final AtomicBoolean running;
     private final CountDownLatch done;
 
@@ -36,6 +37,7 @@ public class TcpTransport implements Transport {
         this.listener = listener;
         this.executor = Executors.newSingleThreadExecutor();
         this.lastReceivedMessaged = System.nanoTime();
+        this.lastSentMessage = System.nanoTime();
         this.running = new AtomicBoolean(true);
         this.done = new CountDownLatch(1);
     }
@@ -112,9 +114,15 @@ public class TcpTransport implements Transport {
             var os = socket.getOutputStream();
             os.write(message.encode().getBytes());
             os.flush();
+            lastSentMessage = System.nanoTime();
         } catch (Exception e) {
             throw TransportFailures.sendFailed(e);
         }
+    }
+
+    @Override
+    public long outboundSilentTime() {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastSentMessage);
     }
 
     public long silentTime() {

@@ -520,13 +520,17 @@ public class StompClientImpl implements StompClient {
                    .get(Header.HEART_BEAT)
                    .map(heartBeatInterval -> {
                        String[] heartBeats = heartBeatInterval.split(",");
-                       return Math.round(0.7 * Integer.parseInt(heartBeats[1]));
+                       var serverExpectMs = Integer.parseInt(heartBeats[1].trim());
+                       var clientSendMs = DEFAULT_HEART_BEAT_INTERVAL.toMillis();
+                       // STOMP 1.2: client send rate is max(cx, sy); use 0.7 to send before deadline.
+                       return Math.round(0.7 * Math.max(clientSendMs, serverExpectMs));
                    }).ifPresent(interval -> {
                        if (interval > 0) {
                            logger.info("Setting up heart beat with interval: {}", interval);
                            heartBeatTask = heartBeatService.scheduleAtFixedRate(() -> {
                                try {
-                                   if (transport.silentTime() > interval) {
+                                   // Outbound idle only — inbound server heart-beats must not suppress client sends.
+                                   if (transport.outboundSilentTime() > interval) {
                                        transport.send(selectedProtocol.get().heartBeatMessage());
                                    }
                                } catch (RuntimeException ex) {
