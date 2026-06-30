@@ -250,9 +250,21 @@ SPI registrations live in `client/src/main/resources/META-INF/services/`.
 | `client` | `StompClientTcpTest`, `StompClientWebSocketTest` | Integration vs ActiveMQ (all STOMP versions) |
 | `server` | `StompServerTest` | Integration — embedded server + `stomp4j-client` |
 
-`StompContainer` JUnit 5 extension starts a shared `StompActiveMqContainer` (one broker per JVM, stopped on shutdown) and injects URLs/credentials into test methods. Docker-backed tests use `@Tag("integration")`.
+`StompContainer` JUnit 5 extension starts a shared `StompActiveMqContainer` (one broker per JVM, stopped on shutdown) and injects URLs/credentials into test methods. `StompTestSupport` in `client.tests.infra` provides shared `settleSubscription()` and `awaitMessageCount()` for broker-backed client tests. Docker-backed tests use `@Tag("integration")`.
 
-**Run:** `mvn verify` from repo root (full suite, Docker required). **Fast loop:** `mvn -Pfast -pl commons,client,server test` skips integration-tagged tests. Integration tests require **Docker** (Testcontainers).
+**Run:** `mvn verify` from repo root (full suite, Docker required). **During development:** tiered module tests — see `.cursor/rules/stomp4j-test-during-development.mdc`. **Fast loop:** `mvn -Pfast -pl commons,client,server test` skips integration-tagged tests.
+
+### Change impact map (minimum tests)
+
+| Changed area | Run before continuing |
+|--------------|------------------------|
+| `commons.protocol` | `commons` → `client` + `server` (full module test if framing/commands changed) |
+| `client` transport / protocol | `mvn -pl client test` |
+| `server.session` / channels | `mvn -pl server test` |
+| `bridge/` | `mvn -pl bridge/stomp4j-kafka-bridge test` |
+| Test infra (`broker.xml`, `StompContainer`) | All dependent modules — at least `client` |
+
+Integration tests require **Docker** (Testcontainers).
 
 **Local broker (optional):** `docker compose -f scripts/docker/docker-compose.yaml up`
 

@@ -55,6 +55,19 @@ class MessageBufferTest {
     }
 
     @Test
+    void heartbeatBeforeFrameTest() {
+        var buffer = new MessageBuffer();
+        assertFalse(buffer.append("\n"));
+        assertTrue(buffer.append("MESSAGE\ndestination:/topic/test\nmessage-id:1234\ncontent-type:text/plain\n\nHello\n\u0000"));
+        assertTrue(buffer.hasMessage());
+        var message = buffer.message();
+        assertEquals(Command.MESSAGE, message.command());
+        assertEquals("/topic/test", message.headers().get(Header.DESTINATION).orElse(null));
+        assertEquals("Hello", message.body());
+        assertFalse(buffer.hasMessage());
+    }
+
+    @Test
     void heartbeatWithMessageTest() {
         var buffer = new MessageBuffer();
         assertTrue(buffer.append("""

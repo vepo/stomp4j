@@ -26,6 +26,7 @@ public class WebSocketTransport implements Transport {
     private final WebSocketInboundFramer framer = new WebSocketInboundFramer();
     private WebSocket webSocketClient;
     private final CountDownLatch openLatch = new CountDownLatch(1);
+    private final CountDownLatch closeLatch = new CountDownLatch(1);
 
     public WebSocketTransport(URI uri, TransportListener listener) {
         this.uri = uri;
@@ -38,6 +39,12 @@ public class WebSocketTransport implements Transport {
     public void close() {
         if (Objects.nonNull(webSocketClient)) {
             webSocketClient.sendClose(WebSocket.NORMAL_CLOSURE, "Client closed connection");
+            try {
+                closeLatch.await(2, TimeUnit.SECONDS);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+            }
+            webSocketClient = null;
         }
         httpClient.close();
     }
@@ -47,6 +54,11 @@ public class WebSocketTransport implements Transport {
         logger.info("Open WebSocket connection with: {}", uri);
         httpClient.newWebSocketBuilder()
                   .header("uuid", key.toHex())
+                  // STOMP over WebSocket negotiates the application protocol during the HTTP upgrade
+                  // via Sec-WebSocket-Protocol (v12.stomp, v11.stomp, …), not ordinary HTTP content
+                  // negotiation. After the handshake, frames use the STOMP wire format — see
+                  // https://stomp.github.io/stomp-specification-1.2.html and https://stomp.github.io/
+                  .subprotocols("v12.stomp", "v11.stomp", "v10.stomp", "stomp")
                   .buildAsync(uri, new WebSocket.Listener() {
                       @Override
                       public CompletionStage<?> onBinary(WebSocket webSocket, ByteBuffer data, boolean last) {
@@ -60,6 +72,7 @@ public class WebSocketTransport implements Transport {
                       @Override
                       public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
                           logger.warn("Connection closed! statusCode={}, reason={}", statusCode, reason);
+                          closeLatch.countDown();
                           return null;
                       }
 
@@ -78,6 +91,7 @@ public class WebSocketTransport implements Transport {
                       public void onOpen(WebSocket webSocket) {
                           logger.info("Connection open!");
                           webSocketClient = webSocket;
+                          webSocket.request(1);
                           openLatch.countDown();
                           listener.onConnected(WebSocketTransport.this);
                       }

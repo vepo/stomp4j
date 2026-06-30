@@ -12,9 +12,16 @@ Before marking a coding task **done**, run **local** checks only (no SonarCloud 
 - After production or test code changes.
 - Skip for docs-only, `.mdc` rules-only, or comment-only edits.
 
-## Required command (match CI)
+## Two gates
 
-Primary gate — same as [`.github/workflows/maven.yml`](../../.github/workflows/maven.yml):
+### Mid-task gate (during development)
+
+After each **substantive** edit batch, run the smallest scope from [stomp4j-test-during-development.mdc](stomp4j-test-during-development.mdc) — module `-Pfast test`, module full `test`, or single `-Dtest=ClassName#methodName`. Do not wait until the end to discover a broken test.
+
+### Pre-finish gate (before marking done)
+
+1. **Module scope:** if changes are confined to one Maven module, that module's tests must pass (with Docker when integration tests apply).
+2. **Full suite:** same as CI — [`.github/workflows/maven.yml`](../../.github/workflows/maven.yml):
 
 ```bash
 mvn verify
@@ -44,4 +51,4 @@ Pre-existing issues in unrelated files: fix only if trivial; do not scope-creep.
 
 ## Report to the user
 
-When wrapping up, briefly note: `verify` (pass / fail fixed), linter (clean / issues fixed).
+When wrapping up, briefly note: mid-task tests run, `verify` (pass / fail fixed), linter (clean / issues fixed).

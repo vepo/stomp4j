@@ -1,4 +1,5 @@
 target/
+reports/
 .vscode/
 .idea/
 pom.xml.versionsBackup

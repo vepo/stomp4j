@@ -32,6 +32,11 @@ See [stomp4j-format-imports.mdc](stomp4j-format-imports.mdc).
 - Use `ifPresentOrElse`, `orElseThrow`, `orElseGet` instead of `isPresent()` + `get()`.
 - Imperative code is fine for NIO loops, transport I/O, and multi-step mutations.
 
+## Comments
+
+- Explain **non-obvious** behaviour only — see [stomp4j-in-code-documentation.mdc](stomp4j-in-code-documentation.mdc).
+- STOMP spec rationale, architecture decisions, and rejected alternatives belong in comments at the decision point.
+
 ## Logging
 
 - Always **SLF4J** — never `System.out`, `System.err`, or `java.util.logging`.

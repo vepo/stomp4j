@@ -20,6 +20,7 @@ public class MessageBuffer {
 
     public boolean append(byte[] data, int offset, int length) {
         buffer.write(data, offset, length);
+        discardLeadingHeartbeats();
         return containsNullTerminator();
     }
 
@@ -32,7 +33,33 @@ public class MessageBuffer {
     }
 
     public boolean hasMessage() {
+        discardLeadingHeartbeats();
         return indexOfNullTerminator() > 0;
+    }
+
+    private void discardLeadingHeartbeats() {
+        var frameBytes = buffer.toByteArray();
+        int position = 0;
+        while (position < frameBytes.length) {
+            if (frameBytes[position] == '\n') {
+                position++;
+                continue;
+            }
+            if (frameBytes[position] == '\r'
+                    && position + 1 < frameBytes.length
+                    && frameBytes[position + 1] == '\n') {
+                position += 2;
+                continue;
+            }
+            break;
+        }
+        if (position == 0) {
+            return;
+        }
+        buffer.reset();
+        if (position < frameBytes.length) {
+            buffer.write(frameBytes, position, frameBytes.length - position);
+        }
     }
 
     private int indexOfNullTerminator() {
@@ -46,6 +73,7 @@ public class MessageBuffer {
     }
 
     public Message message() {
+        discardLeadingHeartbeats();
         var nullIndex = indexOfNullTerminator();
         if (nullIndex <= 0) {
             throw new IllegalStateException("Message not complete");

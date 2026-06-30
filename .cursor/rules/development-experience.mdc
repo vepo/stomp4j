@@ -16,7 +16,7 @@ mvn -pl client test           # client module only (Docker required for integrat
 docker compose -f scripts/docker/docker-compose.yaml up   # optional local Artemis
 ```
 
-**Fast loop:** `mvn -Pfast -pl commons,client,server test` skips `@Tag("integration")` tests (Testcontainers). Run full `mvn verify` before pushing.
+**Fast loop:** `mvn -Pfast -pl commons,client,server test` skips `@Tag("integration")` tests (Testcontainers). Run affected module tests **during development** — see [stomp4j-test-during-development.mdc](../../.cursor/rules/stomp4j-test-during-development.mdc). Run full `mvn verify` before pushing.
 
 Testcontainers reuse is enabled in `src/test/resources/testcontainers.properties`; brokers stay up for the JVM and between Maven runs when reuse is active.
 
@@ -37,6 +37,7 @@ With `docker-compose` Artemis running, exercise client APIs from a small scratch
 
 ## Checklist before finishing
 
+- [ ] Mid-task tests run per [stomp4j-test-during-development.mdc](../../.cursor/rules/stomp4j-test-during-development.mdc)
 - [ ] `mvn verify` passes (Docker running)
 - [ ] New behaviour has tests in the correct module
 - [ ] [docs/features.md](../../docs/features.md) updated if capabilities changed

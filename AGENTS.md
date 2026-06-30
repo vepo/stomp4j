@@ -12,9 +12,9 @@ Read these before changing code or tests:
 | [resources/roteiros/](resources/roteiros/) | Design rationale (Portuguese) |
 | [.cursor/rules/](.cursor/rules/) | Cursor rules (always-on + file-scoped) |
 
-**Workflow:** read domain spec → place code in correct module → update SPI/`module-info` if needed → test → update [docs/features.md](docs/features.md) and other docs when public API changes → update ARCHITECTURE.md when architecture changes → `mvn verify`.
+**Workflow:** read domain spec → place code in correct module → update SPI/`module-info` if needed → **tiered tests during development** → `mvn verify` once → update [docs/features.md](docs/features.md) and other docs when public API changes → update ARCHITECTURE.md when architecture changes.
 
-**Tests:** integration tests use Testcontainers (Docker required). Reuse `StompContainer` and existing test infra; do not bypass with raw sockets when the DSL exists.
+**Tests:** integration tests use Testcontainers (Docker required). Reuse `StompContainer`, `StompTestSupport`, and existing test infra; do not bypass with raw sockets when the DSL exists. Run module tests early — see `stomp4j-test-during-development.mdc`.
 
 **Rules index:**
 
@@ -25,12 +25,15 @@ Read these before changing code or tests:
 | `stomp4j-module-architecture.mdc` | Module layers and dependencies |
 | `stomp4j-module-boundaries.mdc` | JPMS export/import rules |
 | `stomp4j-java.mdc` | Java style (`**/*.java`) |
+| `stomp4j-in-code-documentation.mdc` | Non-obvious comments — STOMP spec, architecture, rejected alternatives (`**/*.java`) |
 | `stomp4j-format-imports.mdc` | Import hygiene |
 | `stomp4j-strings.mdc` | String building |
 | `stomp4j-tell-dont-ask.mdc` | Intent methods |
 | `stomp4j-law-of-demeter.mdc` | No train wrecks |
 | `stomp4j-no-method-bypass-allowed.mdc` | No pass-through wrappers |
-| `stomp4j-tests.mdc` | Test conventions |
+| `stomp4j-tests.mdc` | Test conventions (+ production paths that affect tests) |
+| `stomp4j-test-during-development.mdc` | Tiered tests during development — catch regressions early |
+| `stomp4j-test-failure-diagnosis.mdc` | Diagnose failing tests (logs, root cause, STOMP alignment) |
 | `stomp4j-test-docker.mdc` | Docker for Testcontainers |
 | `development-experience.mdc` | Local broker and test infra |
 | `domain-model.mdc` | Domain language alignment |

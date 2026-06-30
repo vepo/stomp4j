@@ -11,18 +11,21 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import org.apache.activemq.ActiveMQConnectionFactory;
 import org.awaitility.Durations;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.junit.jupiter.api.Timeout;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -37,7 +40,7 @@ import dev.vepo.stomp4j.client.protocol.v1_0.Stomp1_0;
 import dev.vepo.stomp4j.client.protocol.v1_1.Stomp1_1;
 import dev.vepo.stomp4j.client.protocol.v1_2.Stomp1_2;
 import dev.vepo.stomp4j.client.tests.infra.StompActiveMqContainer;
-import dev.vepo.stomp4j.client.tests.infra.StompContainer;
+import dev.vepo.stomp4j.client.tests.infra.StompTestSupport;
 import jakarta.jms.Connection;
 import jakarta.jms.DeliveryMode;
 import jakarta.jms.JMSException;
@@ -45,13 +48,12 @@ import jakarta.jms.Session;
 import jakarta.jms.Topic;
 
 @Tag("integration")
-@ExtendWith(StompContainer.class)
 @Execution(ExecutionMode.SAME_THREAD)
 class StompClientWebSocketTest {
 
-    private static final Duration SUBSCRIPTION_SETTLE_DELAY = Duration.ofMillis(250);
-
     private static final Logger logger = LoggerFactory.getLogger(StompClientWebSocketTest.class);
+
+    private static StompActiveMqContainer stomp;
 
     private static Stream<Arguments> allVersions() {
         return Stream.of(Arguments.of(new Stomp1_0()),
@@ -64,6 +66,19 @@ class StompClientWebSocketTest {
     private Session session;
 
     private Topic topic;
+
+    @BeforeAll
+    static void startBroker() {
+        stomp = new StompActiveMqContainer();
+        stomp.start();
+    }
+
+    @AfterAll
+    static void stopBroker() {
+        if (Objects.nonNull(stomp)) {
+            stomp.stop();
+        }
+    }
 
     Optional<String> receiveMessage(String content, Duration timeout) {
         try (var consumer = session.createConsumer(topic)) {
@@ -93,37 +108,44 @@ class StompClientWebSocketTest {
     @ParameterizedTest
     @MethodSource("allVersions")
     @Timeout(value = 60)
-    @DisplayName("Sending message with {0}")
-    void sendMessageTest(Stomp version, StompActiveMqContainer stomp) {
-        try (var pool = Executors.newSingleThreadExecutor();
-                var client = StompClient.create(stomp.webSocketUrl(), new UserCredential(stomp.username(), stomp.password()), TransportType.WEB_SOCKET,
-                                                Set.of(version))) {
+    void versionTest(Stomp version) throws JMSException {
+        try (StompClient client = StompClient.create(stomp.webSocketUrl(),
+                                                     new UserCredential(stomp.username(), stomp.password()),
+                                                     TransportType.WEB_SOCKET,
+                                                     Set.of(version))) {
+            var messageList = new ArrayList<String>();
             client.connect();
-            // Queue is not durable. Start received first!
-            pool.submit(() -> {
-                try {
-                    Thread.sleep(Duration.ofMillis(100));
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-                client.sendPlain(topicName, "hello queue", "text/plain");
-            });
-            var message = receiveMessage(topicName, Duration.ofSeconds(15));
-            assertThat(message).as("Verifying message for %s".formatted(version))
-                               .isNotEmpty()
-                               .hasValue("hello queue");
+            client.subscribe(topicName, message -> messageList.add(message));
+            StompTestSupport.settleSubscription();
+            sendMessage("message-01");
+            sendMessage("message-02");
+            sendMessage("message-03");
+            sendMessage("message-04");
+            sendMessage("message-05");
+            sendMessage("message-06");
+            sendMessage("message-07");
+            sendMessage("message-08");
+            sendMessage("message-09");
+            sendMessage("message-10");
+            StompTestSupport.awaitMessageCount(10, messageList::size);
+            assertThat(messageList).containsExactly("message-01", "message-02", "message-03", "message-04",
+                                                    "message-05", "message-06", "message-07", "message-08",
+                                                    "message-09", "message-10");
+            client.unsubscribe(topicName);
+            sendMessage("message-11");
+            await().pollDelay(Durations.ONE_SECOND).until(() -> true);
+            assertThat(messageList).size().isEqualTo(10);
+            sendMessage("message-12");
+            assertThat(messageList).size().isEqualTo(10);
+            sendMessage("message-13");
+            assertThat(messageList).size().isEqualTo(10);
         }
     }
 
-    private void settleSubscription() {
-        await().pollDelay(SUBSCRIPTION_SETTLE_DELAY).until(() -> true);
-    }
-
     @BeforeEach
-    void setup(StompActiveMqContainer stomp) throws JMSException {
+    void setup() throws JMSException {
         var connectionFactory = new ActiveMQConnectionFactory(stomp.clientUrl());
         connection = connectionFactory.createConnection(stomp.username(), stomp.password());
-        // topic
         connection.start();
         session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
         topicName = "topic-" + UUID.randomUUID().toString();
@@ -140,37 +162,25 @@ class StompClientWebSocketTest {
     @ParameterizedTest
     @MethodSource("allVersions")
     @Timeout(value = 60)
-    void versionTest(Stomp version, StompActiveMqContainer stomp) throws InterruptedException, JMSException {
-        try (StompClient client = StompClient.create(stomp.webSocketUrl(),
-                                                     new UserCredential(stomp.username(), stomp.password()),
-                                                     TransportType.WEB_SOCKET,
-                                                     Set.of(version))) {
-            var messageList = new ArrayList<String>();
+    @DisplayName("Sending message with {0}")
+    void sendMessageTest(Stomp version) throws Exception {
+        try (var pool = Executors.newSingleThreadExecutor();
+                var client = StompClient.create(stomp.webSocketUrl(), new UserCredential(stomp.username(), stomp.password()), TransportType.WEB_SOCKET,
+                                                Set.of(version))) {
             client.connect();
-            client.subscribe(topicName, message -> messageList.add(message));
-            settleSubscription();
-            sendMessage("message-01");
-            sendMessage("message-02");
-            sendMessage("message-03");
-            sendMessage("message-04");
-            sendMessage("message-05");
-            sendMessage("message-06");
-            sendMessage("message-07");
-            sendMessage("message-08");
-            sendMessage("message-09");
-            sendMessage("message-10");
-            await().atMost(Duration.ofSeconds(30)).until(() -> messageList.size() == 10);
-            assertThat(messageList).containsExactly("message-01", "message-02", "message-03", "message-04",
-                                                    "message-05", "message-06", "message-07", "message-08",
-                                                    "message-09", "message-10");
-            client.unsubscribe(topicName);
-            sendMessage("message-11");
-            await().pollDelay(Durations.ONE_SECOND).until(() -> true);
-            assertThat(messageList).size().isEqualTo(10);
-            sendMessage("message-12");
-            assertThat(messageList).size().isEqualTo(10);
-            sendMessage("message-13");
-            assertThat(messageList).size().isEqualTo(10);
+            Future<?> sendTask = pool.submit(() -> {
+                try {
+                    Thread.sleep(Duration.ofMillis(100));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                client.sendPlain(topicName, "hello queue", "text/plain");
+            });
+            var message = receiveMessage(topicName, Duration.ofSeconds(15));
+            sendTask.get(15, TimeUnit.SECONDS);
+            assertThat(message).as("Verifying message for %s".formatted(version))
+                               .isNotEmpty()
+                               .hasValue("hello queue");
         }
     }
 }

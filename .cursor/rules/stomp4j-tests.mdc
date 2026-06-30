@@ -1,6 +1,10 @@
 ---
 description: JUnit, Testcontainers, and integration test conventions
-globs: "**/src/test/**/*.java"
+globs:
+  - '**/src/test/**/*.java'
+  - '**/commons/**'
+  - '**/client/**'
+  - '**/server/**'
 alwaysApply: false
 ---
 
@@ -9,6 +13,8 @@ alwaysApply: false
 ## Docker required
 
 Integration tests use Testcontainers (ActiveMQ Artemis). Docker must be running — see [stomp4j-test-docker.mdc](stomp4j-test-docker.mdc).
+
+Run tests during development per [stomp4j-test-during-development.mdc](stomp4j-test-during-development.mdc) — do not defer all testing to `mvn verify`.
 
 ## Layout
 
@@ -21,6 +27,7 @@ Integration tests use Testcontainers (ActiveMQ Artemis). Docker must be running 
 ## Infrastructure
 
 - **`StompContainer`** — JUnit 5 extension; one shared ActiveMQ container per JVM; injects `tcpUrl()`, `webSocketUrl()`, credentials.
+- **`StompTestSupport`** — shared `settleSubscription()` and `awaitMessageCount()` for broker-backed client tests.
 - Start via `ensureStarted()`; **do not** stop the broker in `afterAll` — a JVM shutdown hook stops it after the test run.
 - Reuse `StompContainer` — do not start duplicate brokers per test class unless isolation requires it.
 - Docker-backed tests are tagged `@Tag("integration")`; exclude with Maven profile `fast` (`mvn -Pfast test`).
@@ -30,11 +37,76 @@ Integration tests use Testcontainers (ActiveMQ Artemis). Docker must be running 
 
 - `@ParameterizedTest` for STOMP versions (1.0, 1.1, 1.2) and transport types.
 - JUnit 5 lifecycle (`@BeforeAll`, `@AfterAll`) via extensions where shared containers are used.
+- `@Execution(ExecutionMode.SAME_THREAD)` on broker-backed or port-sharing tests.
 
 ## Assertions
 
 - **AssertJ** for fluent assertions.
 - **Awaitility** for async subscribe/receive flows — not `Thread.sleep()`.
+- Always set `atMost(...)`; any `pollDelay` must be **less than** `atMost`.
+
+## Cookbook
+
+### Broker integration test class
+
+```java
+@Tag("integration")
+@ExtendWith(StompContainer.class)
+@Execution(ExecutionMode.SAME_THREAD)
+class MyStompClientTest {
+
+    @ParameterizedTest
+    @MethodSource("allVersions")
+    void shouldDeliverMessage(Stomp version, StompActiveMqContainer stomp) {
+        try (var client = StompClient.create(stomp.tcpUrl(), credentials, Set.of(version))) {
+            client.connect();
+            var messages = new ArrayList<String>();
+            client.subscribe("/topic/foo", messages::add);
+            StompTestSupport.settleSubscription(); // before SEND — avoids Artemis race
+            // publish via JMS or client.send…
+            StompTestSupport.awaitMessageCount(1, messages::size);
+        }
+    }
+}
+```
+
+### WebSocket vs TCP URLs
+
+| Transport | URL source | Port |
+|-----------|------------|------|
+| STOMP TCP | `stomp.tcpUrl()` | mapped **61613** |
+| STOMP WebSocket | `stomp.webSocketUrl()` | mapped **61614** |
+| JMS (publish side) | `stomp.clientUrl()` | mapped **61616** (OpenWire) |
+
+Do not use `61616` for STOMP WebSocket tests.
+
+### Embedded server test
+
+```java
+@Execution(ExecutionMode.SAME_THREAD)
+class MyServerTest {
+    @Test
+    void scenario() {
+        var port = /* unique per test method — e.g. EphemeralPort or random */;
+        try (var server = StompServer.builder().port(port).build()) {
+            server.start();
+            // client connects to stomp://localhost:{port}
+        }
+    }
+}
+```
+
+### Awaitility — correct vs wrong
+
+```java
+// ✅
+await().atMost(Duration.ofSeconds(30))
+       .pollInterval(Duration.ofMillis(50))
+       .until(subscription::hasData);
+
+// ❌ pollDelay without atMost guard
+await().pollDelay(Duration.ofSeconds(5)).until(() -> true);
+```
 
 ## URLs in tests
 
@@ -45,3 +117,8 @@ Integration tests use Testcontainers (ActiveMQ Artemis). Docker must be running 
 - `Thread.sleep()` to fix timing — use Awaitility or proper synchronization.
 - `@Disabled` / ignore failures without fixing root cause.
 - Bypass `StompContainer` with raw broker URLs when the extension is available.
+- Change production code to green a test without confirming STOMP spec alignment — follow [stomp4j-test-failure-diagnosis.mdc](stomp4j-test-failure-diagnosis.mdc).
+
+## When a test fails
+
+Follow [stomp4j-test-failure-diagnosis.mdc](stomp4j-test-failure-diagnosis.mdc): collect surefire logs, classify (test / infra / production / environment), fix the root cause, re-run alone then module suite.

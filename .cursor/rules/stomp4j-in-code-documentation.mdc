@@ -1,0 +1,71 @@
+---
+description: In-code comments for non-obvious behaviour — architecture, rejected alternatives, STOMP spec rationale
+globs: "**/*.java"
+alwaysApply: false
+---
+
+# In-code documentation
+
+In-code documentation means **comments that explain what the code alone cannot make obvious**. Good code is mostly self-explanatory; comments fill gaps the reader cannot infer from names and structure alone.
+
+## When to comment
+
+Add a comment when at least one applies:
+
+| Situation | What to document |
+|-----------|------------------|
+| **STOMP spec detail** | Normative behaviour, version differences (1.0 vs 1.1 vs 1.2), header semantics, frame layout edge cases — cite spec section or command (e.g. `CONNECT` heart-beat negotiation). |
+| **Architecture decision** | Why this module/layer owns the logic, transport vs protocol boundary, thread model, why an internal package is used. |
+| **Rejected alternative** | Another approach considered and **why it was not chosen** (performance, spec violation, broker quirk, JPMS boundary). |
+| **Non-obvious invariant** | Ordering requirements, idempotency, lifecycle rules aligned with [domain-specification.md](../../docs/domain-specification.md). |
+| **Intentional deviation** | Documented broker quirk or known gap; point to ARCHITECTURE.md §12 when user-visible. |
+| **Test or fix rationale** | After a non-trivial test fix, briefly state why production vs test was changed (see [stomp4j-test-failure-diagnosis.mdc](stomp4j-test-failure-diagnosis.mdc)). |
+
+## When not to comment
+
+- Restating what the code already says (`// increment counter` above `count++`).
+- Narrating every step of a straight-line method.
+- Duplicating Javadoc that only repeats parameter names.
+- Large tutorials — use [docs/](../../docs/) or ARCHITECTURE.md instead.
+
+## Style
+
+- Prefer **block comments** above the relevant statement or small block; use line comments only for a single trailing clarification.
+- Keep comments **short and factual** — one to four sentences unless a spec citation needs a bit more.
+- Use domain terms: `Destination`, `Subscription`, `Frame`, `Session`, `Transport`.
+- Link spec by name/version in prose; full URLs belong in markdown docs, not in every comment.
+
+## Examples
+
+```java
+// STOMP 1.2: heart-beat header is "cx,cy" in CONNECT; server may answer with adjusted values in CONNECTED.
+// We send 0,0 when the client did not request beats — spec allows disabling outbound heart-beats.
+negotiateHeartBeats(connectHeaders);
+```
+
+```java
+// Artemis expects WebSocket subprotocol v12.stomp on port 61614, not the OpenWire port (61616).
+// Using 61614 matches broker.xml in test resources and StompActiveMqContainer.
+```
+
+```java
+// Not using a second parse pass: MessageBuffer must decode incrementally from the transport
+// read loop; buffering full frames would break heart-beat octet interleaving on TCP.
+```
+
+```java
+// Rejected: fire-and-forget SUBSCRIBE without waiting for broker receipt — races with SEND
+// in integration tests and violates our settleSubscription invariant before publish.
+awaitSubscriptionReceipt(subscription);
+```
+
+## After protocol or boundary changes
+
+- New non-obvious STOMP behaviour → comment at the decision point **and** update [domain-specification.md](../../docs/domain-specification.md) if vocabulary or invariants change.
+- User-visible gap or quirk → ARCHITECTURE.md §12 in the same change.
+
+## Related
+
+- [stomp-protocol-compliance.mdc](stomp-protocol-compliance.mdc) — normative STOMP rules
+- [domain-model.mdc](domain-model.mdc) — ubiquitous language in tests and code
+- [stomp4j-java.mdc](stomp4j-java.mdc) — Java style and logging

@@ -126,6 +126,8 @@ public class StompClientImpl implements StompClient {
                         onError(message);
                     }
                     break;
+                case HEARTBEAT:
+                    break;
                 default:
                     break;
             }
