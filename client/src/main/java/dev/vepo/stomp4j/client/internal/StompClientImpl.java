@@ -527,16 +527,17 @@ public class StompClientImpl implements StompClient {
                    }).ifPresent(interval -> {
                        if (interval > 0) {
                            logger.info("Setting up heart beat with interval: {}", interval);
+                           // Check more often than the send interval so scheduling jitter does not miss the deadline.
+                           var checkPeriodMs = Math.max(1_000L, interval / 4);
                            heartBeatTask = heartBeatService.scheduleAtFixedRate(() -> {
                                try {
-                                   // Outbound idle only — inbound server heart-beats must not suppress client sends.
                                    if (transport.outboundSilentTime() >= interval) {
                                        transport.send(selectedProtocol.get().heartBeatMessage());
                                    }
                                } catch (RuntimeException ex) {
                                    logger.debug("Heartbeat send failed: {}", ex.getMessage());
                                }
-                           }, interval, interval, TimeUnit.MILLISECONDS);
+                           }, checkPeriodMs, checkPeriodMs, TimeUnit.MILLISECONDS);
                        } else {
                            logger.info("Heart beat interval is zero. Disabling heart beat");
                        }
