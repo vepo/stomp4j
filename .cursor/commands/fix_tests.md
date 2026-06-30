@@ -7,7 +7,7 @@ You are an expert Java developer. Your task is to fix **all failing tests** in t
 
 **Prerequisites:** Docker must be running (Testcontainers / ActiveMQ).
 
-Follow [stomp4j-test-during-development.mdc](../rules/stomp4j-test-during-development.mdc) and [stomp4j-test-failure-diagnosis.mdc](../rules/stomp4j-test-failure-diagnosis.mdc).
+Follow [stomp4j-testing.mdc](../rules/stomp4j-testing.mdc) and [stomp4j-test-failure-diagnosis.mdc](../rules/stomp4j-test-failure-diagnosis.mdc).
 
 Follow this exact loop — **do not ask for confirmation** and **do not invent workarounds**.
 

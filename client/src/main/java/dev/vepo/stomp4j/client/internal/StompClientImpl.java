@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -17,6 +16,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -189,9 +189,13 @@ public class StompClientImpl implements StompClient {
         @Override
         public List<String> poll() {
             Queue<Message> messageQueue = receivedMessages.get(SubscriptionImpl.this);
-            List<String> messages = new ArrayList<>(messageQueue.size());
-            while (!messageQueue.isEmpty()) {
-                messages.add(messageQueue.poll().body());
+            if (Objects.isNull(messageQueue)) {
+                return List.of();
+            }
+            List<String> messages = new ArrayList<>();
+            Message message;
+            while ((message = messageQueue.poll()) != null) {
+                messages.add(message.body());
             }
             logger.debug("polled messages! {}", messages);
             return messages;
@@ -358,7 +362,7 @@ public class StompClientImpl implements StompClient {
                                                message.headers().get(Header.DESTINATION));
         logger.debug("Subscription found! {}", subscription);
         if (subscription.isPresent()) {
-            receivedMessages.computeIfAbsent(subscription.get(), k -> new LinkedList<>())
+            receivedMessages.computeIfAbsent(subscription.get(), ignored -> new ConcurrentLinkedQueue<>())
                             .add(message);
             if (subscription.get().autoAckAfterDelivery()) {
                 selectedProtocol.get().acknowledge(message, session, transport);

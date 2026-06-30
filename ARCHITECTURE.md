@@ -250,9 +250,11 @@ SPI registrations live in `client/src/main/resources/META-INF/services/`.
 | `client` | `StompClientTcpTest`, `StompClientWebSocketTest` | Integration vs ActiveMQ (all STOMP versions) |
 | `server` | `StompServerTest` | Integration — embedded server + `stomp4j-client` |
 
-`StompContainer` JUnit 5 extension starts a shared `StompActiveMqContainer` (one broker per JVM, stopped on shutdown) and injects URLs/credentials into test methods. `StompTestSupport` in `client.tests.infra` provides shared `settleSubscription()` and `awaitMessageCount()` for broker-backed client tests. Docker-backed tests use `@Tag("integration")`.
+`StompContainer` JUnit 5 extension starts a shared `StompActiveMqContainer` (one broker per JVM, stopped on shutdown) and injects URLs/credentials into test methods. Client test infra in `client.tests.infra`: `TestDestinations` (exclusive names), `ArtemisJmsFixture` (per-test JMS), `StompTestSupport` (Awaitility with mandatory `atMost`). Server test infra in `server.tests.infra`: `EphemeralPorts`, `EmbeddedServerFixture` (embedded server on free ports), `TestDestinations`, `ServerTestSupport`.
 
-**Run:** `mvn verify` from repo root (full suite, Docker required). **During development:** tiered module tests — see `.cursor/rules/stomp4j-test-during-development.mdc`. **Fast loop:** `mvn -Pfast -pl commons,client,server test` skips integration-tagged tests.
+**Parallel execution:** `junit-platform.properties` in `client` and `server` enables JUnit parallel mode (`parallel.enabled=true`, concurrent classes and methods). Safety relies on exclusive destinations and ephemeral ports — not per-test brokers. Long-running tests (heartbeat) use `@Execution(SAME_THREAD)` at method level only. Docker-backed tests use `@Tag("integration")`.
+
+**Run:** `mvn verify` from repo root (full suite, Docker required). **During development:** tiered module tests — see `.cursor/rules/stomp4j-testing.mdc`. **Fast loop:** `mvn -Pfast -pl commons,client,server test` skips integration-tagged tests.
 
 ### Change impact map (minimum tests)
 
