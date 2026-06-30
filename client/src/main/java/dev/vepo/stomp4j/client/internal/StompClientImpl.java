@@ -525,11 +525,14 @@ public class StompClientImpl implements StompClient {
                        if (interval > 0) {
                            logger.info("Setting up heart beat with interval: {}", interval);
                            heartBeatTask = heartBeatService.scheduleAtFixedRate(() -> {
-                               logger.info("Sending heart beat message");
-                               if (transport.silentTime() > interval) {
-                                   transport.send(selectedProtocol.get().heartBeatMessage());
+                               try {
+                                   if (transport.silentTime() > interval) {
+                                       transport.send(selectedProtocol.get().heartBeatMessage());
+                                   }
+                               } catch (RuntimeException ex) {
+                                   logger.debug("Heartbeat send failed: {}", ex.getMessage());
                                }
-                           }, 0, interval, TimeUnit.MILLISECONDS);
+                           }, interval, interval, TimeUnit.MILLISECONDS);
                        } else {
                            logger.info("Heart beat interval is zero. Disabling heart beat");
                        }

@@ -1,17 +1,11 @@
 package dev.vepo.stomp4j.client.internal.transport;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
-import java.nio.channels.Channels;
-import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.SSLContext;
 
@@ -38,9 +32,8 @@ public class SecureWebSocketTransport implements Transport {
     private final ClientKey key;
     private final URI uri;
     private final TransportListener listener;
+    private final WebSocketInboundFramer framer = new WebSocketInboundFramer();
     private WebSocket webSocketClient;
-
-    private volatile long lastReceivedMessage;
 
     public SecureWebSocketTransport(URI uri, TransportListener listener) {
         this(uri, listener, defaultSslContext());
@@ -51,7 +44,6 @@ public class SecureWebSocketTransport implements Transport {
         this.listener = listener;
         this.httpClient = HttpClient.newBuilder().sslContext(sslContext).build();
         this.key = new ClientKey();
-        this.lastReceivedMessage = System.nanoTime();
     }
 
     @Override
@@ -64,16 +56,17 @@ public class SecureWebSocketTransport implements Transport {
 
     @Override
     public void connect() {
-        var byteArrayOutputStream = new ByteArrayOutputStream();
-        var byteChannel = Channels.newChannel(byteArrayOutputStream);
-        var buffer = new StringBuffer();
         logger.info("Opening secure WebSocket connection with: {}", uri);
         httpClient.newWebSocketBuilder()
                   .header("uuid", key.toHex())
                   .buildAsync(uri, new WebSocket.Listener() {
                       @Override
                       public CompletionStage<?> onBinary(WebSocket webSocket, ByteBuffer data, boolean last) {
-                          return handleData(webSocket, data, last, byteArrayOutputStream, byteChannel, buffer);
+                          var bytes = new byte[data.remaining()];
+                          data.get(bytes);
+                          framer.offer(bytes, listener);
+                          webSocket.request(1);
+                          return null;
                       }
 
                       @Override
@@ -96,50 +89,16 @@ public class SecureWebSocketTransport implements Transport {
                       public void onOpen(WebSocket webSocket) {
                           logger.info("Secure connection open!");
                           webSocketClient = webSocket;
-                          lastReceivedMessage = System.nanoTime();
                           listener.onConnected(SecureWebSocketTransport.this);
                       }
 
                       @Override
                       public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
-                          try {
-                              byteChannel.write(StandardCharsets.UTF_8.encode(CharBuffer.wrap(data)));
-                          } catch (IOException ex) {
-                              throw new RuntimeException(ex);
-                          }
-                          return handleBuffered(webSocket, last, byteArrayOutputStream, buffer);
+                          framer.offer(data, listener);
+                          webSocket.request(1);
+                          return null;
                       }
                   });
-    }
-
-    private CompletionStage<?> handleBuffered(WebSocket webSocket,
-                                              boolean last,
-                                              ByteArrayOutputStream byteArrayOutputStream,
-                                              StringBuffer buffer) {
-        var value = ByteBuffer.wrap(byteArrayOutputStream.toByteArray());
-        byteArrayOutputStream.reset();
-        buffer.append(StandardCharsets.UTF_8.decode(value));
-        if (last) {
-            lastReceivedMessage = System.nanoTime();
-            listener.onMessage(Message.readMessage(buffer.toString()));
-            buffer.setLength(0);
-        }
-        webSocket.request(1);
-        return null;
-    }
-
-    private CompletionStage<?> handleData(WebSocket webSocket,
-                                          ByteBuffer data,
-                                          boolean last,
-                                          ByteArrayOutputStream byteArrayOutputStream,
-                                          java.nio.channels.WritableByteChannel byteChannel,
-                                          StringBuffer buffer) {
-        try {
-            byteChannel.write(data);
-        } catch (IOException ex) {
-            throw new RuntimeException(ex);
-        }
-        return handleBuffered(webSocket, last, byteArrayOutputStream, buffer);
     }
 
     @Override
@@ -165,6 +124,6 @@ public class SecureWebSocketTransport implements Transport {
 
     @Override
     public long silentTime() {
-        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastReceivedMessage);
+        return framer.silentTime();
     }
 }

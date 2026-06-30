@@ -48,7 +48,7 @@ public class StompActiveMqContainer extends GenericContainer<StompActiveMqContai
     }
 
     public String webSocketUrl() {
-        return String.format("ws://%s:%d/stomp", getHost(), getMappedPort(61616));
+        return String.format("ws://%s:%d/stomp", getHost(), getMappedPort(61614));
     }
 
     public StompActiveMqContainer withPassword(String password) {

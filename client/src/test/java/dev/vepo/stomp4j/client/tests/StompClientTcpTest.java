@@ -20,6 +20,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -44,6 +46,7 @@ import jakarta.jms.Topic;
 
 @Tag("integration")
 @ExtendWith(StompContainer.class)
+@Execution(ExecutionMode.SAME_THREAD)
 class StompClientTcpTest {
 
     private static final Duration MESSAGE_COLLECTION_TIMEOUT = Duration.ofSeconds(30);
@@ -75,20 +78,18 @@ class StompClientTcpTest {
 
     @ParameterizedTest
     @MethodSource("allHeartbeatVersions")
-    @Timeout(value = 150, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    @Timeout(value = 150)
     void heartbeatTest(Stomp version, StompActiveMqContainer stomp) {
         try (StompClient client = StompClient.create(stomp.tcpUrl(),
                                                      new UserCredential(stomp.username(), stomp.password()),
                                                      Set.of(version))) {
             var messageList = new ArrayList<String>();
             client.connect();
+            client.subscribe(topicName, message -> messageList.add(message));
+            settleSubscription();
             await().timeout(Durations.TWO_MINUTES)
                    .pollDelay(Durations.ONE_MINUTE)
                    .until(() -> true);
-            client.subscribe(topicName, message -> {
-                messageList.add(message);
-            });
-            settleSubscription();
             sendMessage("message-01");
             sendMessage("message-02");
             sendMessage("message-03");
@@ -145,7 +146,7 @@ class StompClientTcpTest {
 
     @ParameterizedTest
     @MethodSource("allVersions")
-    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    @Timeout(value = 30)
     @DisplayName("Sending message with {0}")
     void sendMessageTest(Stomp version, StompActiveMqContainer stomp) {
         try (var pool = Executors.newSingleThreadExecutor();
@@ -185,7 +186,7 @@ class StompClientTcpTest {
 
     @ParameterizedTest
     @MethodSource("allVersions")
-    @Timeout(value = 60, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    @Timeout(value = 60)
     void subscribeSyncTest(Stomp version, StompActiveMqContainer stomp) {
         try (var client = StompClient.create(stomp.tcpUrl(),
                                              new UserCredential(stomp.username(), stomp.password()),
@@ -226,7 +227,7 @@ class StompClientTcpTest {
 
     @ParameterizedTest
     @MethodSource("allVersions")
-    @Timeout(value = 60, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    @Timeout(value = 60)
     void subscribeTest(Stomp version, StompActiveMqContainer stomp) {
         try (StompClient client = StompClient.create(stomp.tcpUrl(),
                                                      new UserCredential(stomp.username(), stomp.password()),

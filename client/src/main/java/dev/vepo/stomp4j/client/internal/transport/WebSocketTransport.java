@@ -1,17 +1,11 @@
 package dev.vepo.stomp4j.client.internal.transport;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
-import java.nio.channels.Channels;
-import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,15 +21,14 @@ public class WebSocketTransport implements Transport {
     private final ClientKey key;
     private final URI uri;
     private final TransportListener listener;
+    private final WebSocketInboundFramer framer = new WebSocketInboundFramer();
     private WebSocket webSocketClient;
-    private volatile long lastReceivedMessage;
 
     public WebSocketTransport(URI uri, TransportListener listener) {
         this.uri = uri;
         this.listener = listener;
         this.httpClient = HttpClient.newHttpClient();
         this.key = new ClientKey();
-        this.lastReceivedMessage = System.nanoTime();
     }
 
     @Override
@@ -48,32 +41,15 @@ public class WebSocketTransport implements Transport {
 
     @Override
     public void connect() {
-        var byteArrayOutputStream = new ByteArrayOutputStream();
-        var byteChannel = Channels.newChannel(byteArrayOutputStream);
-        var buffer = new StringBuffer();
         logger.info("Open WebSocket connection with: {}", uri);
         httpClient.newWebSocketBuilder()
                   .header("uuid", key.toHex())
                   .buildAsync(uri, new WebSocket.Listener() {
                       @Override
                       public CompletionStage<?> onBinary(WebSocket webSocket, ByteBuffer data, boolean last) {
-                          logger.info("Binary data received! last={}", last);
-                          try {
-                              byteChannel.write(data);
-                          } catch (IOException e) {
-                              throw new RuntimeException(e);
-                          }
-                          var value = ByteBuffer.wrap(byteArrayOutputStream.toByteArray());
-                          byteArrayOutputStream.reset();
-                          buffer.append(new String(value.array()));
-
-                          if (last) {
-                              lastReceivedMessage = System.nanoTime();
-                              listener.onMessage(Message.readMessage(buffer.toString()));
-                              buffer.setLength(0);
-                          } else {
-                              logger.info("Data until now: {}", buffer.toString());
-                          }
+                          var bytes = new byte[data.remaining()];
+                          data.get(bytes);
+                          framer.offer(bytes, listener);
                           webSocket.request(1);
                           return null;
                       }
@@ -98,50 +74,28 @@ public class WebSocketTransport implements Transport {
                       public void onOpen(WebSocket webSocket) {
                           logger.info("Connection open!");
                           webSocketClient = webSocket;
-                          lastReceivedMessage = System.nanoTime();
                           listener.onConnected(WebSocketTransport.this);
                       }
 
                       @Override
                       public CompletionStage<?> onPing(WebSocket webSocket, ByteBuffer message) {
-                          logger.info("Ping received!");
                           webSocket.request(1);
                           return null;
                       }
 
                       @Override
                       public CompletionStage<?> onPong(WebSocket webSocket, ByteBuffer message) {
-                          logger.info("Pong received!");
                           webSocket.request(1);
                           return null;
                       }
 
                       @Override
                       public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
-                          logger.info("Binary data received! last={}", last);
-                          try {
-                              byteChannel.write(StandardCharsets.UTF_8.encode(CharBuffer.wrap(data)));
-                          } catch (IOException e) {
-                              throw new RuntimeException(e);
-                          }
-                          var value = ByteBuffer.wrap(byteArrayOutputStream.toByteArray());
-                          byteArrayOutputStream.reset();
-                          buffer.append(new String(value.array()));
-
-                          if (last) {
-                              lastReceivedMessage = System.nanoTime();
-                              listener.onMessage(Message.readMessage(buffer.toString()));
-                              buffer.setLength(0);
-                          } else {
-                              logger.info("Data until now: {}", buffer.toString());
-                          }
+                          framer.offer(data, listener);
                           webSocket.request(1);
                           return null;
-
                       }
                   });
-
-        logger.info("WebSocket connection established!");
     }
 
     @Override
@@ -167,7 +121,6 @@ public class WebSocketTransport implements Transport {
 
     @Override
     public long silentTime() {
-        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastReceivedMessage);
+        return framer.silentTime();
     }
-
 }

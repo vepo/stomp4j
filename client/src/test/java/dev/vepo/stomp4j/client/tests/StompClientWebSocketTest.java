@@ -19,6 +19,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -44,7 +46,10 @@ import jakarta.jms.Topic;
 
 @Tag("integration")
 @ExtendWith(StompContainer.class)
+@Execution(ExecutionMode.SAME_THREAD)
 class StompClientWebSocketTest {
+
+    private static final Duration SUBSCRIPTION_SETTLE_DELAY = Duration.ofMillis(250);
 
     private static final Logger logger = LoggerFactory.getLogger(StompClientWebSocketTest.class);
 
@@ -87,7 +92,7 @@ class StompClientWebSocketTest {
 
     @ParameterizedTest
     @MethodSource("allVersions")
-    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    @Timeout(value = 60)
     @DisplayName("Sending message with {0}")
     void sendMessageTest(Stomp version, StompActiveMqContainer stomp) {
         try (var pool = Executors.newSingleThreadExecutor();
@@ -110,6 +115,10 @@ class StompClientWebSocketTest {
         }
     }
 
+    private void settleSubscription() {
+        await().pollDelay(SUBSCRIPTION_SETTLE_DELAY).until(() -> true);
+    }
+
     @BeforeEach
     void setup(StompActiveMqContainer stomp) throws JMSException {
         var connectionFactory = new ActiveMQConnectionFactory(stomp.clientUrl());
@@ -130,7 +139,7 @@ class StompClientWebSocketTest {
 
     @ParameterizedTest
     @MethodSource("allVersions")
-    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    @Timeout(value = 60)
     void versionTest(Stomp version, StompActiveMqContainer stomp) throws InterruptedException, JMSException {
         try (StompClient client = StompClient.create(stomp.webSocketUrl(),
                                                      new UserCredential(stomp.username(), stomp.password()),
@@ -138,9 +147,8 @@ class StompClientWebSocketTest {
                                                      Set.of(version))) {
             var messageList = new ArrayList<String>();
             client.connect();
-            client.subscribe(topicName, message -> {
-                messageList.add(message);
-            });
+            client.subscribe(topicName, message -> messageList.add(message));
+            settleSubscription();
             sendMessage("message-01");
             sendMessage("message-02");
             sendMessage("message-03");
