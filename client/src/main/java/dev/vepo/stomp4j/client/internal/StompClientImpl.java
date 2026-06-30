@@ -530,7 +530,7 @@ public class StompClientImpl implements StompClient {
                            heartBeatTask = heartBeatService.scheduleAtFixedRate(() -> {
                                try {
                                    // Outbound idle only — inbound server heart-beats must not suppress client sends.
-                                   if (transport.outboundSilentTime() > interval) {
+                                   if (transport.outboundSilentTime() >= interval) {
                                        transport.send(selectedProtocol.get().heartBeatMessage());
                                    }
                                } catch (RuntimeException ex) {

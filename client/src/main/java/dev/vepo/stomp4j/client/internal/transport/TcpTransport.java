@@ -125,6 +125,7 @@ public class TcpTransport implements Transport {
         return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastSentMessage);
     }
 
+    @Override
     public long silentTime() {
         return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastReceivedMessaged);
     }
