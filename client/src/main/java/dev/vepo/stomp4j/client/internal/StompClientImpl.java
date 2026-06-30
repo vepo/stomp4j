@@ -352,7 +352,7 @@ public class StompClientImpl implements StompClient {
         if (subscription.isPresent()) {
             consumers.get(subscription.get()).accept(message.body());
             if (subscription.get().autoAckAfterDelivery()) {
-                selectedProtocol.get().acknowledge(message, session, transport);
+                scheduleOutbound(() -> selectedProtocol.get().acknowledge(message, session, transport));
             }
             logger.debug("Consumer found! {}", subscription);
             return;
@@ -365,7 +365,7 @@ public class StompClientImpl implements StompClient {
             receivedMessages.computeIfAbsent(subscription.get(), ignored -> new ConcurrentLinkedQueue<>())
                             .add(message);
             if (subscription.get().autoAckAfterDelivery()) {
-                selectedProtocol.get().acknowledge(message, session, transport);
+                scheduleOutbound(() -> selectedProtocol.get().acknowledge(message, session, transport));
             }
         } else {
             logger.warn("No subscription found for message: {}", message);
@@ -551,6 +551,11 @@ public class StompClientImpl implements StompClient {
         if (Objects.nonNull(heartBeatTask)) {
             heartBeatTask.cancel(false);
         }
+    }
+
+    // Reader thread must not block on transport.send — heartbeats and ACKs share this executor.
+    private void scheduleOutbound(Runnable task) {
+        heartBeatService.execute(task);
     }
 
     @Override

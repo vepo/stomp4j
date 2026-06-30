@@ -30,6 +30,7 @@ public class TcpTransport implements Transport {
     private volatile long lastSentMessage;
     private final AtomicBoolean running;
     private final CountDownLatch done;
+    private final Object sendLock = new Object();
 
     public TcpTransport(URI uri, TransportListener listener) {
         this.host = uri.getHost();
@@ -111,10 +112,12 @@ public class TcpTransport implements Transport {
               .log("Sending message: {}");
 
         try {
-            var os = socket.getOutputStream();
-            os.write(message.encode().getBytes());
-            os.flush();
-            lastSentMessage = System.nanoTime();
+            synchronized (sendLock) {
+                var os = socket.getOutputStream();
+                os.write(message.encode().getBytes());
+                os.flush();
+                lastSentMessage = System.nanoTime();
+            }
         } catch (Exception e) {
             throw TransportFailures.sendFailed(e);
         }
