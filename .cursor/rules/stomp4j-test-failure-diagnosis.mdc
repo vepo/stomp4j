@@ -88,7 +88,7 @@ Before marking done:
 - [ ] **Report file** written under `${mavenRoot}/reports/` after fix is green (see §6)
 - [ ] No change contradicts STOMP spec or domain spec
 - [ ] `mvn verify` passes once (Docker running) — not after every incremental fix
-- [ ] If user-visible behaviour changed → [docs/features.md](../../docs/features.md); if gap closed → ARCHITECTURE.md §12
+- [ ] If user-visible behaviour changed → [docs/features.md](../../docs/features.md); if gap closed → ARCHITECTURE.md §13
 - [ ] Non-obvious fix rationale added as in-code comments per [stomp4j-in-code-documentation.mdc](stomp4j-in-code-documentation.mdc)
 
 ## 6. Failure report (mandatory after fix)

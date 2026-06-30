@@ -3,6 +3,9 @@ package dev.vepo.stomp4j.client.tests.infra;
 import static org.awaitility.Awaitility.await;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.function.IntSupplier;
 
 /**
@@ -18,7 +21,7 @@ public final class StompTestSupport {
     }
 
     public static void settleSubscription() {
-        await().pollDelay(SUBSCRIPTION_SETTLE_DELAY).until(() -> true);
+        settleFor(SUBSCRIPTION_SETTLE_DELAY);
     }
 
     public static void awaitMessageCount(int expected, IntSupplier actualSize) {
@@ -27,4 +30,16 @@ public final class StompTestSupport {
                .until(() -> actualSize.getAsInt() == expected);
     }
 
+    public static void settleFor(Duration delay) {
+        await().atMost(delay.plusSeconds(1))
+               .pollDelay(delay)
+               .until(() -> true);
+    }
+
+    /**
+     * Message callbacks run on the transport reader thread; use this list with {@code subscribe(topic, list::add)}.
+     */
+    public static List<String> threadSafeMessageList() {
+        return Collections.synchronizedList(new ArrayList<>());
+    }
 }

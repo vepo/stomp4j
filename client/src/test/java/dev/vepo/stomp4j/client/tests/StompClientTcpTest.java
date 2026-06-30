@@ -1,33 +1,23 @@
 package dev.vepo.stomp4j.client.tests;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.fail;
 import static org.awaitility.Awaitility.await;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.Executors;
 import java.util.stream.Stream;
 
-import org.apache.activemq.ActiveMQConnectionFactory;
 import org.awaitility.Durations;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
-import org.junit.jupiter.api.parallel.Execution;
-import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import dev.vepo.stomp4j.client.StompClient;
 import dev.vepo.stomp4j.client.UserCredential;
@@ -35,23 +25,17 @@ import dev.vepo.stomp4j.client.protocol.Stomp;
 import dev.vepo.stomp4j.client.protocol.v1_0.Stomp1_0;
 import dev.vepo.stomp4j.client.protocol.v1_1.Stomp1_1;
 import dev.vepo.stomp4j.client.protocol.v1_2.Stomp1_2;
+import dev.vepo.stomp4j.client.tests.infra.ArtemisJmsFixture;
 import dev.vepo.stomp4j.client.tests.infra.StompActiveMqContainer;
 import dev.vepo.stomp4j.client.tests.infra.StompContainer;
 import dev.vepo.stomp4j.client.tests.infra.StompTestSupport;
-import jakarta.jms.Connection;
-import jakarta.jms.DeliveryMode;
-import jakarta.jms.JMSException;
-import jakarta.jms.Session;
-import jakarta.jms.Topic;
 
 @Tag("integration")
 @ExtendWith(StompContainer.class)
-@Execution(ExecutionMode.SAME_THREAD)
+@Execution(ExecutionMode.CONCURRENT)
 class StompClientTcpTest {
 
     private static final Duration HEARTBEAT_IDLE_WAIT = Duration.ofSeconds(35);
-
-    private static final Logger logger = LoggerFactory.getLogger(StompClientTcpTest.class);
 
     private static Stream<Arguments> allHeartbeatVersions() {
         return Stream.of(Arguments.of(new Stomp1_1()),
@@ -64,76 +48,43 @@ class StompClientTcpTest {
                          Arguments.of(new Stomp1_2()));
     }
 
-    private String topicName;
-    private Connection connection;
-    private Session session;
-    private Topic topic;
-
     @ParameterizedTest
     @MethodSource("allHeartbeatVersions")
+    @Execution(ExecutionMode.SAME_THREAD)
     @Timeout(value = 150)
-    void heartbeatTest(Stomp version, StompActiveMqContainer stomp) {
-        try (StompClient client = StompClient.create(stomp.tcpUrl(),
+    void heartbeatTest(Stomp version, StompActiveMqContainer stomp) throws Exception {
+        try (var jms = ArtemisJmsFixture.openTopic(stomp);
+                StompClient client = StompClient.create(stomp.tcpUrl(),
                                                      new UserCredential(stomp.username(), stomp.password()),
                                                      Set.of(version))) {
-            var messageList = new ArrayList<String>();
+            var topicName = jms.destinationName();
+            var messageList = StompTestSupport.threadSafeMessageList();
             client.connect();
-            client.subscribe(topicName, message -> messageList.add(message));
+            client.subscribe(topicName, messageList::add);
             StompTestSupport.settleSubscription();
-            await().atMost(HEARTBEAT_IDLE_WAIT.plusSeconds(5))
-                   .pollDelay(HEARTBEAT_IDLE_WAIT)
-                   .until(() -> true);
-            sendMessage("message-01");
-            sendMessage("message-02");
-            sendMessage("message-03");
-            sendMessage("message-04");
-            sendMessage("message-05");
-            sendMessage("message-06");
-            sendMessage("message-07");
-            sendMessage("message-08");
-            sendMessage("message-09");
-            sendMessage("message-10");
+            StompTestSupport.settleFor(HEARTBEAT_IDLE_WAIT);
+            jms.publishText("message-01");
+            jms.publishText("message-02");
+            jms.publishText("message-03");
+            jms.publishText("message-04");
+            jms.publishText("message-05");
+            jms.publishText("message-06");
+            jms.publishText("message-07");
+            jms.publishText("message-08");
+            jms.publishText("message-09");
+            jms.publishText("message-10");
             StompTestSupport.awaitMessageCount(10, messageList::size);
             assertThat(messageList).containsExactly("message-01", "message-02", "message-03", "message-04",
                                                     "message-05", "message-06", "message-07", "message-08",
                                                     "message-09", "message-10");
             client.unsubscribe(topicName);
-            sendMessage("message-11");
-            await().pollDelay(Durations.ONE_SECOND).until(() -> true);
-            assertThat(messageList).size().isEqualTo(10);
-            sendMessage("message-12");
-            assertThat(messageList).size().isEqualTo(10);
-            sendMessage("message-13");
-            assertThat(messageList).size().isEqualTo(10);
-        }
-    }
-
-    Optional<String> receiveMessage(String content, Duration timeout) {
-        try (var consumer = session.createConsumer(topic)) {
-            long startTime = System.nanoTime();
-            while (System.nanoTime() - startTime < timeout.toNanos()) {
-                logger.info("Trying to read message...");
-                var message = consumer.receive(timeout.toMillis());
-                logger.info("Message received: {}", message);
-                if (Objects.nonNull(message) && message.isBodyAssignableTo(byte[].class)) {
-                    return Optional.ofNullable(new String(message.getBody(byte[].class)));
-                } else if (Objects.nonNull(message) && message.isBodyAssignableTo(String.class)) {
-                    return Optional.ofNullable(message.getBody(String.class));
-                }
-            }
-            return Optional.empty();
-        } catch (JMSException e) {
-            fail("Error sending message", e);
-            return Optional.empty();
-        }
-    }
-
-    void sendMessage(String content) {
-        try (var producer = session.createProducer(topic)) {
-            producer.setDeliveryMode(DeliveryMode.PERSISTENT);
-            producer.send(session.createTextMessage(content));
-        } catch (JMSException e) {
-            fail("Error sending message", e);
+            jms.publishText("message-11");
+            StompTestSupport.settleFor(Durations.ONE_SECOND);
+            assertThat(messageList).hasSize(10);
+            jms.publishText("message-12");
+            assertThat(messageList).hasSize(10);
+            jms.publishText("message-13");
+            assertThat(messageList).hasSize(10);
         }
     }
 
@@ -141,12 +92,12 @@ class StompClientTcpTest {
     @MethodSource("allVersions")
     @Timeout(value = 30)
     @DisplayName("Sending message with {0}")
-    void sendMessageTest(Stomp version, StompActiveMqContainer stomp) {
-        try (var pool = Executors.newSingleThreadExecutor();
+    void sendMessageTest(Stomp version, StompActiveMqContainer stomp) throws Exception {
+        try (var jms = ArtemisJmsFixture.openTopic(stomp);
                 var client = StompClient.create(stomp.tcpUrl(), new UserCredential(stomp.username(), stomp.password()), Set.of(version))) {
+            var topicName = jms.destinationName();
             client.connect();
-            // Queue is not durable. Start received first!
-            pool.submit(() -> {
+            var message = jms.receiveTextAfter(Duration.ofSeconds(15), () -> {
                 try {
                     Thread.sleep(Duration.ofMillis(100));
                 } catch (InterruptedException e) {
@@ -154,48 +105,37 @@ class StompClientTcpTest {
                 }
                 client.sendPlain(topicName, "hello queue", "text/plain");
             });
-            var message = receiveMessage(topicName, Duration.ofSeconds(15));
             assertThat(message).as("Verifying message for %s".formatted(version))
                                .isNotEmpty()
                                .hasValue("hello queue");
         }
     }
 
-    @BeforeEach
-    void setup(StompActiveMqContainer stomp) throws JMSException {
-        var connectionFactory = new ActiveMQConnectionFactory(stomp.clientUrl());
-        connection = connectionFactory.createConnection(stomp.username(), stomp.password());
-        // topic
-        connection.start();
-        session = connection.createSession(false, Session.AUTO_ACKNOWLEDGE);
-        topicName = "topic-" + UUID.randomUUID().toString();
-        topic = session.createTopic(topicName);
-        logger.info("Created topic: {}", topic);
-    }
-
     @ParameterizedTest
     @MethodSource("allVersions")
     @Timeout(value = 60)
-    void subscribeSyncTest(Stomp version, StompActiveMqContainer stomp) {
-        try (var client = StompClient.create(stomp.tcpUrl(),
+    void subscribeSyncTest(Stomp version, StompActiveMqContainer stomp) throws Exception {
+        try (var jms = ArtemisJmsFixture.openTopic(stomp);
+                var client = StompClient.create(stomp.tcpUrl(),
                                              new UserCredential(stomp.username(), stomp.password()),
                                              Set.of(version))) {
+            var topicName = jms.destinationName();
             client.connect();
             var subscription = client.subscribe(topicName);
             StompTestSupport.settleSubscription();
-            sendMessage("message-01");
-            sendMessage("message-02");
-            sendMessage("message-03");
-            sendMessage("message-04");
-            sendMessage("message-05");
-            sendMessage("message-06");
-            sendMessage("message-07");
-            sendMessage("message-08");
-            sendMessage("message-09");
-            sendMessage("message-10");
+            jms.publishText("message-01");
+            jms.publishText("message-02");
+            jms.publishText("message-03");
+            jms.publishText("message-04");
+            jms.publishText("message-05");
+            jms.publishText("message-06");
+            jms.publishText("message-07");
+            jms.publishText("message-08");
+            jms.publishText("message-09");
+            jms.publishText("message-10");
             var messageList = new ArrayList<String>();
             do {
-                await().atMost(StompTestSupport.MESSAGE_COLLECTION_TIMEOUT).until(() -> subscription.hasData());
+                await().atMost(StompTestSupport.MESSAGE_COLLECTION_TIMEOUT).until(subscription::hasData);
                 while (subscription.hasData()) {
                     subscription.poll().forEach(messageList::add);
                 }
@@ -204,57 +144,51 @@ class StompClientTcpTest {
                                                     "message-05", "message-06", "message-07", "message-08",
                                                     "message-09", "message-10");
             client.unsubscribe(topicName);
-            sendMessage("message-11");
-            await().pollDelay(Durations.ONE_SECOND).until(() -> true);
-            assertThat(messageList).size().isEqualTo(10);
-            sendMessage("message-12");
-            assertThat(messageList).size().isEqualTo(10);
-            sendMessage("message-13");
-            assertThat(messageList).size().isEqualTo(10);
+            jms.publishText("message-11");
+            StompTestSupport.settleFor(Durations.ONE_SECOND);
+            assertThat(messageList).hasSize(10);
+            jms.publishText("message-12");
+            assertThat(messageList).hasSize(10);
+            jms.publishText("message-13");
+            assertThat(messageList).hasSize(10);
         }
     }
 
     @ParameterizedTest
     @MethodSource("allVersions")
     @Timeout(value = 60)
-    void subscribeTest(Stomp version, StompActiveMqContainer stomp) {
-        try (StompClient client = StompClient.create(stomp.tcpUrl(),
+    void subscribeTest(Stomp version, StompActiveMqContainer stomp) throws Exception {
+        try (var jms = ArtemisJmsFixture.openTopic(stomp);
+                StompClient client = StompClient.create(stomp.tcpUrl(),
                                                      new UserCredential(stomp.username(), stomp.password()),
                                                      Set.of(version))) {
-            var messageList = new ArrayList<String>();
+            var topicName = jms.destinationName();
+            var messageList = StompTestSupport.threadSafeMessageList();
             client.connect();
-            client.subscribe(topicName, message -> {
-                messageList.add(message);
-            });
+            client.subscribe(topicName, messageList::add);
             StompTestSupport.settleSubscription();
-            sendMessage("message-01");
-            sendMessage("message-02");
-            sendMessage("message-03");
-            sendMessage("message-04");
-            sendMessage("message-05");
-            sendMessage("message-06");
-            sendMessage("message-07");
-            sendMessage("message-08");
-            sendMessage("message-09");
-            sendMessage("message-10");
+            jms.publishText("message-01");
+            jms.publishText("message-02");
+            jms.publishText("message-03");
+            jms.publishText("message-04");
+            jms.publishText("message-05");
+            jms.publishText("message-06");
+            jms.publishText("message-07");
+            jms.publishText("message-08");
+            jms.publishText("message-09");
+            jms.publishText("message-10");
             StompTestSupport.awaitMessageCount(10, messageList::size);
             assertThat(messageList).containsExactly("message-01", "message-02", "message-03", "message-04",
                                                     "message-05", "message-06", "message-07", "message-08",
                                                     "message-09", "message-10");
             client.unsubscribe(topicName);
-            sendMessage("message-11");
-            await().pollDelay(Durations.ONE_SECOND).until(() -> true);
-            assertThat(messageList).size().isEqualTo(10);
-            sendMessage("message-12");
-            assertThat(messageList).size().isEqualTo(10);
-            sendMessage("message-13");
-            assertThat(messageList).size().isEqualTo(10);
+            jms.publishText("message-11");
+            StompTestSupport.settleFor(Durations.ONE_SECOND);
+            assertThat(messageList).hasSize(10);
+            jms.publishText("message-12");
+            assertThat(messageList).hasSize(10);
+            jms.publishText("message-13");
+            assertThat(messageList).hasSize(10);
         }
-    }
-
-    @AfterEach
-    void tearDown() throws JMSException {
-        session.close();
-        connection.close();
     }
 }

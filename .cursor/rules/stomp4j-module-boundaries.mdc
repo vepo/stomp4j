@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Module boundaries (JPMS)
 
-Three Maven modules with explicit `module-info.java`. Full map: [ARCHITECTURE.md](../../ARCHITECTURE.md) §11.
+Three Maven modules with explicit `module-info.java`. Full map: [ARCHITECTURE.md](../../ARCHITECTURE.md) §12.
 
 ## Context map
 

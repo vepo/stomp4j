@@ -6,6 +6,15 @@ import org.testcontainers.containers.BindMode;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 
+/**
+ * <p><b>Responsibilities</b></p>
+ * <ul>
+ *   <li><b>Knowing:</b> Mapped broker ports and credentials for STOMP TCP, WebSocket, and OpenWire JMS.</li>
+ *   <li><b>Doing:</b> Configure and run the Artemis Testcontainers image with test {@code broker.xml}.</li>
+ * </ul>
+ * <p><b>Collaborators:</b> Testcontainers, classpath {@code broker.xml}</p>
+ * <p><b>Not responsible for:</b> test scenarios or destination naming.</p>
+ */
 public class StompActiveMqContainer extends GenericContainer<StompActiveMqContainer> {
 
     private static final String DEFAULT_USER = "user";

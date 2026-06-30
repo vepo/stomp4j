@@ -41,7 +41,7 @@ With `docker-compose` Artemis running, exercise client APIs from a small scratch
 - [ ] `mvn verify` passes (Docker running)
 - [ ] New behaviour has tests in the correct module
 - [ ] [docs/features.md](../../docs/features.md) updated if capabilities changed
-- [ ] ARCHITECTURE.md §12 updated if gaps were closed or discovered
+- [ ] ARCHITECTURE.md §13 updated if gaps were closed or discovered
 
 ## Never
 

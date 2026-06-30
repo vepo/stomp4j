@@ -18,7 +18,7 @@ Add a comment when at least one applies:
 | **Architecture decision** | Why this module/layer owns the logic, transport vs protocol boundary, thread model, why an internal package is used. |
 | **Rejected alternative** | Another approach considered and **why it was not chosen** (performance, spec violation, broker quirk, JPMS boundary). |
 | **Non-obvious invariant** | Ordering requirements, idempotency, lifecycle rules aligned with [domain-specification.md](../../docs/domain-specification.md). |
-| **Intentional deviation** | Documented broker quirk or known gap; point to ARCHITECTURE.md §12 when user-visible. |
+| **Intentional deviation** | Documented broker quirk or known gap; point to ARCHITECTURE.md §13 when user-visible. |
 | **Test or fix rationale** | After a non-trivial test fix, briefly state why production vs test was changed (see [stomp4j-test-failure-diagnosis.mdc](stomp4j-test-failure-diagnosis.mdc)). |
 
 ## When not to comment
@@ -62,7 +62,7 @@ awaitSubscriptionReceipt(subscription);
 ## After protocol or boundary changes
 
 - New non-obvious STOMP behaviour → comment at the decision point **and** update [domain-specification.md](../../docs/domain-specification.md) if vocabulary or invariants change.
-- User-visible gap or quirk → ARCHITECTURE.md §12 in the same change.
+- User-visible gap or quirk → ARCHITECTURE.md §13 in the same change.
 
 ## Related
 

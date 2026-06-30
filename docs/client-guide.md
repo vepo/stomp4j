@@ -51,6 +51,19 @@ try (var client = StompClient.create(url, credentials)) {
 - Always close the client to send `DISCONNECT` and free sockets.
 - **`close(Duration)`** sends `DISCONNECT` with a `receipt` header and waits up to the grace period for the matching `RECEIPT` before closing the transport.
 
+## Threading
+
+**Design intent:** a `StompClient` should be usable from multiple application threads after `connect()` (concurrent `send`, subscribe while receiving). Full guarantees are still being hardened — see [ARCHITECTURE.md §4](../ARCHITECTURE.md#4-threading-and-concurrency) and §13 (known gaps).
+
+| Topic | Behaviour today |
+|-------|-----------------|
+| **Callback subscriptions** | Your `Consumer` runs on the **transport I/O thread** (TCP read loop or WebSocket callback). Keep callbacks short; offload heavy work to your own executor. Do not touch non-thread-safe state without synchronisation. |
+| **Polling subscriptions** | `hasData()` / `poll()` from your thread; inbound messages are queued per subscription. |
+| **`join()`** | Blocks until `close()` completes on another thread. |
+| **Concurrent API calls** | Prefer serialising `subscribe` / `unsubscribe` from one thread until thread-safety work in §4.6 is complete. |
+
+For tests, avoid asserting from the test thread while messages arrive on the client I/O thread without `Awaitility` or latches — see ARCHITECTURE §4.5.
+
 ## Subscriptions
 
 Two styles are supported.

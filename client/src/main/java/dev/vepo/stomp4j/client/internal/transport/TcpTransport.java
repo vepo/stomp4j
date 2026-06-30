@@ -81,8 +81,8 @@ public class TcpTransport implements Transport {
             var messageBuffer = new MessageBuffer();
             var inputStream = socket.getInputStream();
             var buffer = new byte[1024];
-            int length = 0;
-            while (running.get() && (inputStream.available() == 0 || (length = inputStream.read(buffer)) != -1)) {
+            int length;
+            while (running.get() && (length = inputStream.read(buffer)) != -1) {
                 if (length > 0) {
                     this.lastReceivedMessaged = System.nanoTime();
                     if (messageBuffer.append(buffer, 0, length)) {
@@ -92,14 +92,6 @@ public class TcpTransport implements Transport {
                             logger.info("Message sent to listener.");
                         } while (messageBuffer.hasMessage());
                     }
-                    length = 0;
-                }
-
-                // logger.debug("No more data available. Sleeping for 1 second.");
-                try {
-                    TimeUnit.MILLISECONDS.sleep(100);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
                 }
             }
         } catch (IOException e) {

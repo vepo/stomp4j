@@ -88,5 +88,5 @@ STOMP protocol vocabulary and library-specific terms. Agents must align code and
 Before adding new commands, transports, or server features:
 
 1. Add terms to the tables above.
-2. Update [ARCHITECTURE.md](../ARCHITECTURE.md) §3 and §12 if boundaries or WIP status change.
+2. Update [ARCHITECTURE.md](../ARCHITECTURE.md) §3 and §13 if boundaries or WIP status change.
 3. Use domain terms in class, method, and test names — not generic technical names.
