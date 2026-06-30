@@ -24,11 +24,6 @@ public class StompContainer implements BeforeAllCallback {
         }
     }
 
-    @Override
-    public void beforeAll(ExtensionContext context) {
-        ensureStarted();
-    }
-
     private static void registerShutdownHook() {
         if (!shutdownHookRegistered) {
             shutdownHookRegistered = true;
@@ -40,5 +35,10 @@ public class StompContainer implements BeforeAllCallback {
                 }
             }, "stomp4j-quarkus-broker-shutdown"));
         }
+    }
+
+    @Override
+    public void beforeAll(ExtensionContext context) {
+        ensureStarted();
     }
 }

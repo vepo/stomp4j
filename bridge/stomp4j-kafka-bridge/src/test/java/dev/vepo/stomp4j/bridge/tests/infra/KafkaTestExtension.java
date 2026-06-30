@@ -16,13 +16,6 @@ public final class KafkaTestExtension implements BeforeAllCallback {
         return KAFKA;
     }
 
-    @Override
-    public void beforeAll(ExtensionContext context) {
-        if (!KAFKA.isRunning()) {
-            KAFKA.start();
-        }
-    }
-
     private static void registerShutdownHook() {
         if (!shutdownHookRegistered) {
             shutdownHookRegistered = true;
@@ -33,6 +26,13 @@ public final class KafkaTestExtension implements BeforeAllCallback {
                     }
                 }
             }, "stomp4j-kafka-shutdown"));
+        }
+    }
+
+    @Override
+    public void beforeAll(ExtensionContext context) {
+        if (!KAFKA.isRunning()) {
+            KAFKA.start();
         }
     }
 }

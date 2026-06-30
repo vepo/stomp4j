@@ -19,6 +19,7 @@ public class BrokerTestResource implements QuarkusTestResourceLifecycleManager {
 
     @Override
     public void stop() {
-        // Shared broker stays up for the JVM; stopped via shutdown hook in StompContainer.
+        // Shared broker stays up for the JVM; stopped via shutdown hook in
+        // StompContainer.
     }
 }

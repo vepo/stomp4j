@@ -27,6 +27,19 @@ public class StompContainer implements BeforeAllCallback, ParameterResolver {
         }
     }
 
+    private static void registerShutdownHook() {
+        if (!shutdownHookRegistered) {
+            shutdownHookRegistered = true;
+            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                synchronized (LOCK) {
+                    if (stomp != null && stomp.isRunning()) {
+                        stomp.stop();
+                    }
+                }
+            }, "stomp4j-spring-broker-shutdown"));
+        }
+    }
+
     @Override
     public void beforeAll(ExtensionContext context) {
         ensureStarted();
@@ -42,18 +55,5 @@ public class StompContainer implements BeforeAllCallback, ParameterResolver {
     public boolean supportsParameter(ParameterContext parameterContext, ExtensionContext extensionContext)
             throws ParameterResolutionException {
         return parameterContext.getParameter().getType() == StompActiveMqContainer.class;
-    }
-
-    private static void registerShutdownHook() {
-        if (!shutdownHookRegistered) {
-            shutdownHookRegistered = true;
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-                synchronized (LOCK) {
-                    if (stomp != null && stomp.isRunning()) {
-                        stomp.stop();
-                    }
-                }
-            }, "stomp4j-spring-broker-shutdown"));
-        }
     }
 }
