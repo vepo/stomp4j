@@ -1,0 +1,169 @@
+---
+description: Diagnose and fix failing tests — collect logs, classify root cause, preserve STOMP spec compliance, write reports
+alwaysApply: true
+---
+
+# Test failure diagnosis and fix
+
+When **any** test fails (`mvn verify`, module `test`, or CI), follow this workflow before changing code. Do not guess; do not weaken production behaviour to green a test.
+
+## 1. Collect evidence
+
+Run the **smallest repro** first, then widen if needed:
+
+```bash
+# Single test (preferred)
+mvn -pl <module> test -Dtest=ClassName#methodName -Dformatter.skip=true -Dspotless.skip=true
+
+# Single test class
+mvn -pl <module> test -Dtest=ClassName
+
+# Full gate (after fix)
+mvn verify
+```
+
+Gather artifacts:
+
+| Source | What to read |
+|--------|----------------|
+| `*/target/surefire-reports/*.txt` | Stack trace, suppressed exceptions, timeout vs assertion |
+| `*/target/surefire-reports/TEST-*.xml` | Per-method timing, parameterized index `[n]` |
+| Test stdout/stderr | STOMP frames, transport connect URL, broker ports |
+| CI log | Docker availability, port conflicts, parallel runs |
+
+Re-run the **failing test alone**. If it passes alone but fails in the suite → suspect **test infra** (shared state, ports, parallel execution, container reuse).
+
+## 2. Classify root cause
+
+Write a one-paragraph analysis with a **single primary bucket**:
+
+| Bucket | Signals | Fix location |
+|--------|---------|--------------|
+| **Test defect** | Wrong URL/port/path, wrong STOMP version rules, `pollDelay` > Awaitility timeout, `SEPARATE_THREAD` + shared broker, missing `settleSubscription`, assertion does not match spec | Test class or test resource only |
+| **Test infra** | `StompContainer` / `broker.xml` mismatch, wrong mapped port (TCP **61613**, WebSocket **61614**, OpenWire **61616**), container reuse with stale image, `junit-platform.properties` parallel + fixed ports | `*.tests.infra`, `src/test/resources/broker.xml`, `junit-platform.properties` |
+| **Production defect** | Fails alone and in suite; behaviour contradicts [STOMP spec](https://stomp.github.io/stomp-1.2.html) or [domain-specification.md](../../docs/domain-specification.md); regression introduced by recent change | `src/main` in correct module |
+| **Environment** | Docker not running, OOM, CI timeout on slow broker startup | Document; do not change protocol code |
+
+**Normative references** (read before changing behaviour):
+
+- STOMP spec: [stomp.github.io](https://stomp.github.io/) — wire format, command order, headers, heart-beats, ack semantics
+- Library vocabulary: [docs/domain-specification.md](../../docs/domain-specification.md)
+- Protocol rule: [stomp-protocol-compliance.mdc](stomp-protocol-compliance.mdc)
+
+## 3. Decision rules (mandatory)
+
+1. **Spec wins** — If production code matches the STOMP spec and the test does not, fix the **test**. If production code deviates from the spec, fix **production** and add tests that would fail if it regresses.
+2. **No implementation breakage** — Do not remove receipts, ack handling, framing, or API contracts solely to pass a test. Do not add sleeps, `@Disabled`, or widen timeouts without fixing the underlying race or misconfiguration.
+3. **Minimal diff** — One root cause per change set. Do not mix unrelated test stabilisation with feature work.
+4. **Module placement** — Protocol/framing → `commons` tests; client behaviour → `client`; embedded server flows → `server` (avoids Maven cyclic test deps).
+5. **Verify in the right module** — `commons` unit → `mvn -pl commons test`; broker-backed → `mvn -pl client test` or `server test` with Docker.
+
+## 4. Stable test framework (OO and infra)
+
+Reuse and extend existing abstractions; do not duplicate broker wiring per test.
+
+| Type | Use | Do not |
+|------|-----|--------|
+| Broker integration | `StompContainer` + `StompActiveMqContainer` | Raw `stomp://localhost:61613` or ad-hoc Testcontainers |
+| Embedded server | `StompServer.builder()` + unique port per test/method | Shared port across parameterized or parallel tests |
+| Async waits | Awaitility with `atMost` > `pollDelay` | `Thread.sleep()` |
+| Concurrency | `@Execution(SAME_THREAD)` + `junit.jupiter.execution.parallel.enabled=false` when sharing ports/broker | `SEPARATE_THREAD` + shared static container without isolation |
+| WebSocket Artemis | `ws://host:<mapped 61614>` + `Sec-WebSocket-Protocol` subprotocols (`v12.stomp`, …) | `ws://…:61616` (OpenWire) or `/stomp` path unless broker requires it |
+| TCP client transport | `MessageBuffer` incremental decode | Extra `\n` after encoded frames |
+
+**Test infra OO boundaries:**
+
+- `StompContainer` — JUnit extension; lifecycle and parameter resolution only
+- `StompActiveMqContainer` — broker image, ports, credentials, URLs (`tcpUrl`, `webSocketUrl`)
+- Test classes — scenario and assertions only; no embedded Docker logic
+
+When adding infra, prefer **one class, one responsibility** and package-private helpers in `*.tests.infra` (e.g. frame builders shared by server protocol tests).
+
+## 5. Fix checklist
+
+Before marking done:
+
+- [ ] Failing test re-run alone **and** in full module suite passes
+- [ ] Root cause documented in commit/PR (test / infra / production)
+- [ ] **Report file** written under `${mavenRoot}/reports/` after fix is green (see §6)
+- [ ] No change contradicts STOMP spec or domain spec
+- [ ] `mvn verify` passes once (Docker running) — not after every incremental fix
+- [ ] If user-visible behaviour changed → [docs/features.md](../../docs/features.md); if gap closed → ARCHITECTURE.md §13
+- [ ] Non-obvious fix rationale added as in-code comments per [stomp4j-in-code-documentation.mdc](stomp4j-in-code-documentation.mdc)
+
+## 6. Failure report (mandatory after fix)
+
+Write **one report file per root cause or fix session** — not one file per failed assertion while still iterating.
+
+**When to write**
+
+| Phase | Action |
+|-------|--------|
+| While investigating | Classify and fix; re-run single test or `mvn -pl <module> test` only |
+| After module tests green | Create or update the report file |
+| Trivial test typo / wrong port in test only | Optional report; still document in commit message |
+
+Skip the full report template for obvious one-line test fixes (wrong import, typo in expected string). Always report **production defects** and **non-trivial infra** fixes.
+
+**Location:** `${mavenRoot}/reports/`
+
+`${mavenRoot}` is the directory that contains the root `pom.xml` (repository root in this project). Create the `reports/` folder if it does not exist.
+
+**Filename:** `{sequential}-test-failure-{module}-{TestClass}-{methodName}-{yyyy-MM-dd-HHmmss}.md`
+
+- **`{sequential}`** — zero-padded counter (`001`, `002`, …) so directory listing sorts reports in creation order. Before creating a file, list `${mavenRoot}/reports/` and set `{sequential}` to one more than the highest existing prefix on any `*-test-failure-*.md` file (or `001` when the folder is empty or missing).
+- Omit `{methodName}` when the whole class failed or the root cause spans the class.
+- Use `unknown` for the method name when not yet isolated.
+- Example: `003-test-failure-client-StompClientTcpTest-shouldDeliverMessage-2026-06-29-143022.md`
+
+### Report template
+
+Copy this structure into every report:
+
+```markdown
+# Test failure report
+
+## Failing test
+- **Module:**
+- **Class:**
+- **Method:**
+- **Command used to reproduce:**
+
+## Why it failed
+- **Classification:** test defect | test infra | production defect | environment
+- **Exception / assertion:**
+- **Evidence:** (surefire excerpt, log line, or frame dump)
+- **Root cause:** (one paragraph)
+
+## Fix
+- **Files changed:**
+- **What changed:**
+- **Why this fix is correct:** (does not weaken receipts, acks, framing, or API contracts)
+
+## STOMP spec alignment
+- **Spec version:** 1.0 | 1.1 | 1.2
+- **Relevant spec section(s):** (command, header, heart-beats, ack, … — link or cite [stomp.github.io](https://stomp.github.io/))
+- **How the failure or fix relates to the spec:** (expected wire behaviour, command order, header semantics)
+- **Domain spec:** (only if [domain-specification.md](../../docs/domain-specification.md) adds library invariants beyond the normative spec)
+```
+
+Update the report after the fix is verified green. If classification or spec interpretation changes during investigation, amend the same file rather than creating duplicates.
+
+## 7. User summary
+
+When reporting to the user, include the same four areas as the report file:
+
+1. **Failing test** (module, class, method)
+2. **Why it failed** (classification + evidence)
+3. **Fix** (what changed and why it does not break implementation)
+4. **STOMP spec alignment** (version, section, relationship to expected behaviour)
+
+Point to the report path: `${mavenRoot}/reports/<sequential>-test-failure-….md`.
+
+## Related
+
+- [stomp4j-test-during-development.mdc](stomp4j-test-during-development.mdc) — tiered tests to prevent failures
+- [stomp4j-tests.mdc](stomp4j-tests.mdc) — layout and annotations
+- [stomp4j-test-docker.mdc](stomp4j-test-docker.mdc) — Docker commands and ports
+- [stomp4j-in-code-documentation.mdc](stomp4j-in-code-documentation.mdc) — when to add comments for non-obvious fixes
+- [static-analysis.mdc](static-analysis.mdc) — `mvn verify` gate

@@ -36,7 +36,7 @@ All client, server, and wire-format code **must** conform to the official STOMP 
 - **Sequences:** e.g. client waits for `CONNECTED` before `SUBSCRIBE`/`SEND`; server rejects invalid order.
 - **Headers:** use spec-defined names and semantics (`destination`, `subscription`, `ack`, `heart-beat`, …).
 - **Version negotiation:** honour negotiated version; do not mix 1.0 and 1.2 rules on the same session.
-- **No silent deviations:** if the spec cannot be followed (broker quirk, documented gap), note it in code comment and [ARCHITECTURE.md](../../ARCHITECTURE.md) §12.
+- **No silent deviations:** if the spec cannot be followed (broker quirk, documented gap), note it in code comment and [ARCHITECTURE.md](../../ARCHITECTURE.md) §13.
 
 ## Testing
 

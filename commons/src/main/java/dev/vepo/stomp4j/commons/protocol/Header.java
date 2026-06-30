@@ -18,7 +18,8 @@ public enum Header {
     VERSION("version"),
     CONTENT_TYPE("content-type"),
     SUBSCRIPTION("subscription"),
-    CONTENT_LENGTH("content-length");
+    CONTENT_LENGTH("content-length"),
+    TRANSACTION("transaction");
 
     private final String value;
 

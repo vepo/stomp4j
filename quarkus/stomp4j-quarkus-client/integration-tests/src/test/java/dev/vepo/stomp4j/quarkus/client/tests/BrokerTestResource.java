@@ -2,17 +2,15 @@ package dev.vepo.stomp4j.quarkus.client.tests;
 
 import java.util.Map;
 
-import dev.vepo.stomp4j.quarkus.client.tests.infra.StompActiveMqContainer;
+import dev.vepo.stomp4j.quarkus.client.tests.infra.StompContainer;
 import io.quarkus.test.common.QuarkusTestResourceLifecycleManager;
 
 public class BrokerTestResource implements QuarkusTestResourceLifecycleManager {
 
-    private StompActiveMqContainer container;
-
     @Override
     public Map<String, String> start() {
-        container = new StompActiveMqContainer();
-        container.start();
+        var container = StompContainer.broker();
+        StompContainer.ensureStarted();
         return Map.of(
                       "stomp4j.client.url", container.tcpUrl(),
                       "stomp4j.client.username", container.username(),
@@ -21,8 +19,7 @@ public class BrokerTestResource implements QuarkusTestResourceLifecycleManager {
 
     @Override
     public void stop() {
-        if (container != null) {
-            container.stop();
-        }
+        // Shared broker stays up for the JVM; stopped via shutdown hook in
+        // StompContainer.
     }
 }

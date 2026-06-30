@@ -6,6 +6,7 @@ import static org.awaitility.Awaitility.await;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,6 +27,7 @@ import dev.vepo.stomp4j.spring.boot.autoconfigure.client.StompClientTemplate;
 import dev.vepo.stomp4j.spring.boot.autoconfigure.client.StompListener;
 import dev.vepo.stomp4j.spring.boot.autoconfigure.tests.infra.StompContainer;
 
+@Tag("integration")
 @SpringBootTest
 @ContextConfiguration(classes = StompClientAutoConfigurationTest.TestApplication.class, initializers = StompClientAutoConfigurationTest.BrokerInitializer.class)
 @ExtendWith(StompContainer.class)

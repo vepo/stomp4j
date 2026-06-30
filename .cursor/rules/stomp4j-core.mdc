@@ -43,8 +43,8 @@ New transports or protocol versions:
 
 ## When adding a feature
 
-ARCHITECTURE.md §13 — domain spec → correct module → SPI if needed → tests → update ARCHITECTURE.md → `mvn verify`.
+ARCHITECTURE.md §13 — domain spec → correct module → SPI if needed → **tiered tests** ([stomp4j-test-during-development.mdc](stomp4j-test-during-development.mdc)) → `mvn verify`.
 
 ## When fixing a test
 
-Understand failure first; fix production code or test setup. Reuse `StompContainer` and existing test infra.
+Understand failure first; fix production code or test setup. Reuse `StompContainer`, `StompTestSupport`, and existing test infra. Follow [stomp4j-test-failure-diagnosis.mdc](stomp4j-test-failure-diagnosis.mdc).

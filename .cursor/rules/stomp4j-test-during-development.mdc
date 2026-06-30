@@ -1,0 +1,76 @@
+---
+description: Tiered test commands during development — catch regressions early before full verify
+alwaysApply: true
+---
+
+# Test during development
+
+Run the **smallest test scope that can catch your regression** after substantive edits — not only at task end. Full gate remains [static-analysis.mdc](static-analysis.mdc) (`mvn verify` once before marking done).
+
+## Tiered ladder
+
+| When | Command |
+|------|---------|
+| After compile-only / trivial edit | Skip tests until next substantive change |
+| After editing one module | See **module commands** below |
+| After editing public API or SPI | Module tests + downstream module if listed in **impact map** |
+| Before marking task done | `mvn verify` (once) |
+
+### Module commands
+
+```bash
+# Unit + embedded-server tests (no Docker)
+mvn -Pfast -pl commons test
+mvn -Pfast -pl client test
+mvn -Pfast -pl server test
+mvn -Pfast -pl bridge/stomp4j-kafka-bridge test
+
+# Full module tests (Docker required for @Tag("integration"))
+mvn -pl client test
+mvn -pl server test
+mvn -pl bridge/stomp4j-kafka-bridge test
+mvn -pl spring test
+mvn -pl quarkus test
+
+# Single failing or new test (fastest feedback)
+mvn -pl <module> test -Dtest=ClassName#methodName
+```
+
+Use `-Pfast` while iterating on logic that has unit/embedded coverage. Run **without** `-Pfast` when you touch transport, protocol, session, broker integration, or anything tagged `@Tag("integration")`.
+
+## Change impact map
+
+| You changed | Run before continuing |
+|-------------|------------------------|
+| `commons` / `commons.protocol` | `mvn -pl commons test` then `mvn -Pfast -pl client,server test`; if framing/commands changed → `mvn -pl client,server test` (Docker) |
+| `client` transport or protocol | `mvn -pl client test` (Docker) |
+| `client` public API only | `mvn -Pfast -pl client test`; add `mvn -pl client test` if behaviour is async/broker-facing |
+| `server.session` / channels / handlers | `mvn -pl server test` |
+| `server` public API | `mvn -Pfast -pl server test` |
+| `bridge/` | `mvn -pl bridge/stomp4j-kafka-bridge test` |
+| `spring/` or `quarkus/` | Respective module tests after core modules green |
+| Test infra (`*.tests.infra`, `broker.xml`) | All modules that use that infra — at minimum `mvn -pl client test` |
+
+## Production-code checklist
+
+When editing **production** code (not only test files), apply patterns from [stomp4j-tests.mdc](stomp4j-tests.mdc):
+
+- Protocol/transport/session change → run integration tests for that module.
+- After SUBSCRIBE in new broker tests → `StompTestSupport.settleSubscription()` before SEND.
+- WebSocket broker URL → port **61614** (`webSocketUrl()`), not OpenWire **61616**.
+- Broker-backed tests → `@Execution(SAME_THREAD)`, `@ExtendWith(StompContainer.class)` when possible.
+- Awaitility → always set `atMost`; ensure `atMost` > any `pollDelay`.
+
+## When a test fails
+
+1. **While fixing:** re-run single test or module test only — see [stomp4j-test-failure-diagnosis.mdc](stomp4j-test-failure-diagnosis.mdc) §1–§4.
+2. **After green:** one report file per root cause or session; full `mvn verify` once.
+
+Do **not** loop full `mvn verify` after every incremental fix.
+
+## Related
+
+- [development-experience.mdc](development-experience.mdc) — local Docker broker
+- [stomp4j-test-failure-diagnosis.mdc](stomp4j-test-failure-diagnosis.mdc) — fix workflow and reports
+- [stomp4j-test-docker.mdc](stomp4j-test-docker.mdc) — Testcontainers ports
+- ARCHITECTURE.md §9 — test layout, threading (§4), impact map

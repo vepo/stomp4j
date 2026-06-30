@@ -7,7 +7,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -17,11 +16,13 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -36,6 +37,8 @@ import dev.vepo.stomp4j.client.SendOptions;
 import dev.vepo.stomp4j.client.StompClient;
 import dev.vepo.stomp4j.client.StompDelivery;
 import dev.vepo.stomp4j.client.StompReceipt;
+import dev.vepo.stomp4j.client.StompTransaction;
+import dev.vepo.stomp4j.client.SubscribeOptions;
 import dev.vepo.stomp4j.client.exceptions.StompException;
 import dev.vepo.stomp4j.client.Subscription;
 import dev.vepo.stomp4j.client.UserCredential;
@@ -44,6 +47,7 @@ import dev.vepo.stomp4j.client.internal.transport.SecureWebSocketTransport;
 import dev.vepo.stomp4j.client.internal.transport.TcpTransport;
 import dev.vepo.stomp4j.client.internal.transport.TransportFactory;
 import dev.vepo.stomp4j.client.internal.transport.WebSocketTransport;
+import dev.vepo.stomp4j.client.protocol.SendParameters;
 import dev.vepo.stomp4j.client.protocol.Stomp;
 import dev.vepo.stomp4j.client.transport.Transport;
 import dev.vepo.stomp4j.client.transport.TransportListener;
@@ -122,6 +126,8 @@ public class StompClientImpl implements StompClient {
                         onError(message);
                     }
                     break;
+                case HEARTBEAT:
+                    break;
                 default:
                     break;
             }
@@ -183,9 +189,13 @@ public class StompClientImpl implements StompClient {
         @Override
         public List<String> poll() {
             Queue<Message> messageQueue = receivedMessages.get(SubscriptionImpl.this);
-            List<String> messages = new ArrayList<>(messageQueue.size());
-            while (!messageQueue.isEmpty()) {
-                messages.add(messageQueue.poll().body());
+            if (Objects.isNull(messageQueue)) {
+                return List.of();
+            }
+            List<String> messages = new ArrayList<>();
+            Message message;
+            while ((message = messageQueue.poll()) != null) {
+                messages.add(message.body());
             }
             logger.debug("polled messages! {}", messages);
             return messages;
@@ -209,6 +219,7 @@ public class StompClientImpl implements StompClient {
 
     private static final Logger logger = LoggerFactory.getLogger(StompClientImpl.class);
     private static final Duration DEFAULT_HEART_BEAT_INTERVAL = Duration.ofSeconds(30);
+    private static final Duration DEFAULT_CLOSE_GRACE_PERIOD = Duration.ofMillis(500);
     private final CountDownLatch connectedLatch;
     private final Object lock = new Object();
     private final AtomicReference<Stomp> selectedProtocol = new AtomicReference<>();
@@ -224,6 +235,7 @@ public class StompClientImpl implements StompClient {
     private ScheduledFuture<?> heartBeatTask;
 
     private final AtomicInteger subscriptIdSequence;
+    private final AtomicBoolean closed = new AtomicBoolean(false);
     private Set<Stomp> protocols;
     private Optional<String> session;
 
@@ -255,30 +267,44 @@ public class StompClientImpl implements StompClient {
         }
     }
 
+    void abortTransaction(String transactionId) {
+        selectedProtocol.get().abortTransaction(transactionId, transport);
+    }
+
+    @Override
+    public StompTransaction beginTransaction() {
+        var transactionId = UUID.randomUUID().toString();
+        selectedProtocol.get().beginTransaction(transactionId, transport);
+        return new StompTransactionImpl(this, transactionId);
+    }
+
     @Override
     public void close() {
+        close(DEFAULT_CLOSE_GRACE_PERIOD);
+    }
+
+    @Override
+    public void close(Duration gracePeriod) {
+        if (!closed.compareAndSet(false, true)) {
+            return;
+        }
         logger.info("Stopping Stomp client");
+        stopHeartBeat();
         if (Objects.nonNull(selectedProtocol.get())) {
-            transport.send(MessageBuilder.builder(Command.DISCONNECT).build());
-            try {
-                TimeUnit.MILLISECONDS.sleep(100);
-            } catch (InterruptedException ex) {
-                Thread.currentThread().interrupt();
-            }
+            gracefulDisconnect(gracePeriod);
+        } else {
+            transport.close();
         }
-        transport.close();
-        pendingReceipts.values().forEach(future -> future.completeExceptionally(new StompException("Client closed")));
-        pendingReceipts.clear();
-        logger.info("Stopping heartbeat service");
-        if (Objects.nonNull(heartBeatTask)) {
-            heartBeatTask.cancel(false);
-        }
-        logger.info("Shutting down heart beat service");
+        failPendingReceipts();
         heartBeatService.shutdown();
         logger.info("Stomp client stopped");
         synchronized (lock) {
             lock.notify();
         }
+    }
+
+    void commitTransaction(String transactionId) {
+        selectedProtocol.get().commitTransaction(transactionId, transport);
     }
 
     @Override
@@ -336,7 +362,7 @@ public class StompClientImpl implements StompClient {
                                                message.headers().get(Header.DESTINATION));
         logger.debug("Subscription found! {}", subscription);
         if (subscription.isPresent()) {
-            receivedMessages.computeIfAbsent(subscription.get(), k -> new LinkedList<>())
+            receivedMessages.computeIfAbsent(subscription.get(), ignored -> new ConcurrentLinkedQueue<>())
                             .add(message);
             if (subscription.get().autoAckAfterDelivery()) {
                 selectedProtocol.get().acknowledge(message, session, transport);
@@ -376,6 +402,12 @@ public class StompClientImpl implements StompClient {
         return new WebSocketTransport(uri, transportListener);
     }
 
+    private void failPendingReceipts() {
+        pendingReceipts.values()
+                       .forEach(future -> future.completeExceptionally(new StompException("Client closed")));
+        pendingReceipts.clear();
+    }
+
     private Optional<Subscription> findConsumerSubscription(Optional<String> subscriptionId,
                                                             Optional<String> destination) {
         return findSubscription(subscriptionId, destination, consumers.keySet());
@@ -410,6 +442,25 @@ public class StompClientImpl implements StompClient {
                                                     .findFirst());
     }
 
+    private void gracefulDisconnect(Duration gracePeriod) {
+        var receiptId = UUID.randomUUID().toString();
+        var completion = new CompletableFuture<Void>();
+        pendingReceipts.put(receiptId, completion);
+        transport.send(MessageBuilder.builder(Command.DISCONNECT)
+                                     .header(Header.RECEIPT, receiptId)
+                                     .build());
+        try {
+            completion.get(gracePeriod.toMillis(), TimeUnit.MILLISECONDS);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+        } catch (Exception ex) {
+            logger.debug("Graceful disconnect timed out or failed: {}", ex.getMessage());
+        } finally {
+            pendingReceipts.remove(receiptId, completion);
+            transport.close();
+        }
+    }
+
     @Override
     public void join() {
         synchronized (lock) {
@@ -424,29 +475,37 @@ public class StompClientImpl implements StompClient {
     @Override
     public StompReceipt send(String destination, String body, SendOptions options) {
         Objects.requireNonNull(options, "options cannot be null");
-        if (!options.receipt()) {
-            this.selectedProtocol.get()
-                                 .send(destination, body, options.contentType(), this.session, this.transport);
-            return new StompReceiptImpl("", CompletableFuture.completedFuture(null));
-        }
-        var receiptId = UUID.randomUUID().toString();
-        var completion = new CompletableFuture<Void>();
-        pendingReceipts.put(receiptId, completion);
-        this.selectedProtocol.get()
-                             .send(destination,
-                                   body,
-                                   options.contentType(),
-                                   this.session,
-                                   this.transport,
-                                   Optional.of(receiptId));
-        completion.orTimeout(options.receiptTimeout().toMillis(), TimeUnit.MILLISECONDS)
-                  .whenComplete((ignored, error) -> pendingReceipts.remove(receiptId, completion));
-        return new StompReceiptImpl(receiptId, completion);
+        return sendWithParameters(destination, body, options, Optional.empty());
+    }
+
+    StompReceipt sendInTransaction(String transactionId, String destination, String body, SendOptions options) {
+        Objects.requireNonNull(options, "options cannot be null");
+        return sendWithParameters(destination, body, options, Optional.of(transactionId));
     }
 
     @Override
     public void sendPlain(String destination, String content, String contentType) {
         this.selectedProtocol.get().send(destination, content, contentType, this.session, this.transport);
+    }
+
+    private StompReceipt sendWithParameters(String destination,
+                                            String body,
+                                            SendOptions options,
+                                            Optional<String> transactionId) {
+        var receiptId = options.receipt() ? Optional.of(UUID.randomUUID().toString()) : Optional.<String>empty();
+        var parameters = SendParameters.of(options.headers(), receiptId, transactionId);
+        if (receiptId.isEmpty()) {
+            selectedProtocol.get()
+                            .send(destination, body, options.contentType(), session, transport, parameters);
+            return new StompReceiptImpl("", CompletableFuture.completedFuture(null));
+        }
+        var completion = new CompletableFuture<Void>();
+        pendingReceipts.put(receiptId.get(), completion);
+        selectedProtocol.get()
+                        .send(destination, body, options.contentType(), session, transport, parameters);
+        completion.orTimeout(options.receiptTimeout().toMillis(), TimeUnit.MILLISECONDS)
+                  .whenComplete((ignored, error) -> pendingReceipts.remove(receiptId.get(), completion));
+        return new StompReceiptImpl(receiptId.get(), completion);
     }
 
     private void setupConnection(Message message) {
@@ -461,16 +520,24 @@ public class StompClientImpl implements StompClient {
                    .get(Header.HEART_BEAT)
                    .map(heartBeatInterval -> {
                        String[] heartBeats = heartBeatInterval.split(",");
-                       return Math.round(0.7 * Integer.parseInt(heartBeats[1]));
+                       var serverExpectMs = Integer.parseInt(heartBeats[1].trim());
+                       var clientSendMs = DEFAULT_HEART_BEAT_INTERVAL.toMillis();
+                       // STOMP 1.2: client send rate is max(cx, sy); use 0.7 to send before deadline.
+                       return Math.round(0.7 * Math.max(clientSendMs, serverExpectMs));
                    }).ifPresent(interval -> {
                        if (interval > 0) {
                            logger.info("Setting up heart beat with interval: {}", interval);
+                           // Check more often than the send interval so scheduling jitter does not miss the deadline.
+                           var checkPeriodMs = Math.max(1_000L, interval / 4);
                            heartBeatTask = heartBeatService.scheduleAtFixedRate(() -> {
-                               logger.info("Sending heart beat message");
-                               if (transport.silentTime() > interval) {
-                                   transport.send(selectedProtocol.get().heartBeatMessage());
+                               try {
+                                   if (transport.outboundSilentTime() >= interval) {
+                                       transport.send(selectedProtocol.get().heartBeatMessage());
+                                   }
+                               } catch (RuntimeException ex) {
+                                   logger.debug("Heartbeat send failed: {}", ex.getMessage());
                                }
-                           }, 0, interval, TimeUnit.MILLISECONDS);
+                           }, checkPeriodMs, checkPeriodMs, TimeUnit.MILLISECONDS);
                        } else {
                            logger.info("Heart beat interval is zero. Disabling heart beat");
                        }
@@ -480,33 +547,55 @@ public class StompClientImpl implements StompClient {
         logger.info("Client connected");
     }
 
+    private void stopHeartBeat() {
+        if (Objects.nonNull(heartBeatTask)) {
+            heartBeatTask.cancel(false);
+        }
+    }
+
     @Override
     public Subscription subscribe(String topic) {
-        var subscriptionId = subscriptIdSequence.incrementAndGet();
-        var subscription = new SubscriptionImpl(topic, subscriptionId, AckMode.CLIENT, true);
-        this.polling.add(subscription);
-        this.selectedProtocol.get().subscribe(subscription, session, this.transport, subscription.ackMode());
-        return subscription;
+        return subscribe(topic, SubscribeOptions.defaults());
     }
 
     @Override
     public Subscription subscribe(String topic, AckMode ackMode, Consumer<StompDelivery> consumer) {
-        Objects.requireNonNull(ackMode, "ackMode cannot be null");
-        Objects.requireNonNull(consumer, "consumer cannot be null");
-        var subscriptionId = subscriptIdSequence.incrementAndGet();
-        var autoAckAfterDelivery = !ackMode.requiresManualAcknowledgement();
-        var subscription = new SubscriptionImpl(topic, subscriptionId, ackMode, autoAckAfterDelivery);
-        this.deliveryConsumers.put(subscription, consumer);
-        this.selectedProtocol.get().subscribe(subscription, this.session, this.transport, ackMode);
-        return subscription;
+        return subscribe(topic, SubscribeOptions.builder().ackMode(ackMode).build(), consumer);
     }
 
     @Override
     public Subscription subscribe(String topic, Consumer<String> consumer) {
+        Objects.requireNonNull(consumer, "consumer cannot be null");
         var subscriptionId = subscriptIdSequence.incrementAndGet();
         var subscription = new SubscriptionImpl(topic, subscriptionId, AckMode.CLIENT, true);
-        this.consumers.put(subscription, consumer);
-        this.selectedProtocol.get().subscribe(subscription, this.session, this.transport, subscription.ackMode());
+        consumers.put(subscription, consumer);
+        selectedProtocol.get()
+                        .subscribe(subscription, session, transport, subscription.ackMode(), Map.of());
+        return subscription;
+    }
+
+    @Override
+    public Subscription subscribe(String topic, SubscribeOptions options) {
+        Objects.requireNonNull(options, "options cannot be null");
+        var subscriptionId = subscriptIdSequence.incrementAndGet();
+        var autoAckAfterDelivery = !options.ackMode().requiresManualAcknowledgement();
+        var subscription = new SubscriptionImpl(topic, subscriptionId, options.ackMode(), autoAckAfterDelivery);
+        polling.add(subscription);
+        selectedProtocol.get()
+                        .subscribe(subscription, session, transport, options.ackMode(), options.headers());
+        return subscription;
+    }
+
+    @Override
+    public Subscription subscribe(String topic, SubscribeOptions options, Consumer<StompDelivery> consumer) {
+        Objects.requireNonNull(options, "options cannot be null");
+        Objects.requireNonNull(consumer, "consumer cannot be null");
+        var subscriptionId = subscriptIdSequence.incrementAndGet();
+        var autoAckAfterDelivery = !options.ackMode().requiresManualAcknowledgement();
+        var subscription = new SubscriptionImpl(topic, subscriptionId, options.ackMode(), autoAckAfterDelivery);
+        deliveryConsumers.put(subscription, consumer);
+        selectedProtocol.get()
+                        .subscribe(subscription, session, transport, options.ackMode(), options.headers());
         return subscription;
     }
 

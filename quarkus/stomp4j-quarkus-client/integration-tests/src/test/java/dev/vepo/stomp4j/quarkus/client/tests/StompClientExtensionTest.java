@@ -5,6 +5,7 @@ import static org.awaitility.Awaitility.await;
 
 import java.time.Duration;
 
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 import dev.vepo.stomp4j.quarkus.cdi.StompSync;
@@ -14,6 +15,7 @@ import io.quarkus.test.junit.QuarkusTest;
 import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
 
+@Tag("integration")
 @QuarkusTest
 @QuarkusTestResource(BrokerTestResource.class)
 class StompClientExtensionTest {

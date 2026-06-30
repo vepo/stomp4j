@@ -27,6 +27,7 @@ public class TcpTransport implements Transport {
     private final ExecutorService executor;
     private Socket socket;
     private volatile long lastReceivedMessaged;
+    private volatile long lastSentMessage;
     private final AtomicBoolean running;
     private final CountDownLatch done;
 
@@ -36,6 +37,7 @@ public class TcpTransport implements Transport {
         this.listener = listener;
         this.executor = Executors.newSingleThreadExecutor();
         this.lastReceivedMessaged = System.nanoTime();
+        this.lastSentMessage = System.nanoTime();
         this.running = new AtomicBoolean(true);
         this.done = new CountDownLatch(1);
     }
@@ -65,9 +67,9 @@ public class TcpTransport implements Transport {
             executor.submit(this::readMessages);
             listener.onConnected(this);
         } catch (UnknownHostException uhe) {
-            throw new RuntimeException(uhe);
+            throw TransportFailures.connectFailed("%s:%d".formatted(host, port), uhe);
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            throw TransportFailures.connectFailed("%s:%d".formatted(host, port), e);
         }
     }
 
@@ -81,25 +83,17 @@ public class TcpTransport implements Transport {
             var messageBuffer = new MessageBuffer();
             var inputStream = socket.getInputStream();
             var buffer = new byte[1024];
-            int length = 0;
-            while (running.get() && (inputStream.available() == 0 || (length = inputStream.read(buffer)) != -1)) {
+            int length;
+            while (running.get() && (length = inputStream.read(buffer)) != -1) {
                 if (length > 0) {
                     this.lastReceivedMessaged = System.nanoTime();
-                    if (messageBuffer.append(new String(buffer, 0, length))) {
+                    if (messageBuffer.append(buffer, 0, length)) {
                         do {
                             logger.info("Message complete. Sending to listener. listener: {}", listener);
                             listener.onMessage(messageBuffer.message());
                             logger.info("Message sent to listener.");
                         } while (messageBuffer.hasMessage());
                     }
-                    length = 0;
-                }
-
-                // logger.debug("No more data available. Sleeping for 1 second.");
-                try {
-                    TimeUnit.MILLISECONDS.sleep(100);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
                 }
             }
         } catch (IOException e) {
@@ -119,13 +113,19 @@ public class TcpTransport implements Transport {
         try {
             var os = socket.getOutputStream();
             os.write(message.encode().getBytes());
-            os.write("\n".getBytes());
             os.flush();
+            lastSentMessage = System.nanoTime();
         } catch (Exception e) {
-            logger.error("Error sending message", e);
+            throw TransportFailures.sendFailed(e);
         }
     }
 
+    @Override
+    public long outboundSilentTime() {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastSentMessage);
+    }
+
+    @Override
     public long silentTime() {
         return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastReceivedMessaged);
     }

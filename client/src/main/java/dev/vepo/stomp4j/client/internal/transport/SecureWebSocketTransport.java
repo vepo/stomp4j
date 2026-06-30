@@ -1,16 +1,12 @@
 package dev.vepo.stomp4j.client.internal.transport;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
-import java.nio.channels.Channels;
-import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import javax.net.ssl.SSLContext;
@@ -38,9 +34,11 @@ public class SecureWebSocketTransport implements Transport {
     private final ClientKey key;
     private final URI uri;
     private final TransportListener listener;
+    private final WebSocketInboundFramer framer = new WebSocketInboundFramer();
+    private volatile long lastSentMessage = System.nanoTime();
     private WebSocket webSocketClient;
-
-    private volatile long lastReceivedMessage;
+    private final CountDownLatch openLatch = new CountDownLatch(1);
+    private final CountDownLatch closeLatch = new CountDownLatch(1);
 
     public SecureWebSocketTransport(URI uri, TransportListener listener) {
         this(uri, listener, defaultSslContext());
@@ -51,40 +49,76 @@ public class SecureWebSocketTransport implements Transport {
         this.listener = listener;
         this.httpClient = HttpClient.newBuilder().sslContext(sslContext).build();
         this.key = new ClientKey();
-        this.lastReceivedMessage = System.nanoTime();
+    }
+
+    private void awaitWebSocketOpen() {
+        try {
+            if (!openLatch.await(30, TimeUnit.SECONDS)) {
+                throw TransportFailures.connectFailed(uri.toString(), new IllegalStateException("WebSocket open timed out"));
+            }
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw TransportFailures.connectFailed(uri.toString(), ex);
+        }
     }
 
     @Override
     public void close() {
         if (Objects.nonNull(webSocketClient)) {
-            webSocketClient.sendClose(WebSocket.NORMAL_CLOSURE, "Client closed connection");
+            try {
+                webSocketClient.sendClose(WebSocket.NORMAL_CLOSURE, "Client closed connection");
+                if (!closeLatch.await(2, TimeUnit.SECONDS)) {
+                    // Brokers often leave the WebSocket open after STOMP DISCONNECT;
+                    // HttpClient.close()
+                    // blocks until the socket ends, so abort when no close frame arrives in time.
+                    logger.debug("WebSocket close frame not acknowledged; aborting connection");
+                    webSocketClient.abort();
+                }
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                webSocketClient.abort();
+            } finally {
+                webSocketClient = null;
+            }
         }
         httpClient.close();
     }
 
     @Override
     public void connect() {
-        var byteArrayOutputStream = new ByteArrayOutputStream();
-        var byteChannel = Channels.newChannel(byteArrayOutputStream);
-        var buffer = new StringBuffer();
         logger.info("Opening secure WebSocket connection with: {}", uri);
         httpClient.newWebSocketBuilder()
                   .header("uuid", key.toHex())
+                  // STOMP over WebSocket negotiates the application protocol during the HTTP
+                  // upgrade
+                  // via Sec-WebSocket-Protocol (v12.stomp, v11.stomp, …), not ordinary HTTP
+                  // content
+                  // negotiation. After the handshake, frames use the STOMP wire format — see
+                  // https://stomp.github.io/stomp-specification-1.2.html and
+                  // https://stomp.github.io/
+                  .subprotocols("v12.stomp", "v11.stomp", "v10.stomp", "stomp")
                   .buildAsync(uri, new WebSocket.Listener() {
                       @Override
                       public CompletionStage<?> onBinary(WebSocket webSocket, ByteBuffer data, boolean last) {
-                          return handleData(webSocket, data, last, byteArrayOutputStream, byteChannel, buffer);
+                          var bytes = new byte[data.remaining()];
+                          data.get(bytes);
+                          framer.offer(bytes, listener);
+                          webSocket.request(1);
+                          return null;
                       }
 
                       @Override
                       public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
                           logger.warn("Secure connection closed! statusCode={}, reason={}", statusCode, reason);
+                          closeLatch.countDown();
                           return null;
                       }
 
                       @Override
                       public void onError(WebSocket webSocket, Throwable error) {
                           logger.error("Error on secure WebSocket connection!", error);
+                          openLatch.countDown();
+                          closeLatch.countDown();
                           listener.onError(new Message(Command.ERROR,
                                                        dev.vepo.stomp4j.commons.protocol.Headers.builder()
                                                                                                 .with("message", error.getMessage())
@@ -96,50 +130,19 @@ public class SecureWebSocketTransport implements Transport {
                       public void onOpen(WebSocket webSocket) {
                           logger.info("Secure connection open!");
                           webSocketClient = webSocket;
-                          lastReceivedMessage = System.nanoTime();
+                          webSocket.request(1);
+                          openLatch.countDown();
                           listener.onConnected(SecureWebSocketTransport.this);
                       }
 
                       @Override
                       public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
-                          try {
-                              byteChannel.write(StandardCharsets.UTF_8.encode(CharBuffer.wrap(data)));
-                          } catch (IOException ex) {
-                              throw new RuntimeException(ex);
-                          }
-                          return handleBuffered(webSocket, last, byteArrayOutputStream, buffer);
+                          framer.offer(data, listener);
+                          webSocket.request(1);
+                          return null;
                       }
                   });
-    }
-
-    private CompletionStage<?> handleBuffered(WebSocket webSocket,
-                                              boolean last,
-                                              ByteArrayOutputStream byteArrayOutputStream,
-                                              StringBuffer buffer) {
-        var value = ByteBuffer.wrap(byteArrayOutputStream.toByteArray());
-        byteArrayOutputStream.reset();
-        buffer.append(StandardCharsets.UTF_8.decode(value));
-        if (last) {
-            lastReceivedMessage = System.nanoTime();
-            listener.onMessage(Message.readMessage(buffer.toString()));
-            buffer.setLength(0);
-        }
-        webSocket.request(1);
-        return null;
-    }
-
-    private CompletionStage<?> handleData(WebSocket webSocket,
-                                          ByteBuffer data,
-                                          boolean last,
-                                          ByteArrayOutputStream byteArrayOutputStream,
-                                          java.nio.channels.WritableByteChannel byteChannel,
-                                          StringBuffer buffer) {
-        try {
-            byteChannel.write(data);
-        } catch (IOException ex) {
-            throw new RuntimeException(ex);
-        }
-        return handleBuffered(webSocket, last, byteArrayOutputStream, buffer);
+        awaitWebSocketOpen();
     }
 
     @Override
@@ -149,15 +152,28 @@ public class SecureWebSocketTransport implements Transport {
 
     @Override
     public void send(Message message) {
+        if (Objects.isNull(webSocketClient)) {
+            throw TransportFailures.notConnected();
+        }
         logger.atDebug()
               .addArgument(() -> Message.formatted(message.encode()))
               .log("Sending message: {}");
-        webSocketClient.sendText(message.encode(), true);
-        webSocketClient.request(1);
+        try {
+            webSocketClient.sendText(message.encode(), true);
+            webSocketClient.request(1);
+            lastSentMessage = System.nanoTime();
+        } catch (RuntimeException ex) {
+            throw TransportFailures.sendFailed(ex);
+        }
+    }
+
+    @Override
+    public long outboundSilentTime() {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastSentMessage);
     }
 
     @Override
     public long silentTime() {
-        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastReceivedMessage);
+        return framer.silentTime();
     }
 }

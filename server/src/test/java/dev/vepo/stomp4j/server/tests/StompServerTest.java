@@ -11,91 +11,120 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import dev.vepo.stomp4j.client.AckMode;
 import dev.vepo.stomp4j.client.StompClient;
 import dev.vepo.stomp4j.client.UserCredential;
 import dev.vepo.stomp4j.client.exceptions.StompException;
-import dev.vepo.stomp4j.commons.TransportType;
+import dev.vepo.stomp4j.client.protocol.v1_2.Stomp1_2;
 import dev.vepo.stomp4j.commons.protocol.Command;
 import dev.vepo.stomp4j.commons.protocol.Header;
 import dev.vepo.stomp4j.commons.protocol.Headers;
 import dev.vepo.stomp4j.commons.protocol.Message;
-import dev.vepo.stomp4j.client.protocol.v1_2.Stomp1_2;
-import dev.vepo.stomp4j.server.StompServer;
 import dev.vepo.stomp4j.server.SubscriberAckListener;
 import dev.vepo.stomp4j.server.StompSession;
 import dev.vepo.stomp4j.server.SubscriptionHandler;
+import dev.vepo.stomp4j.server.tests.infra.EmbeddedServerFixture;
+import dev.vepo.stomp4j.server.tests.infra.EmbeddedServerFixture.ClientTransport;
+import dev.vepo.stomp4j.server.tests.infra.ServerTestSupport;
+import dev.vepo.stomp4j.server.tests.infra.TestDestinations;
 
+@Execution(ExecutionMode.CONCURRENT)
 class StompServerTest {
     private record ReceivedMessage(String topic, String message) {}
 
-    @ParameterizedTest
-    @ValueSource(strings = { "stomp://localhost:5504" })
+    @Test
     @DisplayName("Server should reject invalid credentials")
-    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    void authenticationRejectionTest(String url) {
-        try (var server = StompServer.builder()
-                                     .channel(TransportType.TCP, 5504)
-                                     .authenticator(credentials -> "user".equals(credentials.username())
-                                             && "pass".equals(credentials.password()))
-                                     .subscription(topic -> true)
-                                     .handler(message -> {})
-                                     .start();
-                var client = StompClient.create(url, new UserCredential("wrong", "creds"))) {
+    @Timeout(value = 10)
+    void authenticationRejectionTest() {
+        try (var fixture = EmbeddedServerFixture.builder()
+                                                .withTcp()
+                                                .authenticator(credentials -> "user".equals(credentials.username())
+                                                        && "pass".equals(credentials.password()))
+                                                .subscription(topic -> true)
+                                                .handler(message -> {})
+                                                .start();
+                var client = StompClient.create(fixture.stompTcpUrl(), new UserCredential("wrong", "creds"))) {
             assertThatThrownBy(client::connect).isInstanceOf(StompException.class);
         }
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = { "stomp://localhost:5500", "ws://localhost:5501" })
-    @DisplayName("A server should be able to read a message from clients")
-    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    void receiveMessageTest(String url) {
+    @Test
+    @DisplayName("A server should read a message from TCP clients")
+    @Timeout(value = 10)
+    void receiveMessageOverTcpTest() {
+        var topic = TestDestinations.uniqueTopic();
         var receiveMessages = new LinkedList<ReceivedMessage>();
-        try (var server = StompServer.builder()
-                                     .channel(TransportType.TCP, 5500)
-                                     .channel(TransportType.WEB_SOCKET, 5501)
-                                     .authenticator(credentials -> true)
-                                     .subscription(topic -> true)
-                                     .handler(message -> receiveMessages.offer(
-                                                                               new ReceivedMessage(message.destination(), message.body())))
-                                     .start();
-                var tcpClient = StompClient.create(url)) {
-            tcpClient.connect();
-            var subscription = tcpClient.subscribe("topic-1");
+        try (var fixture = EmbeddedServerFixture.builder()
+                                                .withTcp()
+                                                .authenticator(credentials -> true)
+                                                .subscription(t -> true)
+                                                .handler(message -> receiveMessages.offer(
+                                                                                          new ReceivedMessage(message.destination(), message.body())))
+                                                .start();
+                var client = StompClient.create(fixture.stompTcpUrl())) {
+            client.connect();
+            var subscription = client.subscribe(topic);
             assertThat(subscription.hasData()).isFalse();
-            tcpClient.sendPlain("topic-1", "MESSAGE-1", "text/plain");
-            await().until(() -> !receiveMessages.isEmpty());
+            client.sendPlain(topic, "MESSAGE-1", "text/plain");
+            await().atMost(Duration.ofSeconds(5)).until(() -> !receiveMessages.isEmpty());
             assertThat(receiveMessages).hasSize(1)
-                                       .containsExactly(new ReceivedMessage("topic-1", "MESSAGE-1"));
+                                       .containsExactly(new ReceivedMessage(topic, "MESSAGE-1"));
+        }
+    }
+
+    @Test
+    @DisplayName("A server should read a message from WebSocket clients")
+    @Timeout(value = 10)
+    void receiveMessageOverWebSocketTest() {
+        var topic = TestDestinations.uniqueTopic();
+        var receiveMessages = new LinkedList<ReceivedMessage>();
+        try (var fixture = EmbeddedServerFixture.builder()
+                                                .withWebSocket()
+                                                .authenticator(credentials -> true)
+                                                .subscription(t -> true)
+                                                .handler(message -> receiveMessages.offer(
+                                                                                          new ReceivedMessage(message.destination(), message.body())))
+                                                .start();
+                var client = StompClient.create(fixture.webSocketUrl())) {
+            client.connect();
+            var subscription = client.subscribe(topic);
+            assertThat(subscription.hasData()).isFalse();
+            client.sendPlain(topic, "MESSAGE-1", "text/plain");
+            await().atMost(Duration.ofSeconds(5)).until(() -> !receiveMessages.isEmpty());
+            assertThat(receiveMessages).hasSize(1)
+                                       .containsExactly(new ReceivedMessage(topic, "MESSAGE-1"));
         }
     }
 
     @ParameterizedTest
-    @ValueSource(strings = { "stomp://localhost:5500", "ws://localhost:5501" })
+    @EnumSource(ClientTransport.class)
     @DisplayName("A server should be able to send a message to clients")
-    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    void sendMessageTest(String url) {
+    @Timeout(value = 10)
+    void sendMessageTest(ClientTransport transport) {
+        var topic = TestDestinations.uniqueTopic();
         var subscribed = new AtomicBoolean(false);
-        try (var server = StompServer.builder()
-                                     .channel(TransportType.TCP, 5500)
-                                     .channel(TransportType.WEB_SOCKET, 5501)
-                                     .authenticator(credentials -> true)
-                                     .subscription(topic -> subscribed.compareAndSet(false, true))
-                                     .handler(message -> {})
-                                     .start();
-                var tcpClient = StompClient.create(url)) {
-            tcpClient.connect();
-            var subscription = tcpClient.subscribe("topic-1");
+        try (var fixture = EmbeddedServerFixture.builder()
+                                                .withTcp()
+                                                .withWebSocket()
+                                                .authenticator(credentials -> true)
+                                                .subscription(t -> subscribed.compareAndSet(false, true))
+                                                .handler(message -> {})
+                                                .start();
+                var client = StompClient.create(fixture.clientUrl(transport))) {
+            client.connect();
+            var subscription = client.subscribe(topic);
             assertThat(subscription.hasData()).isFalse();
-            await().until(subscribed::get);
-            server.outboundChannel()
-                  .send(new Message(Command.SEND, Headers.builder().with(Header.DESTINATION, "topic-1").build(), "MESSAGE-1"));
-            await().until(() -> subscription.hasData());
+            await().atMost(Duration.ofSeconds(5)).until(subscribed::get);
+            fixture.outboundChannel()
+                   .send(new Message(Command.SEND, Headers.builder().with(Header.DESTINATION, topic).build(), "MESSAGE-1"));
+            await().atMost(Duration.ofSeconds(5)).until(subscription::hasData);
             var receiveMessages = subscription.poll();
             assertThat(receiveMessages).hasSize(1)
                                        .containsExactly("MESSAGE-1");
@@ -103,129 +132,132 @@ class StompServerTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = { "stomp://localhost:5502", "ws://localhost:5503" })
+    @EnumSource(ClientTransport.class)
     @DisplayName("Message handler should receive a session outbound channel")
-    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    void sessionReplyTest(String url) {
+    @Timeout(value = 10)
+    void sessionReplyTest(ClientTransport transport) {
+        var inboundTopic = TestDestinations.uniqueTopic("in");
+        var replyTopic = TestDestinations.uniqueTopic("reply");
         var replied = new AtomicBoolean(false);
-        try (var server = StompServer.builder()
-                                     .channel(TransportType.TCP, 5502)
-                                     .channel(TransportType.WEB_SOCKET, 5503)
-                                     .subscription(topic -> true)
-                                     .handler(message -> {
-                                         assertThat(message.sessionChannel()).isNotNull();
-                                         message.sessionChannel()
-                                                .send(new Message(Command.MESSAGE,
-                                                                  Headers.builder()
-                                                                         .with(Header.DESTINATION, "topic-reply")
-                                                                         .with(Header.SUBSCRIPTION, "1")
-                                                                         .with(Header.MESSAGE_ID, "reply-1")
-                                                                         .build(),
-                                                                  "REPLY-1"));
-                                         replied.set(true);
-                                     })
-                                     .start();
-                var client = StompClient.create(url)) {
+        try (var fixture = EmbeddedServerFixture.builder()
+                                                .withTcp()
+                                                .withWebSocket()
+                                                .subscription(topic -> true)
+                                                .handler(message -> {
+                                                    assertThat(message.sessionChannel()).isNotNull();
+                                                    message.sessionChannel()
+                                                           .send(new Message(Command.MESSAGE,
+                                                                             Headers.builder()
+                                                                                    .with(Header.DESTINATION, replyTopic)
+                                                                                    .with(Header.SUBSCRIPTION, "1")
+                                                                                    .with(Header.MESSAGE_ID, "reply-1")
+                                                                                    .build(),
+                                                                             "REPLY-1"));
+                                                    replied.set(true);
+                                                })
+                                                .start();
+                var client = StompClient.create(fixture.clientUrl(transport))) {
             client.connect();
-            var subscription = client.subscribe("topic-reply");
-            client.sendPlain("topic-in", "ping", "text/plain");
-            await().until(replied::get);
-            await().until(() -> subscription.hasData());
+            var subscription = client.subscribe(replyTopic);
+            client.sendPlain(inboundTopic, "ping", "text/plain");
+            await().atMost(Duration.ofSeconds(5)).until(replied::get);
+            await().atMost(Duration.ofSeconds(5)).until(subscription::hasData);
             assertThat(subscription.poll()).containsExactly("REPLY-1");
         }
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = { "stomp://localhost:5507" })
+    @Test
     @DisplayName("Server should notify when subscriber acknowledges outbound message")
-    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    void subscriberAckListenerTest(String url) throws InterruptedException {
+    @Timeout(value = 30)
+    void subscriberAckListenerTest() throws InterruptedException {
+        var topic = TestDestinations.uniqueTopic("ack");
         var subscribed = new AtomicBoolean(false);
         var ackReceived = new CountDownLatch(1);
-        try (var server = StompServer.builder()
-                                     .channel(TransportType.TCP, 5507)
-                                     .subscription(topic -> subscribed.compareAndSet(false, true))
-                                     .handler(message -> {})
-                                     .start();
-                var client = StompClient.create(url, (UserCredential) null, Set.of(new Stomp1_2()))) {
+        try (var fixture = EmbeddedServerFixture.builder()
+                                                .withTcp()
+                                                .subscription(t -> subscribed.compareAndSet(false, true))
+                                                .handler(message -> {})
+                                                .start();
+                var client = StompClient.create(fixture.stompTcpUrl(), (UserCredential) null, Set.of(new Stomp1_2()))) {
             client.connect();
-            client.subscribe("topic-ack", AckMode.CLIENT_INDIVIDUAL, delivery -> delivery.ack());
+            client.subscribe(topic, AckMode.CLIENT_INDIVIDUAL, delivery -> delivery.ack());
             await().atMost(Duration.ofSeconds(10)).until(subscribed::get);
-            server.acknowledgedOutboundChannel()
-                  .send(new Message(Command.SEND,
-                                    Headers.builder().with(Header.DESTINATION, "topic-ack").build(),
-                                    "ACK-ME"),
-                        new SubscriberAckListener() {
-                            @Override
-                            public void onAck(String messageId, StompSession session) {
-                                ackReceived.countDown();
-                            }
+            fixture.acknowledgedOutboundChannel()
+                   .send(new Message(Command.SEND,
+                                     Headers.builder().with(Header.DESTINATION, topic).build(),
+                                     "ACK-ME"),
+                         new SubscriberAckListener() {
+                             @Override
+                             public void onAck(String messageId, StompSession session) {
+                                 ackReceived.countDown();
+                             }
 
-                            @Override
-                            public void onNack(String messageId, StompSession session) {}
-                        });
+                             @Override
+                             public void onNack(String messageId, StompSession session) {}
+                         });
             await().atMost(Duration.ofSeconds(20)).until(() -> ackReceived.getCount() == 0);
         }
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = { "stomp://localhost:5508" })
+    @Test
     @DisplayName("Subscription handler should receive subscribe and unsubscribe lifecycle events")
-    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    void subscriptionLifecycleTest(String url) {
+    @Timeout(value = 10)
+    void subscriptionLifecycleTest() {
+        var topic = TestDestinations.uniqueTopic("lifecycle");
         var subscribed = new LinkedList<String>();
         var unsubscribed = new LinkedList<String>();
-        try (var server = StompServer.builder()
-                                     .channel(TransportType.TCP, 5508)
-                                     .subscription(new SubscriptionHandler() {
-                                         @Override
-                                         public boolean accept(String topic) {
-                                             return true;
-                                         }
+        try (var fixture = EmbeddedServerFixture.builder()
+                                                .withTcp()
+                                                .subscription(new SubscriptionHandler() {
+                                                    @Override
+                                                    public boolean accept(String destination) {
+                                                        return true;
+                                                    }
 
-                                         @Override
-                                         public void onSubscribed(StompSession session, String topic) {
-                                             subscribed.add(topic);
-                                         }
+                                                    @Override
+                                                    public void onSubscribed(StompSession session, String destination) {
+                                                        subscribed.add(destination);
+                                                    }
 
-                                         @Override
-                                         public void onUnsubscribed(StompSession session, String topic) {
-                                             unsubscribed.add(topic);
-                                         }
-                                     })
-                                     .handler(message -> {})
-                                     .start();
-                var client = StompClient.create(url)) {
+                                                    @Override
+                                                    public void onUnsubscribed(StompSession session, String destination) {
+                                                        unsubscribed.add(destination);
+                                                    }
+                                                })
+                                                .handler(message -> {})
+                                                .start();
+                var client = StompClient.create(fixture.stompTcpUrl())) {
             client.connect();
-            var subscription = client.subscribe("topic-lifecycle");
-            await().until(() -> !subscribed.isEmpty());
-            assertThat(subscribed).containsExactly("topic-lifecycle");
+            var subscription = client.subscribe(topic);
+            await().atMost(Duration.ofSeconds(5)).until(() -> !subscribed.isEmpty());
+            assertThat(subscribed).containsExactly(topic);
             client.unsubscribe(subscription);
-            await().until(() -> !unsubscribed.isEmpty());
-            assertThat(unsubscribed).containsExactly("topic-lifecycle");
+            await().atMost(Duration.ofSeconds(5)).until(() -> !unsubscribed.isEmpty());
+            assertThat(unsubscribed).containsExactly(topic);
         }
     }
 
     @ParameterizedTest
-    @ValueSource(strings = { "stomp://localhost:5505", "ws://localhost:5506" })
+    @EnumSource(ClientTransport.class)
     @DisplayName("Unsubscribe should stop message delivery")
-    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    void unsubscribeTest(String url) {
-        try (var server = StompServer.builder()
-                                     .channel(TransportType.TCP, 5505)
-                                     .channel(TransportType.WEB_SOCKET, 5506)
-                                     .subscription(topic -> true)
-                                     .handler(message -> {})
-                                     .start();
-                var client = StompClient.create(url)) {
+    @Timeout(value = 10)
+    void unsubscribeTest(ClientTransport transport) {
+        var topic = TestDestinations.uniqueTopic("unsub");
+        try (var fixture = EmbeddedServerFixture.builder()
+                                                .withTcp()
+                                                .withWebSocket()
+                                                .subscription(t -> true)
+                                                .handler(message -> {})
+                                                .start();
+                var client = StompClient.create(fixture.clientUrl(transport))) {
             client.connect();
-            var subscription = client.subscribe("topic-unsub");
+            var subscription = client.subscribe(topic);
             client.unsubscribe(subscription);
-            server.outboundChannel()
-                  .send(new Message(Command.SEND,
-                                    Headers.builder().with(Header.DESTINATION, "topic-unsub").build(),
-                                    "SHOULD-NOT-ARRIVE"));
-            await().pollDelay(java.time.Duration.ofMillis(500)).until(() -> true);
+            fixture.outboundChannel()
+                   .send(new Message(Command.SEND,
+                                     Headers.builder().with(Header.DESTINATION, topic).build(),
+                                     "SHOULD-NOT-ARRIVE"));
+            ServerTestSupport.settleFor(Duration.ofMillis(500));
             assertThat(subscription.hasData()).isFalse();
         }
     }

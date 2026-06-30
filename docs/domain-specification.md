@@ -9,7 +9,7 @@ STOMP protocol vocabulary and library-specific terms. Agents must align code and
 | Term | Meaning |
 |------|---------|
 | **Frame** | A STOMP message on the wire: command, headers, body, terminated by NUL |
-| **Command** | First line of a frame (`CONNECT`, `CONNECTED`, `SEND`, `SUBSCRIBE`, `MESSAGE`, `ACK`, `NACK`, `UNSUBSCRIBE`, `DISCONNECT`, `ERROR`, …) |
+| **Command** | First line of a frame (`CONNECT`, `STOMP`, `CONNECTED`, `SEND`, `SUBSCRIBE`, `MESSAGE`, `ACK`, `NACK`, `UNSUBSCRIBE`, `DISCONNECT`, `BEGIN`, `COMMIT`, `ABORT`, `ERROR`, `RECEIPT`, …) |
 | **Header** | Key-value metadata on a frame (`destination`, `content-type`, `subscription`, `ack`, `heart-beat`, …) |
 | **Destination** | Logical address for send/subscribe (topic or queue path, e.g. `/topic/foo`) |
 | **Subscription** | Client interest in a destination; identified by `id` header (1.1+) |
@@ -50,6 +50,9 @@ STOMP protocol vocabulary and library-specific terms. Agents must align code and
 | **AckMode** | `AUTO`, `CLIENT`, `CLIENT_INDIVIDUAL` — `ack` header on `SUBSCRIBE` |
 | **StompDelivery** | Inbound `MESSAGE` with `ack()` / `nack()` for manual acknowledgement |
 | **StompReceipt** | Correlates producer `SEND` with broker `RECEIPT` frame |
+| **StompTransaction** | Client-side `BEGIN` / `COMMIT` / `ABORT` scope for deferred sends |
+| **SubscribeOptions** | `ack` mode and custom headers for `SUBSCRIBE` |
+| **SendOptions** | `content-type`, optional receipt, and custom headers for `SEND` |
 | **SubscriberAckListener** | Server callback when a client ACKs/NACKs an outbound `MESSAGE` |
 
 ### Spring Boot (optional)
@@ -74,7 +77,9 @@ STOMP protocol vocabulary and library-specific terms. Agents must align code and
 
 - Every frame on the wire ends with a NUL byte.
 - Client must receive `CONNECTED` before subscribing or sending.
-- Server `SubscriptionHandler` runs before accepting a `SUBSCRIBE`.
+- Server `SubscriptionHandler` runs before accepting a `SUBSCRIBE`; denied subscribe yields `ERROR` and closes the session.
+- STOMP 1.2 `ACK`/`NACK` use the `id` header matching the `ack` header on `MESSAGE` (fallback to `message-id` for broker quirks).
+- Transactional `SEND`/`ACK`/`NACK` are deferred until `COMMIT`; `ABORT` or `DISCONNECT` discards them.
 - Internal packages (`client.internal`, `server.channels`, `server.session`) are not part of the public API.
 - SPI implementations must be registered in both `module-info.java` and `META-INF/services`.
 
@@ -83,5 +88,5 @@ STOMP protocol vocabulary and library-specific terms. Agents must align code and
 Before adding new commands, transports, or server features:
 
 1. Add terms to the tables above.
-2. Update [ARCHITECTURE.md](../ARCHITECTURE.md) §3 and §12 if boundaries or WIP status change.
+2. Update [ARCHITECTURE.md](../ARCHITECTURE.md) §3 and §13 if boundaries or WIP status change.
 3. Use domain terms in class, method, and test names — not generic technical names.

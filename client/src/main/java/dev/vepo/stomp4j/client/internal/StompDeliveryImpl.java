@@ -7,9 +7,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import dev.vepo.stomp4j.client.StompDelivery;
 import dev.vepo.stomp4j.client.Subscription;
 import dev.vepo.stomp4j.client.exceptions.StompException;
+import dev.vepo.stomp4j.client.protocol.AcknowledgementIds;
 import dev.vepo.stomp4j.client.protocol.Stomp;
 import dev.vepo.stomp4j.client.transport.Transport;
-import dev.vepo.stomp4j.commons.protocol.Header;
 import dev.vepo.stomp4j.commons.protocol.Headers;
 import dev.vepo.stomp4j.commons.protocol.Message;
 
@@ -109,10 +109,7 @@ final class StompDeliveryImpl implements StompDelivery {
 
     @Override
     public String messageId() {
-        return message.headers()
-                      .get(Header.MESSAGE_ID)
-                      .or(() -> message.headers().get(Header.ID))
-                      .orElse("");
+        return AcknowledgementIds.deliveryMessageId(message, protocol.version()).orElse("");
     }
 
     @Override

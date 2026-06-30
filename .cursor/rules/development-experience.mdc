@@ -11,9 +11,14 @@ Stomp4J is a library — there is no `main()` or dev server. Local validation is
 
 ```bash
 mvn verify                    # full build + tests (Docker required)
-mvn -pl client test           # client module only
+mvn -Pfast -pl commons,client,server test   # unit + embedded-server tests only (no Docker)
+mvn -pl client test           # client module only (Docker required for integration tests)
 docker compose -f scripts/docker/docker-compose.yaml up   # optional local Artemis
 ```
+
+**Fast loop:** `mvn -Pfast -pl commons,client,server test` skips `@Tag("integration")` tests (Testcontainers). Run affected module tests **during development** — see [stomp4j-test-during-development.mdc](../../.cursor/rules/stomp4j-test-during-development.mdc). Run full `mvn verify` before pushing.
+
+Testcontainers reuse is enabled in `src/test/resources/testcontainers.properties`; brokers stay up for the JVM and between Maven runs when reuse is active.
 
 ## When adding or changing a feature
 
@@ -32,10 +37,11 @@ With `docker-compose` Artemis running, exercise client APIs from a small scratch
 
 ## Checklist before finishing
 
+- [ ] Mid-task tests run per [stomp4j-test-during-development.mdc](../../.cursor/rules/stomp4j-test-during-development.mdc)
 - [ ] `mvn verify` passes (Docker running)
 - [ ] New behaviour has tests in the correct module
 - [ ] [docs/features.md](../../docs/features.md) updated if capabilities changed
-- [ ] ARCHITECTURE.md §12 updated if gaps were closed or discovered
+- [ ] ARCHITECTURE.md §13 updated if gaps were closed or discovered
 
 ## Never
 

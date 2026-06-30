@@ -20,8 +20,8 @@ User-facing docs live in [README.md](../../README.md) and [docs/](../../docs/). 
 |---------|--------------------------------------------------|
 | New client or server capability | Add or update the row; set status to Supported |
 | Removed or deferred feature | Update status to Not supported or remove the row |
-| Partial / known gap closed | Change status; remove matching item from ARCHITECTURE.md §12 if resolved |
-| New known gap discovered | Add row with Not supported or Partial; mirror in ARCHITECTURE.md §12 |
+| Partial / known gap closed | Change status; remove matching item from ARCHITECTURE.md §13 if resolved |
+| New known gap discovered | Add row with Not supported or Partial; mirror in ARCHITECTURE.md §13 |
 
 Do not duplicate tutorial content in features.md — link to the relevant guide instead.
 

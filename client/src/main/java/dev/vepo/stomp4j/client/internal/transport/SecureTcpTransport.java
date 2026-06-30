@@ -41,6 +41,7 @@ public class SecureTcpTransport implements Transport {
     private final ExecutorService executor;
     private Socket socket;
     private volatile long lastReceivedMessage;
+    private volatile long lastSentMessage;
     private final AtomicBoolean running;
 
     private final CountDownLatch done;
@@ -56,6 +57,7 @@ public class SecureTcpTransport implements Transport {
         this.sslContext = sslContext;
         this.executor = Executors.newSingleThreadExecutor();
         this.lastReceivedMessage = System.nanoTime();
+        this.lastSentMessage = System.nanoTime();
         this.running = new AtomicBoolean(true);
         this.done = new CountDownLatch(1);
     }
@@ -90,9 +92,9 @@ public class SecureTcpTransport implements Transport {
             executor.submit(this::readMessages);
             listener.onConnected(this);
         } catch (UnknownHostException ex) {
-            throw new RuntimeException(ex);
+            throw TransportFailures.connectFailed("%s:%d".formatted(host, port), ex);
         } catch (IOException ex) {
-            throw new RuntimeException(ex);
+            throw TransportFailures.connectFailed("%s:%d".formatted(host, port), ex);
         }
     }
 
@@ -111,7 +113,7 @@ public class SecureTcpTransport implements Transport {
             while (running.get() && (length = inputStream.read(buffer)) != -1) {
                 if (length > 0) {
                     lastReceivedMessage = System.nanoTime();
-                    if (messageBuffer.append(new String(buffer, 0, length))) {
+                    if (messageBuffer.append(buffer, 0, length)) {
                         do {
                             listener.onMessage(messageBuffer.message());
                         } while (messageBuffer.hasMessage());
@@ -134,9 +136,15 @@ public class SecureTcpTransport implements Transport {
             var os = socket.getOutputStream();
             os.write(message.encode().getBytes());
             os.flush();
+            lastSentMessage = System.nanoTime();
         } catch (Exception ex) {
-            logger.error("Error sending message", ex);
+            throw TransportFailures.sendFailed(ex);
         }
+    }
+
+    @Override
+    public long outboundSilentTime() {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastSentMessage);
     }
 
     @Override

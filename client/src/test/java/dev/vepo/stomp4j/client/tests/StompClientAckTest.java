@@ -5,11 +5,14 @@ import static org.awaitility.Awaitility.await;
 
 import java.time.Duration;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -22,20 +25,24 @@ import dev.vepo.stomp4j.client.protocol.v1_1.Stomp1_1;
 import dev.vepo.stomp4j.client.protocol.v1_2.Stomp1_2;
 import dev.vepo.stomp4j.client.tests.infra.StompActiveMqContainer;
 import dev.vepo.stomp4j.client.tests.infra.StompContainer;
+import dev.vepo.stomp4j.client.tests.infra.StompTestSupport;
+import dev.vepo.stomp4j.client.tests.infra.TestDestinations;
 
+@Tag("integration")
 @ExtendWith(StompContainer.class)
+@Execution(ExecutionMode.CONCURRENT)
 class StompClientAckTest {
 
-    private static java.util.stream.Stream<Arguments> manualAckVersions() {
-        return java.util.stream.Stream.of(Arguments.of(new Stomp1_1()),
-                                          Arguments.of(new Stomp1_2()));
+    private static Stream<Arguments> manualAckVersions() {
+        return Stream.of(Arguments.of(new Stomp1_1()),
+                         Arguments.of(new Stomp1_2()));
     }
 
     @ParameterizedTest
     @MethodSource("manualAckVersions")
     @DisplayName("Should allow manual acknowledgement of a delivery")
     void shouldAllowManualAcknowledgement(Stomp protocol, StompActiveMqContainer stomp) {
-        var destination = "/queue/ack-" + UUID.randomUUID();
+        var destination = TestDestinations.uniqueQueue("ack");
         var credentials = new UserCredential(stomp.username(), stomp.password());
         var processed = new AtomicBoolean(false);
         var acknowledged = new AtomicBoolean(false);
@@ -48,6 +55,7 @@ class StompClientAckTest {
                 delivery.ack();
                 acknowledged.set(delivery.acknowledged());
             });
+            StompTestSupport.settleSubscription();
 
             try (var producer = StompClient.create(stomp.tcpUrl(), credentials, Set.of(protocol))) {
                 producer.connect();
@@ -62,7 +70,7 @@ class StompClientAckTest {
     @MethodSource("manualAckVersions")
     @DisplayName("Should allow manual negative acknowledgement of a delivery")
     void shouldAllowManualNegativeAcknowledgement(Stomp protocol, StompActiveMqContainer stomp) {
-        var destination = "/queue/nack-" + UUID.randomUUID();
+        var destination = TestDestinations.uniqueQueue("nack");
         var credentials = new UserCredential(stomp.username(), stomp.password());
         var nacked = new AtomicBoolean(false);
 
@@ -72,6 +80,7 @@ class StompClientAckTest {
                 delivery.nack();
                 nacked.set(delivery.acknowledged());
             });
+            StompTestSupport.settleSubscription();
 
             try (var producer = StompClient.create(stomp.tcpUrl(), credentials, Set.of(protocol))) {
                 producer.connect();

@@ -15,5 +15,9 @@ public interface Transport extends Closeable {
 
     void send(Message message);
 
+    /** Milliseconds since the last inbound wire activity (including heart-beats). */
     long silentTime();
+
+    /** Milliseconds since the last outbound wire activity (including heart-beats). */
+    long outboundSilentTime();
 }

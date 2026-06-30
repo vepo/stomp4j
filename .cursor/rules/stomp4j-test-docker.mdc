@@ -33,4 +33,4 @@ Ports: STOMP TCP 61613, WebSocket 61614, OpenWire 61616, console 8161.
 ## When changing test infra
 
 - Update `client/src/test/resources/broker.xml` and `StompContainer` if broker config changes.
-- Document new ports or env in [ARCHITECTURE.md](../../ARCHITECTURE.md) §8 and [development-experience.mdc](development-experience.mdc).
+- Document new ports or env in [ARCHITECTURE.md](../../ARCHITECTURE.md) §9 and [development-experience.mdc](development-experience.mdc).
