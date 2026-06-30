@@ -36,6 +36,7 @@ public class SecureWebSocketTransport implements Transport {
     private final TransportListener listener;
     private final WebSocketInboundFramer framer = new WebSocketInboundFramer();
     private volatile long lastSentMessage = System.nanoTime();
+    private final Object sendLock = new Object();
     private WebSocket webSocketClient;
     private final CountDownLatch openLatch = new CountDownLatch(1);
     private final CountDownLatch closeLatch = new CountDownLatch(1);
@@ -159,9 +160,11 @@ public class SecureWebSocketTransport implements Transport {
               .addArgument(() -> Message.formatted(message.encode()))
               .log("Sending message: {}");
         try {
-            webSocketClient.sendText(message.encode(), true);
-            webSocketClient.request(1);
-            lastSentMessage = System.nanoTime();
+            synchronized (sendLock) {
+                webSocketClient.sendText(message.encode(), true);
+                webSocketClient.request(1);
+                lastSentMessage = System.nanoTime();
+            }
         } catch (RuntimeException ex) {
             throw TransportFailures.sendFailed(ex);
         }

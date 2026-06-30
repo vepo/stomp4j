@@ -45,6 +45,7 @@ public class SecureTcpTransport implements Transport {
     private final AtomicBoolean running;
 
     private final CountDownLatch done;
+    private final Object sendLock = new Object();
 
     public SecureTcpTransport(URI uri, TransportListener listener) {
         this(uri, listener, defaultSslContext());
@@ -133,10 +134,12 @@ public class SecureTcpTransport implements Transport {
               .addArgument(() -> Message.formatted(message.encode()))
               .log("Sending message: {}");
         try {
-            var os = socket.getOutputStream();
-            os.write(message.encode().getBytes());
-            os.flush();
-            lastSentMessage = System.nanoTime();
+            synchronized (sendLock) {
+                var os = socket.getOutputStream();
+                os.write(message.encode().getBytes());
+                os.flush();
+                lastSentMessage = System.nanoTime();
+            }
         } catch (Exception ex) {
             throw TransportFailures.sendFailed(ex);
         }
