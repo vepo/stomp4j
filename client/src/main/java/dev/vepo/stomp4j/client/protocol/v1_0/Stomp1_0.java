@@ -1,9 +1,11 @@
 package dev.vepo.stomp4j.client.protocol.v1_0;
 
+import java.util.Map;
 import java.util.Optional;
 
 import dev.vepo.stomp4j.client.AckMode;
 import dev.vepo.stomp4j.client.Subscription;
+import dev.vepo.stomp4j.client.protocol.SendParameters;
 import dev.vepo.stomp4j.client.protocol.Stomp;
 import dev.vepo.stomp4j.client.transport.Transport;
 import dev.vepo.stomp4j.commons.protocol.Command;
@@ -39,12 +41,7 @@ public class Stomp1_0 extends Stomp {
 
     @Override
     public void send(String destination, String content, String contentType, Optional<String> session, Transport transport) {
-        transport.send(MessageBuilder.builder(Command.SEND)
-                                     .header(Header.DESTINATION, destination)
-                                     .header(Header.CONTENT_LENGTH, Integer.toString(content.length()))
-                                     .headerIfPresent(Header.SESSION, session)
-                                     .body(content)
-                                     .build());
+        send(destination, content, contentType, session, transport, SendParameters.plain());
     }
 
     @Override
@@ -53,28 +50,30 @@ public class Stomp1_0 extends Stomp {
                      String contentType,
                      Optional<String> session,
                      Transport transport,
-                     Optional<String> receiptId) {
+                     SendParameters parameters) {
         var builder = MessageBuilder.builder(Command.SEND)
                                     .header(Header.DESTINATION, destination)
                                     .header(Header.CONTENT_LENGTH, Integer.toString(content.length()))
                                     .headerIfPresent(Header.SESSION, session);
-        receiptId.ifPresent(id -> builder.header(Header.RECEIPT, id));
+        applyCustomHeaders(builder, parameters.customHeaders());
+        applyTransaction(builder, parameters.transactionId());
+        parameters.receiptId().ifPresent(id -> builder.header(Header.RECEIPT, id));
         transport.send(builder.body(content).build());
     }
 
     @Override
-    public void subscribe(Subscription subscription, Optional<String> session, Transport transport, AckMode ackMode) {
+    public void subscribe(Subscription subscription,
+                          Optional<String> session,
+                          Transport transport,
+                          AckMode ackMode,
+                          Map<String, String> customHeaders) {
         var builder = MessageBuilder.builder(Command.SUBSCRIBE)
                                     .header(Header.DESTINATION, subscription.topic());
         if (ackMode != AckMode.AUTO) {
             builder.header(Header.ACK, ackMode.wireValue());
         }
+        applyCustomHeaders(builder, customHeaders);
         transport.send(builder.build());
-    }
-
-    @Override
-    public String toString() {
-        return "Stomp 1.0 Implementation";
     }
 
     @Override

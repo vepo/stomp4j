@@ -7,6 +7,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 
@@ -17,6 +18,7 @@ import dev.vepo.stomp4j.client.protocol.v1_2.Stomp1_2;
 import dev.vepo.stomp4j.client.tests.infra.StompActiveMqContainer;
 import dev.vepo.stomp4j.client.tests.infra.StompContainer;
 
+@Tag("integration")
 @ExtendWith(StompContainer.class)
 class StompClientReceiptTest {
 

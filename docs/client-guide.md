@@ -49,6 +49,7 @@ try (var client = StompClient.create(url, credentials)) {
 - **`connect()`** returns `this` for chaining.
 - **`join()`** blocks the current thread until the client is closed — useful for callback-driven apps that have no other event loop.
 - Always close the client to send `DISCONNECT` and free sockets.
+- **`close(Duration)`** sends `DISCONNECT` with a `receipt` header and waits up to the grace period for the matching `RECEIPT` before closing the transport.
 
 ## Subscriptions
 
@@ -83,6 +84,33 @@ client.unsubscribe("/topic/orders");
 client.unsubscribe(subscription);
 ```
 
+### Options and manual acknowledgement
+
+Use `SubscribeOptions` when you need a non-default `ack` mode or custom `SUBSCRIBE` headers:
+
+```java
+import dev.vepo.stomp4j.client.AckMode;
+import dev.vepo.stomp4j.client.SubscribeOptions;
+
+client.subscribe("/topic/orders",
+    SubscribeOptions.builder()
+        .ackMode(AckMode.CLIENT_INDIVIDUAL)
+        .header("selector", "region = 'EU'")
+        .build(),
+    delivery -> delivery.ack());
+```
+
+Polling subscriptions accept the same options: `client.subscribe(topic, SubscribeOptions.defaults())`.
+
+For manual ack without custom headers:
+
+```java
+client.subscribe("/queue/work", AckMode.CLIENT_INDIVIDUAL, delivery -> {
+    process(delivery.body());
+    delivery.ack();   // or delivery.nack()
+});
+```
+
 ## Sending messages
 
 ```java
@@ -90,6 +118,33 @@ client.sendPlain("/queue/jobs", "{\"id\":1}", "application/json");
 ```
 
 `sendPlain` sets `content-type` and sends a `SEND` frame. The destination string must match what your broker expects (often `/topic/…` or `/queue/…`).
+
+### Receipts and custom headers
+
+```java
+import dev.vepo.stomp4j.client.SendOptions;
+
+var receipt = client.send("/queue/jobs",
+    payload,
+    SendOptions.builder()
+        .contentType("application/json")
+        .header("priority", "9")
+        .receipt(true)
+        .build());
+receipt.completion().get();
+```
+
+## Transactions
+
+```java
+try (var tx = client.beginTransaction()) {
+    tx.send("/topic/events", "a", SendOptions.plainText());
+    tx.send("/topic/events", "b", SendOptions.plainText());
+    tx.commit();   // or tx.abort()
+}
+```
+
+Transactional sends are visible to the server only after `commit()`.
 
 ## Protocol versions
 

@@ -18,6 +18,7 @@ import org.awaitility.Durations;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -41,6 +42,7 @@ import jakarta.jms.JMSException;
 import jakarta.jms.Session;
 import jakarta.jms.Topic;
 
+@Tag("integration")
 @ExtendWith(StompContainer.class)
 class StompClientWebSocketTest {
 

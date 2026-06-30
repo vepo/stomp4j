@@ -22,6 +22,7 @@ import org.apache.kafka.common.serialization.ByteArraySerializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -35,6 +36,7 @@ import dev.vepo.stomp4j.client.UserCredential;
 import dev.vepo.stomp4j.client.exceptions.StompException;
 import dev.vepo.stomp4j.commons.TransportType;
 
+@Tag("integration")
 @ExtendWith(KafkaTestExtension.class)
 class StompKafkaBridgeIntegrationTest {
 

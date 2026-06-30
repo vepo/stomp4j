@@ -33,6 +33,7 @@ public class BufferPool {
                 this.wait();
             }
             var buffer = this.availableBuffers.poll();
+            buffer.clear();
             this.activeBuffers.add(buffer);
             return buffer;
         } catch (InterruptedException ie) {

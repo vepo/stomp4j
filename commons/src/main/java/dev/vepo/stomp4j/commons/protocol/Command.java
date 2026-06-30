@@ -3,6 +3,7 @@ package dev.vepo.stomp4j.commons.protocol;
 public enum Command {
     SEND,
     CONNECT,
+    STOMP,
     CONNECTED,
     SUBSCRIBE,
     MESSAGE,
@@ -12,5 +13,8 @@ public enum Command {
     RECEIPT,
     UNSUBSCRIBE,
     DISCONNECT,
+    BEGIN,
+    COMMIT,
+    ABORT,
     HEARTBEAT
 }

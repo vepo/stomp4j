@@ -1,5 +1,6 @@
 package dev.vepo.stomp4j.commons.protocol;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -51,6 +52,10 @@ public class Headers {
         headers.put(key, value);
     }
 
+    public Map<String, String> asMap() {
+        return Map.copyOf(headers);
+    }
+
     public Optional<String> destination() {
         String destination = headers.get("destination");
         if (destination == null) {
@@ -81,10 +86,10 @@ public class Headers {
         return headers.getOrDefault("version", "1.0");
     }
 
-    public void write(StringBuilder builder) {
+    public void write(StringBuilder builder, Command command) {
         headers.forEach((key, value) -> builder.append(key)
                                                .append(Message.DELIMITER)
-                                               .append(value)
+                                               .append(HeaderCodec.encodeValue(command, value))
                                                .append(Message.NEW_LINE));
     }
 }

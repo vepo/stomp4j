@@ -151,11 +151,18 @@ public class WebSocketTransport implements Transport {
 
     @Override
     public void send(Message message) {
+        if (Objects.isNull(webSocketClient)) {
+            throw TransportFailures.notConnected();
+        }
         logger.atDebug()
               .addArgument(() -> Message.formatted(message.encode()))
               .log("Sending message: {}");
-        webSocketClient.sendText(message.encode(), true);
-        webSocketClient.request(1);
+        try {
+            webSocketClient.sendText(message.encode(), true);
+            webSocketClient.request(1);
+        } catch (RuntimeException ex) {
+            throw TransportFailures.sendFailed(ex);
+        }
     }
 
     @Override

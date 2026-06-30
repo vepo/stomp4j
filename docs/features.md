@@ -30,13 +30,15 @@ When you add, change, or remove user-visible behaviour, **update this page** in 
 | Producer `SEND` receipt | Supported | `SendOptions.receipt(true)` → `StompReceipt` |
 | Client-side auto `ACK` on `MESSAGE` | Supported | Legacy `subscribe` callbacks and `AckMode.AUTO` |
 | Heart-beats | Supported | Sent on `CONNECT` when version supports them (1.1, 1.2) |
-| `DISCONNECT` on close | Supported | `AutoCloseable` / try-with-resources |
+| `DISCONNECT` on close | Supported | `close()` or `close(Duration)` sends `DISCONNECT` with optional receipt |
+| `BEGIN` / `COMMIT` / `ABORT` (transactions) | Supported | `beginTransaction()` → `StompTransaction` |
+| Custom `SUBSCRIBE` / `SEND` headers | Supported | `SubscribeOptions`, `SendOptions.header(...)` |
 | Restrict offered protocol versions | Supported | `Set<Stomp>` on `create` |
 | Force transport type | Supported | `TransportType` on `create` |
 | Custom transport (SPI) | Supported | `TransportProvider` — [advanced-topics.md#extending-transports](advanced-topics.md#extending-transports) |
 | Custom protocol version (SPI) | Supported | Subclass `Stomp` — [advanced-topics.md#extending-protocol-versions](advanced-topics.md#extending-protocol-versions) |
 | `ERROR` frame / failed `CONNECT` | Supported | Throws `StompException` |
-| All transport failures as `StompException` | Partial | Not every low-level transport error is wrapped yet |
+| All transport failures as `StompException` | Supported | Connect and send failures on TCP and WebSocket transports |
 
 ## Server (`stomp4j-server`)
 
@@ -59,7 +61,7 @@ When you add, change, or remove user-visible behaviour, **update this page** in 
 | Subscription lifecycle hooks | Supported | `SubscriptionHandler.onSubscribed` / `onUnsubscribed` |
 | Heart-beat negotiation | Supported | `.heartbeat(Duration)` on builder |
 | Configurable server name | Supported | `.serverName(...)` on `CONNECTED` |
-| STOMP transactions (`BEGIN` / `COMMIT` / `ABORT`) | Not supported | — |
+| STOMP transactions (`BEGIN` / `COMMIT` / `ABORT`) | Supported | In-memory per session; deferred `SEND`/`ACK`/`NACK` until `COMMIT` |
 | Durable queues / message store | Not supported | Embeddable pub/sub only; not a full broker |
 
 ## Commons (`stomp4j-commons`)
@@ -69,7 +71,9 @@ When you add, change, or remove user-visible behaviour, **update this page** in 
 | Frame structure (command, headers, body, NUL) | Supported | [advanced-topics.md#wire-format](advanced-topics.md#wire-format) |
 | `Message` encode / decode | Supported | `Message.encode()`, `MessageBuffer` |
 | `Command`, `Header`, `Headers` model | Supported | Spec-aligned header names |
-| `MessageBuilder` | Supported | Build outbound frames for server or tooling |
+| Header escaping (STOMP 1.2) | Supported | `HeaderCodec` on encode/decode |
+| `content-length` parsing | Supported | Byte-based `FrameDecoder` |
+| `MessageBuilder` | Supported | Build outbound frames; arbitrary headers |
 
 ## Platform and dependencies
 
@@ -95,8 +99,8 @@ When you add, change, or remove user-visible behaviour, **update this page** in 
 | `MESSAGE` | Receives | Sends (outbound) |
 | `ACK` / `NACK` | Manual or auto (see client guide) | Subscriber ACK callbacks on outbound |
 | `RECEIPT` | Producer send confirmation | — |
-| `DISCONNECT` | On `close()` | Session teardown |
-| `BEGIN` / `COMMIT` / `ABORT` | — | Not supported |
+| `BEGIN` / `COMMIT` / `ABORT` | `beginTransaction()` API | In-memory per session |
+| `DISCONNECT` | On `close()` / `close(Duration)` | Session teardown; receipt when requested |
 
 ## Kafka bridge (`stomp4j-kafka-bridge`)
 

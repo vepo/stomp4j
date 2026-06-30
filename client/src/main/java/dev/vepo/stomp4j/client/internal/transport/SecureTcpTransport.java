@@ -90,9 +90,9 @@ public class SecureTcpTransport implements Transport {
             executor.submit(this::readMessages);
             listener.onConnected(this);
         } catch (UnknownHostException ex) {
-            throw new RuntimeException(ex);
+            throw TransportFailures.connectFailed("%s:%d".formatted(host, port), ex);
         } catch (IOException ex) {
-            throw new RuntimeException(ex);
+            throw TransportFailures.connectFailed("%s:%d".formatted(host, port), ex);
         }
     }
 
@@ -111,7 +111,7 @@ public class SecureTcpTransport implements Transport {
             while (running.get() && (length = inputStream.read(buffer)) != -1) {
                 if (length > 0) {
                     lastReceivedMessage = System.nanoTime();
-                    if (messageBuffer.append(new String(buffer, 0, length))) {
+                    if (messageBuffer.append(buffer, 0, length)) {
                         do {
                             listener.onMessage(messageBuffer.message());
                         } while (messageBuffer.hasMessage());
@@ -135,7 +135,7 @@ public class SecureTcpTransport implements Transport {
             os.write(message.encode().getBytes());
             os.flush();
         } catch (Exception ex) {
-            logger.error("Error sending message", ex);
+            throw TransportFailures.sendFailed(ex);
         }
     }
 

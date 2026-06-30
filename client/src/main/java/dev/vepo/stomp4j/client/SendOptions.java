@@ -1,6 +1,9 @@
 package dev.vepo.stomp4j.client;
 
 import java.time.Duration;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 public final class SendOptions {
@@ -9,6 +12,7 @@ public final class SendOptions {
         private String contentType = "text/plain";
         private boolean receipt;
         private Duration receiptTimeout = DEFAULT_RECEIPT_TIMEOUT;
+        private final Map<String, String> headers = new HashMap<>();
 
         private Builder() {}
 
@@ -18,6 +22,13 @@ public final class SendOptions {
 
         public Builder contentType(String contentType) {
             this.contentType = Objects.requireNonNull(contentType);
+            return this;
+        }
+
+        public Builder header(String name, String value) {
+            Objects.requireNonNull(name);
+            Objects.requireNonNull(value);
+            headers.put(name, value);
             return this;
         }
 
@@ -43,19 +54,23 @@ public final class SendOptions {
     }
 
     private final String contentType;
-
     private final boolean receipt;
-
     private final Duration receiptTimeout;
+    private final Map<String, String> headers;
 
     private SendOptions(Builder builder) {
         this.contentType = builder.contentType;
         this.receipt = builder.receipt;
         this.receiptTimeout = builder.receiptTimeout;
+        this.headers = Map.copyOf(builder.headers);
     }
 
     public String contentType() {
         return contentType;
+    }
+
+    public Map<String, String> headers() {
+        return headers;
     }
 
     public boolean receipt() {

@@ -1,5 +1,6 @@
 package dev.vepo.stomp4j.client;
 
+import java.time.Duration;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -45,6 +46,10 @@ public interface StompClient extends AutoCloseable {
 
     void close();
 
+    void close(Duration gracePeriod);
+
+    StompTransaction beginTransaction();
+
     StompClient connect();
 
     void join();
@@ -56,6 +61,10 @@ public interface StompClient extends AutoCloseable {
     Subscription subscribe(String topic);
 
     Subscription subscribe(String topic, AckMode ackMode, Consumer<StompDelivery> consumer);
+
+    Subscription subscribe(String topic, SubscribeOptions options);
+
+    Subscription subscribe(String topic, SubscribeOptions options, Consumer<StompDelivery> consumer);
 
     Subscription subscribe(String topic, Consumer<String> consumer);
 

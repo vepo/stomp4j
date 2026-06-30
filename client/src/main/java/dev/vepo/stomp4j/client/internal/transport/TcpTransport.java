@@ -65,9 +65,9 @@ public class TcpTransport implements Transport {
             executor.submit(this::readMessages);
             listener.onConnected(this);
         } catch (UnknownHostException uhe) {
-            throw new RuntimeException(uhe);
+            throw TransportFailures.connectFailed("%s:%d".formatted(host, port), uhe);
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            throw TransportFailures.connectFailed("%s:%d".formatted(host, port), e);
         }
     }
 
@@ -85,7 +85,7 @@ public class TcpTransport implements Transport {
             while (running.get() && (inputStream.available() == 0 || (length = inputStream.read(buffer)) != -1)) {
                 if (length > 0) {
                     this.lastReceivedMessaged = System.nanoTime();
-                    if (messageBuffer.append(new String(buffer, 0, length))) {
+                    if (messageBuffer.append(buffer, 0, length)) {
                         do {
                             logger.info("Message complete. Sending to listener. listener: {}", listener);
                             listener.onMessage(messageBuffer.message());
@@ -119,10 +119,9 @@ public class TcpTransport implements Transport {
         try {
             var os = socket.getOutputStream();
             os.write(message.encode().getBytes());
-            os.write("\n".getBytes());
             os.flush();
         } catch (Exception e) {
-            logger.error("Error sending message", e);
+            throw TransportFailures.sendFailed(e);
         }
     }
 

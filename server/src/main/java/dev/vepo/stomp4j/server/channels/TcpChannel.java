@@ -266,7 +266,10 @@ public class TcpChannel implements Channel {
                 return;
             }
             if (length > 0) {
-                attachment.session().offer(buffer.array(), length);
+                buffer.flip();
+                var data = new byte[length];
+                buffer.get(data, 0, length);
+                attachment.session().offer(data, length);
             }
         } catch (IOException ex) {
             logger.debug("Read error, closing session", ex);

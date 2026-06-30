@@ -12,6 +12,7 @@ public final class KafkaTestContainer extends GenericContainer<KafkaTestContaine
 
     public KafkaTestContainer() {
         super(IMAGE);
+        withReuse(true);
         withEnv("KAFKA_NODE_ID", "1");
         withEnv("KAFKA_PROCESS_ROLES", "broker,controller");
         withEnv("KAFKA_LISTENERS", "PLAINTEXT://0.0.0.0:%d,CONTROLLER://0.0.0.0:9093".formatted(KAFKA_PORT));

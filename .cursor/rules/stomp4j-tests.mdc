@@ -20,9 +20,11 @@ Integration tests use Testcontainers (ActiveMQ Artemis). Docker must be running 
 
 ## Infrastructure
 
-- **`StompContainer`** — JUnit 5 extension; shared ActiveMQ container; injects `tcpUrl()`, `webSocketUrl()`, credentials.
+- **`StompContainer`** — JUnit 5 extension; one shared ActiveMQ container per JVM; injects `tcpUrl()`, `webSocketUrl()`, credentials.
+- Start via `ensureStarted()`; **do not** stop the broker in `afterAll` — a JVM shutdown hook stops it after the test run.
 - Reuse `StompContainer` — do not start duplicate brokers per test class unless isolation requires it.
-- Test resources: `broker.xml`, `logback.xml` under `client/src/test/resources/`.
+- Docker-backed tests are tagged `@Tag("integration")`; exclude with Maven profile `fast` (`mvn -Pfast test`).
+- Test resources: `broker.xml`, `logback.xml`, `testcontainers.properties` under module `src/test/resources/`.
 
 ## Annotations
 

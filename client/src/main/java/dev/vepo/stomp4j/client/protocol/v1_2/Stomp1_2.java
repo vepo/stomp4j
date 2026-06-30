@@ -1,5 +1,6 @@
 package dev.vepo.stomp4j.client.protocol.v1_2;
 
+import java.util.Map;
 import java.util.Optional;
 
 import org.slf4j.Logger;
@@ -7,6 +8,8 @@ import org.slf4j.LoggerFactory;
 
 import dev.vepo.stomp4j.client.AckMode;
 import dev.vepo.stomp4j.client.Subscription;
+import dev.vepo.stomp4j.client.protocol.AcknowledgementIds;
+import dev.vepo.stomp4j.client.protocol.SendParameters;
 import dev.vepo.stomp4j.client.protocol.Stomp;
 import dev.vepo.stomp4j.client.transport.Transport;
 import dev.vepo.stomp4j.commons.protocol.Command;
@@ -20,8 +23,19 @@ public class Stomp1_2 extends Stomp {
     @Override
     public void acknowledge(Message message, Optional<String> session, Transport transport) {
         transport.send(MessageBuilder.builder(Command.ACK)
-                                     .headerIfPresent(Header.ID, message.headers().get(Header.MESSAGE_ID))
+                                     .headerIfPresent(Header.ID, AcknowledgementIds.forStomp12(message))
                                      .build());
+    }
+
+    @Override
+    public void acknowledge(Message message,
+                            Optional<String> session,
+                            Transport transport,
+                            Optional<String> transactionId) {
+        var builder = MessageBuilder.builder(Command.ACK)
+                                    .headerIfPresent(Header.ID, AcknowledgementIds.forStomp12(message));
+        applyTransaction(builder, transactionId);
+        transport.send(builder.build());
     }
 
     @Override
@@ -32,8 +46,19 @@ public class Stomp1_2 extends Stomp {
     @Override
     public void negativeAcknowledge(Message message, Optional<String> session, Transport transport) {
         transport.send(MessageBuilder.builder(Command.NACK)
-                                     .headerIfPresent(Header.ID, message.headers().get(Header.MESSAGE_ID))
+                                     .headerIfPresent(Header.ID, AcknowledgementIds.forStomp12(message))
                                      .build());
+    }
+
+    @Override
+    public void negativeAcknowledge(Message message,
+                                  Optional<String> session,
+                                  Transport transport,
+                                  Optional<String> transactionId) {
+        var builder = MessageBuilder.builder(Command.NACK)
+                                    .headerIfPresent(Header.ID, AcknowledgementIds.forStomp12(message));
+        applyTransaction(builder, transactionId);
+        transport.send(builder.build());
     }
 
     @Override
@@ -43,13 +68,7 @@ public class Stomp1_2 extends Stomp {
 
     @Override
     public void send(String destination, String content, String contentType, Optional<String> session, Transport transport) {
-        transport.send(MessageBuilder.builder(Command.SEND)
-                                     .header(Header.DESTINATION, destination)
-                                     .header(Header.CONTENT_TYPE, contentType)
-                                     .header(Header.CONTENT_LENGTH, Integer.toString(content.length()))
-                                     .headerIfPresent(Header.SESSION, session)
-                                     .body(content)
-                                     .build());
+        send(destination, content, contentType, session, transport, SendParameters.plain());
     }
 
     @Override
@@ -58,18 +77,24 @@ public class Stomp1_2 extends Stomp {
                      String contentType,
                      Optional<String> session,
                      Transport transport,
-                     Optional<String> receiptId) {
+                     SendParameters parameters) {
         var builder = MessageBuilder.builder(Command.SEND)
                                     .header(Header.DESTINATION, destination)
                                     .header(Header.CONTENT_TYPE, contentType)
                                     .header(Header.CONTENT_LENGTH, Integer.toString(content.length()))
                                     .headerIfPresent(Header.SESSION, session);
-        receiptId.ifPresent(id -> builder.header(Header.RECEIPT, id));
+        applyCustomHeaders(builder, parameters.customHeaders());
+        applyTransaction(builder, parameters.transactionId());
+        parameters.receiptId().ifPresent(id -> builder.header(Header.RECEIPT, id));
         transport.send(builder.body(content).build());
     }
 
     @Override
-    public void subscribe(Subscription subscription, Optional<String> session, Transport transport, AckMode ackMode) {
+    public void subscribe(Subscription subscription,
+                          Optional<String> session,
+                          Transport transport,
+                          AckMode ackMode,
+                          Map<String, String> customHeaders) {
         var builder = MessageBuilder.builder(Command.SUBSCRIBE)
                                     .header(Header.ID, Integer.toString(subscription.id()))
                                     .header(Header.DESTINATION, subscription.topic())
@@ -77,12 +102,8 @@ public class Stomp1_2 extends Stomp {
         if (ackMode != AckMode.AUTO) {
             builder.header(Header.ACK, ackMode.wireValue());
         }
+        applyCustomHeaders(builder, customHeaders);
         transport.send(builder.build());
-    }
-
-    @Override
-    public String toString() {
-        return "Stomp 1.2 Implementation";
     }
 
     @Override

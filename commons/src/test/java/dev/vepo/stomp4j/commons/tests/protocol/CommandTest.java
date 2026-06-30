@@ -12,6 +12,17 @@ import dev.vepo.stomp4j.commons.protocol.MessageBuilder;
 class CommandTest {
 
     @Test
+    void shouldRoundTripBeginFrame() {
+        var message = MessageBuilder.builder(Command.BEGIN)
+                                    .header(Header.TRANSACTION, "tx-1")
+                                    .build();
+        var encoded = message.encode();
+        var decoded = Message.readMessage(encoded.substring(0, encoded.length() - 1));
+        assertThat(decoded.command()).isEqualTo(Command.BEGIN);
+        assertThat(decoded.headers().get(Header.TRANSACTION)).contains("tx-1");
+    }
+
+    @Test
     void shouldRoundTripDisconnectFrame() {
         var message = MessageBuilder.builder(Command.DISCONNECT).build();
         var encoded = message.encode();

@@ -1,6 +1,7 @@
 package dev.vepo.stomp4j.client.protocol;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.ServiceLoader;
@@ -54,7 +55,32 @@ public abstract class Stomp {
                        .orElseThrow(() -> new IllegalArgumentException("Version not supported"));
     }
 
+    public void abortTransaction(String transactionId, Transport transport) {
+        transport.send(MessageBuilder.builder(Command.ABORT)
+                                     .header(Header.TRANSACTION, transactionId)
+                                     .build());
+    }
+
     public abstract void acknowledge(Message message, Optional<String> session, Transport transport);
+
+    public void acknowledge(Message message,
+                            Optional<String> session,
+                            Transport transport,
+                            Optional<String> transactionId) {
+        acknowledge(message, session, transport);
+    }
+
+    public void beginTransaction(String transactionId, Transport transport) {
+        transport.send(MessageBuilder.builder(Command.BEGIN)
+                                     .header(Header.TRANSACTION, transactionId)
+                                     .build());
+    }
+
+    public void commitTransaction(String transactionId, Transport transport) {
+        transport.send(MessageBuilder.builder(Command.COMMIT)
+                                     .header(Header.TRANSACTION, transactionId)
+                                     .build());
+    }
 
     public abstract boolean hasHeartBeat();
 
@@ -64,26 +90,49 @@ public abstract class Stomp {
 
     public abstract void negativeAcknowledge(Message message, Optional<String> session, Transport transport);
 
+    public void negativeAcknowledge(Message message,
+                                  Optional<String> session,
+                                  Transport transport,
+                                  Optional<String> transactionId) {
+        negativeAcknowledge(message, session, transport);
+    }
+
     public abstract void onMessage(Message message, Optional<String> session, Transport transport);
 
-    public abstract void send(String destination, String content, String contentType, Optional<String> session, Transport transport);
+    public abstract void send(String destination,
+                              String content,
+                              String contentType,
+                              Optional<String> session,
+                              Transport transport);
 
     public void send(String destination,
                      String content,
                      String contentType,
                      Optional<String> session,
                      Transport transport,
-                     Optional<String> receiptId) {
+                     SendParameters parameters) {
         send(destination, content, contentType, session, transport);
     }
 
     public final void subscribe(Subscription subscription, Optional<String> session, Transport transport) {
-        subscribe(subscription, session, transport, subscription.ackMode());
+        subscribe(subscription, session, transport, subscription.ackMode(), Map.of());
     }
 
-    public abstract void subscribe(Subscription subscription, Optional<String> session, Transport transport, AckMode ackMode);
+    public abstract void subscribe(Subscription subscription,
+                                   Optional<String> session,
+                                   Transport transport,
+                                   AckMode ackMode,
+                                   Map<String, String> customHeaders);
 
     public abstract void unsubscribe(Subscription subscription, Transport transport);
 
     public abstract String version();
+
+    protected static void applyCustomHeaders(MessageBuilder builder, Map<String, String> customHeaders) {
+        customHeaders.forEach(builder::header);
+    }
+
+    protected static void applyTransaction(MessageBuilder builder, Optional<String> transactionId) {
+        transactionId.ifPresent(id -> builder.header(Header.TRANSACTION, id));
+    }
 }

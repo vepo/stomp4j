@@ -11,7 +11,10 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -30,13 +33,15 @@ import dev.vepo.stomp4j.server.SubscriberAckListener;
 import dev.vepo.stomp4j.server.StompSession;
 import dev.vepo.stomp4j.server.SubscriptionHandler;
 
+@Execution(ExecutionMode.SAME_THREAD)
 class StompServerTest {
     private record ReceivedMessage(String topic, String message) {}
 
     @ParameterizedTest
+    @Execution(ExecutionMode.SAME_THREAD)
     @ValueSource(strings = { "stomp://localhost:5504" })
     @DisplayName("Server should reject invalid credentials")
-    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    @Timeout(value = 10)
     void authenticationRejectionTest(String url) {
         try (var server = StompServer.builder()
                                      .channel(TransportType.TCP, 5504)
@@ -50,40 +55,51 @@ class StompServerTest {
         }
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = { "stomp://localhost:5500", "ws://localhost:5501" })
-    @DisplayName("A server should be able to read a message from clients")
-    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
-    void receiveMessageTest(String url) {
+    private void receiveMessageFromClient(String url) {
         var receiveMessages = new LinkedList<ReceivedMessage>();
         try (var server = StompServer.builder()
-                                     .channel(TransportType.TCP, 5500)
-                                     .channel(TransportType.WEB_SOCKET, 5501)
+                                     .channel(TransportType.TCP, 5620)
+                                     .channel(TransportType.WEB_SOCKET, 5621)
                                      .authenticator(credentials -> true)
                                      .subscription(topic -> true)
                                      .handler(message -> receiveMessages.offer(
                                                                                new ReceivedMessage(message.destination(), message.body())))
                                      .start();
-                var tcpClient = StompClient.create(url)) {
-            tcpClient.connect();
-            var subscription = tcpClient.subscribe("topic-1");
+                var client = StompClient.create(url)) {
+            client.connect();
+            var subscription = client.subscribe("topic-1");
             assertThat(subscription.hasData()).isFalse();
-            tcpClient.sendPlain("topic-1", "MESSAGE-1", "text/plain");
+            client.sendPlain("topic-1", "MESSAGE-1", "text/plain");
             await().until(() -> !receiveMessages.isEmpty());
             assertThat(receiveMessages).hasSize(1)
                                        .containsExactly(new ReceivedMessage("topic-1", "MESSAGE-1"));
         }
     }
 
+    @Test
+    @DisplayName("A server should read a message from TCP clients")
+    @Timeout(value = 10)
+    void receiveMessageOverTcpTest() {
+        receiveMessageFromClient("stomp://localhost:5620");
+    }
+
+    @Test
+    @DisplayName("A server should read a message from WebSocket clients")
+    @Timeout(value = 10)
+    void receiveMessageOverWebSocketTest() {
+        receiveMessageFromClient("ws://localhost:5621");
+    }
+
     @ParameterizedTest
-    @ValueSource(strings = { "stomp://localhost:5500", "ws://localhost:5501" })
+    @Execution(ExecutionMode.SAME_THREAD)
+    @ValueSource(strings = { "stomp://localhost:5600", "ws://localhost:5601" })
     @DisplayName("A server should be able to send a message to clients")
-    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    @Timeout(value = 10)
     void sendMessageTest(String url) {
         var subscribed = new AtomicBoolean(false);
         try (var server = StompServer.builder()
-                                     .channel(TransportType.TCP, 5500)
-                                     .channel(TransportType.WEB_SOCKET, 5501)
+                                     .channel(TransportType.TCP, 5600)
+                                     .channel(TransportType.WEB_SOCKET, 5601)
                                      .authenticator(credentials -> true)
                                      .subscription(topic -> subscribed.compareAndSet(false, true))
                                      .handler(message -> {})
@@ -103,9 +119,10 @@ class StompServerTest {
     }
 
     @ParameterizedTest
+    @Execution(ExecutionMode.SAME_THREAD)
     @ValueSource(strings = { "stomp://localhost:5502", "ws://localhost:5503" })
     @DisplayName("Message handler should receive a session outbound channel")
-    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    @Timeout(value = 10)
     void sessionReplyTest(String url) {
         var replied = new AtomicBoolean(false);
         try (var server = StompServer.builder()
@@ -136,9 +153,10 @@ class StompServerTest {
     }
 
     @ParameterizedTest
+    @Execution(ExecutionMode.SAME_THREAD)
     @ValueSource(strings = { "stomp://localhost:5507" })
     @DisplayName("Server should notify when subscriber acknowledges outbound message")
-    @Timeout(value = 30, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    @Timeout(value = 30)
     void subscriberAckListenerTest(String url) throws InterruptedException {
         var subscribed = new AtomicBoolean(false);
         var ackReceived = new CountDownLatch(1);
@@ -169,9 +187,10 @@ class StompServerTest {
     }
 
     @ParameterizedTest
+    @Execution(ExecutionMode.SAME_THREAD)
     @ValueSource(strings = { "stomp://localhost:5508" })
     @DisplayName("Subscription handler should receive subscribe and unsubscribe lifecycle events")
-    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    @Timeout(value = 10)
     void subscriptionLifecycleTest(String url) {
         var subscribed = new LinkedList<String>();
         var unsubscribed = new LinkedList<String>();
@@ -207,9 +226,10 @@ class StompServerTest {
     }
 
     @ParameterizedTest
+    @Execution(ExecutionMode.SAME_THREAD)
     @ValueSource(strings = { "stomp://localhost:5505", "ws://localhost:5506" })
     @DisplayName("Unsubscribe should stop message delivery")
-    @Timeout(value = 10, threadMode = Timeout.ThreadMode.SEPARATE_THREAD)
+    @Timeout(value = 10)
     void unsubscribeTest(String url) {
         try (var server = StompServer.builder()
                                      .channel(TransportType.TCP, 5505)

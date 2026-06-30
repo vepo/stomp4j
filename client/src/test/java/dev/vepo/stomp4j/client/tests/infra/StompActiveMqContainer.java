@@ -27,6 +27,7 @@ public class StompActiveMqContainer extends GenericContainer<StompActiveMqContai
 
     @Override
     protected void configure() {
+        withReuse(true);
         withEnv("ARTEMIS_USER", username);
         withEnv("ARTEMIS_PASSWORD", password);
         withExposedPorts(61613, 61614, 61616);

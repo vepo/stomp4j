@@ -250,9 +250,9 @@ SPI registrations live in `client/src/main/resources/META-INF/services/`.
 | `client` | `StompClientTcpTest`, `StompClientWebSocketTest` | Integration vs ActiveMQ (all STOMP versions) |
 | `server` | `StompServerTest` | Integration — embedded server + `stomp4j-client` |
 
-`StompContainer` JUnit 5 extension starts a shared `StompActiveMqContainer` and injects URLs/credentials into test methods.
+`StompContainer` JUnit 5 extension starts a shared `StompActiveMqContainer` (one broker per JVM, stopped on shutdown) and injects URLs/credentials into test methods. Docker-backed tests use `@Tag("integration")`.
 
-**Run:** `mvn verify` from repo root. Integration tests require **Docker** (Testcontainers).
+**Run:** `mvn verify` from repo root (full suite, Docker required). **Fast loop:** `mvn -Pfast -pl commons,client,server test` skips integration-tagged tests. Integration tests require **Docker** (Testcontainers).
 
 **Local broker (optional):** `docker compose -f scripts/docker/docker-compose.yaml up`
 
@@ -305,9 +305,8 @@ When adding public API, update `module-info.java` `exports`. When adding SPI, up
 
 ## 12. Known gaps / WIP
 
-- Server: no STOMP transactions (`BEGIN` / `COMMIT` / `ABORT`)
 - Server: no durable message store or queue semantics (embeddable pub/sub only)
-- Client: `StompException` thrown on `ERROR` frames and failed `CONNECT`; not yet used for all transport failures
+- Kafka bridge: no STOMP transactions; client-ack ↔ Kafka offset not supported
 
 Update this section when closing gaps.
 

@@ -37,6 +37,17 @@ public class Session implements StompSession {
     private static final Logger logger = LoggerFactory.getLogger(Session.class);
 
     private static final double HEARTBEAT_TOLERANCE = 2.0;
+    private static final Set<Command> SUPPORTED_CONNECTED_COMMANDS = Set.of(
+                                                                            Command.SEND,
+                                                                            Command.SUBSCRIBE,
+                                                                            Command.UNSUBSCRIBE,
+                                                                            Command.ACK,
+                                                                            Command.NACK,
+                                                                            Command.DISCONNECT,
+                                                                            Command.BEGIN,
+                                                                            Command.COMMIT,
+                                                                            Command.ABORT);
+
     private final OutboundChannel channel;
     private final MessageBuffer buffer;
     private final ChannelListener listener;
@@ -45,8 +56,8 @@ public class Session implements StompSession {
     private final ScheduledExecutorService heartbeatExecutor;
     private final Set<Subscription> subscriptions;
     private final Map<String, PendingMessage> pendingMessages;
+    private final Map<String, TransactionState> transactions;
     private final AtomicLong messageIdSequence;
-
     private final AtomicLong lastReadTime;
     private Status status;
     private String negotiatedVersion;
@@ -55,7 +66,6 @@ public class Session implements StompSession {
     private long serverHeartbeatMs;
     private long clientHeartbeatMs;
     private ScheduledFuture<?> heartbeatTask;
-
     private ScheduledFuture<?> watchdogTask;
 
     public Session(OutboundChannel channel,
@@ -71,6 +81,7 @@ public class Session implements StompSession {
         this.heartbeatExecutor = heartbeatExecutor;
         this.subscriptions = new HashSet<>();
         this.pendingMessages = new HashMap<>();
+        this.transactions = new HashMap<>();
         this.messageIdSequence = new AtomicLong(0);
         this.lastReadTime = new AtomicLong(System.currentTimeMillis());
         this.status = Status.STARTED;
@@ -79,11 +90,23 @@ public class Session implements StompSession {
         this.sessionId = Optional.empty();
     }
 
+    private void abortAllTransactions() {
+        transactions.clear();
+    }
+
+    private void abortTransaction(Message message) {
+        var transactionId = requiredTransactionId(message);
+        if (!transactions.containsKey(transactionId)) {
+            throw new SessionProtocolException("Unknown transaction: %s".formatted(transactionId));
+        }
+        transactions.remove(transactionId);
+    }
+
     private void acknowledgePendingMessage(Message message) {
         resolveAckMessageId(message).ifPresent(messageId -> {
             var pending = pendingMessages.remove(messageId);
             if (Objects.nonNull(pending)) {
-                pending.listener().ifPresent(listener -> listener.onAck(messageId, this));
+                pending.listener().ifPresent(ackListener -> ackListener.onAck(messageId, this));
             }
         });
     }
@@ -96,6 +119,14 @@ public class Session implements StompSession {
                          return authenticator.authenticate(new Credentials(username, password));
                      })
                      .orElse(true);
+    }
+
+    private void beginTransaction(Message message) {
+        var transactionId = requiredTransactionId(message);
+        if (transactions.containsKey(transactionId)) {
+            throw new SessionProtocolException("Transaction already exists: %s".formatted(transactionId));
+        }
+        transactions.put(transactionId, new TransactionState());
     }
 
     private void checkClientHeartbeat() {
@@ -113,11 +144,20 @@ public class Session implements StompSession {
         endSession();
     }
 
+    private void commitTransaction(Message message) {
+        var transactionId = requiredTransactionId(message);
+        var transaction = transactions.remove(transactionId);
+        if (Objects.isNull(transaction)) {
+            throw new SessionProtocolException("Unknown transaction: %s".formatted(transactionId));
+        }
+        transaction.commit();
+    }
+
     private void deliverMessage(Message message, Subscription subscription) {
         deliverMessage(message, subscription, Optional.empty());
     }
 
-    private void deliverMessage(Message message, Subscription subscription, Optional<SubscriberAckListener> listener) {
+    private void deliverMessage(Message message, Subscription subscription, Optional<SubscriberAckListener> ackListener) {
         var messageId = Long.toString(messageIdSequence.incrementAndGet());
         var builder = MessageBuilder.builder(Command.MESSAGE)
                                     .header(Header.SUBSCRIPTION, subscription.id())
@@ -126,12 +166,11 @@ public class Session implements StompSession {
                                     .header(Header.CONTENT_TYPE,
                                             message.headers().get(Header.CONTENT_TYPE).orElse("text/plain"))
                                     .body(message.body());
-        subscription.ackMode().ifPresent(ack -> builder.header(Header.ACK, ack));
-        var outbound = builder.build();
-        channel.send(outbound);
-        subscription.ackMode()
-                    .filter(ack -> ack.equals("client") || ack.equals("client-individual"))
-                    .ifPresent(ack -> pendingMessages.put(messageId, new PendingMessage(message, subscription, listener)));
+        if (requiresManualAcknowledgement(subscription)) {
+            builder.header(Header.ACK, messageId);
+            pendingMessages.put(messageId, new PendingMessage(message, subscription, ackListener));
+        }
+        channel.send(builder.build());
     }
 
     private void endSession() {
@@ -139,6 +178,7 @@ public class Session implements StompSession {
             return;
         }
         status = Status.END;
+        abortAllTransactions();
         stopHeartbeatTasks();
         notifySubscriptionsRemoved();
         listener.sessionDisconnected(this);
@@ -149,14 +189,14 @@ public class Session implements StompSession {
         handle(message, Optional.empty());
     }
 
-    public void handle(Message message, Optional<SubscriberAckListener> listener) {
+    public void handle(Message message, Optional<SubscriberAckListener> ackListener) {
         if (message.command() != Command.SEND) {
             return;
         }
         var destination = message.headers().destination().orElseThrow();
         subscriptions.stream()
                      .filter(subscription -> subscription.topic().equals(destination))
-                     .forEach(subscription -> deliverMessage(message, subscription, listener));
+                     .forEach(subscription -> deliverMessage(message, subscription, ackListener));
     }
 
     @Override
@@ -176,7 +216,7 @@ public class Session implements StompSession {
         resolveAckMessageId(message).ifPresent(messageId -> {
             var pending = pendingMessages.remove(messageId);
             if (Objects.nonNull(pending)) {
-                pending.listener().ifPresent(listener -> listener.onNack(messageId, this));
+                pending.listener().ifPresent(ackListener -> ackListener.onNack(messageId, this));
                 redeliver(messageId, pending);
             }
         });
@@ -211,7 +251,7 @@ public class Session implements StompSession {
             return;
         }
         lastReadTime.set(System.currentTimeMillis());
-        if (buffer.append(new String(data, 0, length))) {
+        if (buffer.append(data, 0, length)) {
             do {
                 process(buffer.message());
             } while (buffer.hasMessage());
@@ -240,57 +280,61 @@ public class Session implements StompSession {
             return;
         }
         logger.debug("Processing message {}", message);
-        switch (status) {
-            case STARTED -> processStarted(message);
-            case CONNECTED -> processConnected(message);
-            case END -> logger.debug("Ignoring message on ended session: {}", message);
+        try {
+            switch (status) {
+                case STARTED -> processStarted(message);
+                case CONNECTED -> processConnected(message);
+                case END -> logger.debug("Ignoring message on ended session: {}", message);
+            }
+        } catch (SessionProtocolException ex) {
+            sendError(ex.getMessage(), message);
+            closeSession();
         }
+    }
+
+    private void processAcknowledgement(Message message, Runnable action) {
+        runInTransaction(message, action);
     }
 
     private void processConnected(Message message) {
-        switch (message.command()) {
-            case SEND -> listener.inboundMessageReceived(this, message);
-            case SUBSCRIBE -> {
-                var topic = message.headers().destination().orElse("");
-                var id = message.headers().get(Header.ID).orElse("0");
-                var ackMode = message.headers().get(Header.ACK);
-                if (listener.subscriptionRequested(this, topic)) {
-                    subscriptions.add(new Subscription(topic, id, ackMode));
-                    listener.subscriptionEstablished(this, topic);
-                }
-            }
-            case UNSUBSCRIBE -> {
-                var id = message.headers().get(Header.ID);
-                var destination = message.headers().destination();
-                var toRemove = subscriptions.stream()
-                                            .filter(subscription -> matchesUnsubscribe(subscription, id, destination))
-                                            .toList();
-                toRemove.forEach(subscription -> listener.subscriptionRemoved(this, subscription.topic()));
-                subscriptions.removeAll(toRemove);
-            }
-            case ACK -> acknowledgePendingMessage(message);
-            case NACK -> negativeAcknowledgePendingMessage(message);
-            case DISCONNECT -> endSession();
-            default -> logger.warn("Command not implemented! {}", message);
+        if (!SUPPORTED_CONNECTED_COMMANDS.contains(message.command())) {
+            throw new SessionProtocolException("Unsupported command: %s".formatted(message.command()));
         }
+        switch (message.command()) {
+            case SEND -> processInboundSend(message);
+            case SUBSCRIBE -> processSubscribe(message);
+            case UNSUBSCRIBE -> processUnsubscribe(message);
+            case ACK -> processAcknowledgement(message, () -> acknowledgePendingMessage(message));
+            case NACK -> processAcknowledgement(message, () -> negativeAcknowledgePendingMessage(message));
+            case BEGIN -> beginTransaction(message);
+            case COMMIT -> commitTransaction(message);
+            case ABORT -> abortTransaction(message);
+            case DISCONNECT -> endSession();
+            default -> throw new SessionProtocolException("Unsupported command: %s".formatted(message.command()));
+        }
+        ReceiptDispatcher.sendReceiptIfRequested(channel, message);
+    }
+
+    private void processInboundSend(Message message) {
+        runInTransaction(message, () -> listener.inboundMessageReceived(this, message));
     }
 
     private void processStarted(Message message) {
-        if (message.command() != Command.CONNECT) {
-            sendError("Expected CONNECT frame");
+        if (message.command() != Command.CONNECT && message.command() != Command.STOMP) {
+            sendError("Expected CONNECT or STOMP frame", message);
             closeSession();
             return;
         }
         login = message.headers().get(Header.LOGIN);
         if (!authenticate(message)) {
-            sendError("Authentication failed");
+            sendError("Authentication failed", message);
             closeSession();
             return;
         }
         try {
             negotiatedVersion = negotiateVersion(message.headers().get(Header.ACCEPT_VERSION).orElse("1.2"));
         } catch (IllegalStateException ex) {
-            sendError("No supported STOMP version");
+            sendError("No supported STOMP version", message);
             closeSession();
             return;
         }
@@ -311,17 +355,44 @@ public class Session implements StompSession {
         status = Status.CONNECTED;
         startHeartbeatTasks();
         listener.sessionConnected(this);
+        ReceiptDispatcher.sendReceiptIfRequested(channel, message);
     }
 
-    private void redeliver(String messageId) {
-        var pending = pendingMessages.get(messageId);
-        if (Objects.nonNull(pending)) {
-            redeliver(messageId, pending);
+    private void processSubscribe(Message message) {
+        var topic = message.headers().destination().orElse("");
+        var id = message.headers().get(Header.ID).orElse("0");
+        var ackMode = message.headers().get(Header.ACK);
+        if (!listener.subscriptionRequested(this, topic)) {
+            throw new SessionProtocolException("Subscription denied for destination: %s".formatted(topic));
         }
+        subscriptions.add(new Subscription(topic, id, ackMode));
+        listener.subscriptionEstablished(this, topic);
+    }
+
+    private void processUnsubscribe(Message message) {
+        var id = message.headers().get(Header.ID);
+        var destination = message.headers().destination();
+        var toRemove = subscriptions.stream()
+                                    .filter(subscription -> matchesUnsubscribe(subscription, id, destination))
+                                    .toList();
+        toRemove.forEach(subscription -> listener.subscriptionRemoved(this, subscription.topic()));
+        subscriptions.removeAll(toRemove);
     }
 
     private void redeliver(String messageId, PendingMessage pending) {
         deliverMessage(pending.message(), pending.subscription(), pending.listener());
+    }
+
+    private String requiredTransactionId(Message message) {
+        return message.headers()
+                      .get(Header.TRANSACTION)
+                      .orElseThrow(() -> new SessionProtocolException("Missing transaction header"));
+    }
+
+    private boolean requiresManualAcknowledgement(Subscription subscription) {
+        return subscription.ackMode()
+                           .map(mode -> "client".equals(mode) || "client-individual".equals(mode))
+                           .orElse(false);
     }
 
     private Optional<String> resolveAckMessageId(Message message) {
@@ -330,11 +401,24 @@ public class Session implements StompSession {
                       .or(() -> message.headers().get(Header.MESSAGE_ID));
     }
 
-    private void sendError(String message) {
-        channel.send(MessageBuilder.builder(Command.ERROR)
-                                   .header(Header.MESSAGE, message)
-                                   .body(message)
-                                   .build());
+    private void runInTransaction(Message message, Runnable action) {
+        message.headers()
+               .get(Header.TRANSACTION)
+               .ifPresentOrElse(transactionId -> {
+                   var transaction = transactions.get(transactionId);
+                   if (Objects.isNull(transaction)) {
+                       throw new SessionProtocolException("Unknown transaction: %s".formatted(transactionId));
+                   }
+                   transaction.defer(action);
+               }, action);
+    }
+
+    private void sendError(String errorMessage, Message relatedFrame) {
+        var builder = MessageBuilder.builder(Command.ERROR)
+                                    .header(Header.MESSAGE, errorMessage)
+                                    .body(errorMessage);
+        relatedFrame.headers().get(Header.RECEIPT).ifPresent(receipt -> builder.header(Header.RECEIPT_ID, receipt));
+        channel.send(builder.build());
     }
 
     private void sendHeartbeatIfIdle() {

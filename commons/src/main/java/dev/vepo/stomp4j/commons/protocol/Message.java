@@ -1,5 +1,7 @@
 package dev.vepo.stomp4j.commons.protocol;
 
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.Objects;
 
 public record Message(Command command, Headers headers, String body) {
@@ -18,38 +20,7 @@ public record Message(Command command, Headers headers, String body) {
     }
 
     public static Message readMessage(String content) {
-        String[] splitMessage = content.split(Message.NEW_LINE);
-
-        if (splitMessage.length == 0)
-            throw new IllegalStateException("Did not received any message");
-
-        String command = splitMessage[0];
-        Headers stompHeaders = new Headers();
-        StringBuilder body = new StringBuilder();
-
-        int cursor = 1;
-        for (int i = cursor; i < splitMessage.length; i++) {
-            // empty line
-            cursor = i;
-            if (splitMessage[i].isEmpty()) {
-                break;
-            } else {
-                var delimiterPos = splitMessage[i].indexOf(Message.DELIMITER);
-                if (delimiterPos > 0) {
-                    stompHeaders.add(splitMessage[i].substring(0, delimiterPos),
-                                     splitMessage[i].substring(delimiterPos + 1));
-                }
-            }
-        }
-
-        for (int i = cursor + 1; i < splitMessage.length; i++) {
-            body.append(splitMessage[i]);
-        }
-
-        if (body.isEmpty())
-            return new Message(Command.valueOf(command), stompHeaders);
-        else
-            return new Message(Command.valueOf(command), stompHeaders, body.toString().replace(Message.END, ""));
+        return FrameDecoder.decode(content);
     }
 
     public static String formatted(String message) {
@@ -59,18 +30,22 @@ public record Message(Command command, Headers headers, String body) {
     public String encode() {
         if (command == Command.HEARTBEAT) {
             return NEW_LINE;
-        } else {
-            var builder = new StringBuilder();
-            builder.append(command.name())
-                   .append(Message.NEW_LINE);
-            headers.write(builder);
-            builder.append(Message.NEW_LINE);
-            if (Objects.nonNull(body)) {
-                builder.append(body);
-            }
-
-            return builder.append(Message.END)
-                          .toString();
         }
+        var encodedHeaders = new HashMap<>(headers.asMap());
+        var frameBody = Objects.nonNull(body) ? body : "";
+        if (!frameBody.isEmpty() && !encodedHeaders.containsKey(Header.CONTENT_LENGTH.value())) {
+            encodedHeaders.put(Header.CONTENT_LENGTH.value(),
+                               Integer.toString(frameBody.getBytes(StandardCharsets.UTF_8).length));
+        }
+        var builder = new StringBuilder();
+        builder.append(command.name())
+               .append(Message.NEW_LINE);
+        new Headers(encodedHeaders).write(builder, command);
+        builder.append(Message.NEW_LINE);
+        if (!frameBody.isEmpty()) {
+            builder.append(frameBody);
+        }
+        return builder.append(Message.END)
+                      .toString();
     }
 }

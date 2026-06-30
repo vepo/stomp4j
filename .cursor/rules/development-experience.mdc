@@ -11,9 +11,14 @@ Stomp4J is a library — there is no `main()` or dev server. Local validation is
 
 ```bash
 mvn verify                    # full build + tests (Docker required)
-mvn -pl client test           # client module only
+mvn -Pfast -pl commons,client,server test   # unit + embedded-server tests only (no Docker)
+mvn -pl client test           # client module only (Docker required for integration tests)
 docker compose -f scripts/docker/docker-compose.yaml up   # optional local Artemis
 ```
+
+**Fast loop:** `mvn -Pfast -pl commons,client,server test` skips `@Tag("integration")` tests (Testcontainers). Run full `mvn verify` before pushing.
+
+Testcontainers reuse is enabled in `src/test/resources/testcontainers.properties`; brokers stay up for the JVM and between Maven runs when reuse is active.
 
 ## When adding or changing a feature
 
