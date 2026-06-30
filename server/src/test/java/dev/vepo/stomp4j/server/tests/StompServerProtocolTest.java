@@ -47,8 +47,13 @@ class StompServerProtocolTest {
             if (length < 0) {
                 throw new IOException("Connection closed while reading frame");
             }
-            if (length > 0 && buffer.append(data, 0, length) && buffer.hasMessage()) {
-                return buffer.message();
+            if (length > 0 && buffer.append(data, 0, length)) {
+                while (buffer.hasMessage()) {
+                    var message = buffer.message();
+                    if (message.command() != Command.HEARTBEAT) {
+                        return message;
+                    }
+                }
             }
         }
     }

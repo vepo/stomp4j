@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 
 import dev.vepo.stomp4j.commons.protocol.Command;
 import dev.vepo.stomp4j.commons.protocol.Header;
+import dev.vepo.stomp4j.commons.protocol.Message;
 import dev.vepo.stomp4j.commons.protocol.MessageBuffer;
 
 class MessageBufferTest {
@@ -44,26 +45,46 @@ class MessageBufferTest {
         assertEquals("text/plain", message.headers().get(Header.CONTENT_TYPE).orElse(null));
         assertEquals("Hello, World!", message.body());
         assertTrue(buffer.hasMessage());
-        message = buffer.message();
+        message = nextFrame(buffer);
         assertNotNull(message);
         assertEquals(Command.MESSAGE, message.command());
         assertEquals("/topic/test-2", message.headers().get(Header.DESTINATION).orElse(null));
         assertEquals("1235", message.headers().get(Header.MESSAGE_ID).orElse(null));
         assertEquals("text/plain", message.headers().get(Header.CONTENT_TYPE).orElse(null));
         assertEquals("Hello, World! 2", message.body());
+        assertTrue(buffer.hasMessage());
+        assertEquals(Command.HEARTBEAT, buffer.message().command());
         assertFalse(buffer.hasMessage());
     }
 
     @Test
     void heartbeatBeforeFrameTest() {
         var buffer = new MessageBuffer();
-        assertFalse(buffer.append("\n"));
+        assertTrue(buffer.append("\n"));
+        assertEquals(Command.HEARTBEAT, buffer.message().command());
         assertTrue(buffer.append("MESSAGE\ndestination:/topic/test\nmessage-id:1234\ncontent-type:text/plain\n\nHello\n\u0000"));
         assertTrue(buffer.hasMessage());
         var message = buffer.message();
         assertEquals(Command.MESSAGE, message.command());
         assertEquals("/topic/test", message.headers().get(Header.DESTINATION).orElse(null));
         assertEquals("Hello", message.body());
+        assertFalse(buffer.hasMessage());
+    }
+
+    @Test
+    void standaloneHeartbeatTest() {
+        var buffer = new MessageBuffer();
+        assertTrue(buffer.append("\n"));
+        assertTrue(buffer.hasMessage());
+        assertEquals(Command.HEARTBEAT, buffer.message().command());
+        assertFalse(buffer.hasMessage());
+    }
+
+    @Test
+    void crlfHeartbeatTest() {
+        var buffer = new MessageBuffer();
+        assertTrue(buffer.append("\r\n"));
+        assertEquals(Command.HEARTBEAT, buffer.message().command());
         assertFalse(buffer.hasMessage());
     }
 
@@ -94,6 +115,9 @@ class MessageBufferTest {
         assertEquals("text/plain", message.headers().get(Header.CONTENT_TYPE).orElse(null));
         assertEquals("Hello, World!", message.body());
         assertTrue(buffer.hasMessage());
+        assertEquals(Command.HEARTBEAT, buffer.message().command());
+        assertTrue(buffer.hasMessage());
+        assertEquals(Command.HEARTBEAT, buffer.message().command());
         message = buffer.message();
         assertNotNull(message);
         assertEquals(Command.MESSAGE, message.command());
@@ -132,7 +156,7 @@ class MessageBufferTest {
 
                                  Hello, World! 2
                                  \u0000"""));
-        message = buffer.message();
+        message = nextFrame(buffer);
         assertNotNull(message);
         assertEquals(Command.MESSAGE, message.command());
         assertEquals("/topic/test-2", message.headers().get(Header.DESTINATION).orElse(null));
@@ -152,7 +176,7 @@ class MessageBufferTest {
                      assertFalse(buffer.append("content-type:text/plain\n"));
                      assertFalse(buffer.append("\n"));
                      assertFalse(buffer.append("Hello, World! " + index + "\n"));
-                     assertTrue(buffer.append("\u0000\n"));
+                     assertTrue(buffer.append("\u0000"));
                      var message = buffer.message();
                      assertNotNull(message);
                      assertEquals(Command.MESSAGE, message.command());
@@ -187,7 +211,7 @@ class MessageBufferTest {
         assertEquals("text/plain", message.headers().get(Header.CONTENT_TYPE).orElse(null));
         assertEquals("Hello, World!", message.body());
         assertTrue(buffer.hasMessage());
-        message = buffer.message();
+        message = nextFrame(buffer);
         assertNotNull(message);
         assertEquals(Command.MESSAGE, message.command());
         assertEquals("/topic/test-2", message.headers().get(Header.DESTINATION).orElse(null));
@@ -232,5 +256,13 @@ class MessageBufferTest {
         assertEquals("1234", message.headers().get(Header.MESSAGE_ID).orElse(null));
         assertEquals("text/plain", message.headers().get(Header.CONTENT_TYPE).orElse(null));
         assertEquals("Hello, World!", message.body());
+    }
+
+    private static Message nextFrame(MessageBuffer buffer) {
+        Message message;
+        do {
+            message = buffer.message();
+        } while (message.command() == Command.HEARTBEAT);
+        return message;
     }
 }

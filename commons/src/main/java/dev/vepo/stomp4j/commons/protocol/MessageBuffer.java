@@ -20,46 +20,42 @@ public class MessageBuffer {
 
     public boolean append(byte[] data, int offset, int length) {
         buffer.write(data, offset, length);
-        discardLeadingHeartbeats();
-        return containsNullTerminator();
+        return hasMessage();
     }
 
     public boolean append(String messageLine) {
         return append(messageLine.getBytes(StandardCharsets.UTF_8));
     }
 
+    public boolean hasMessage() {
+        return leadingHeartbeatLength() > 0 || containsNullTerminator();
+    }
+
     private boolean containsNullTerminator() {
         return indexOfNullTerminator() > 0;
     }
 
-    private void discardLeadingHeartbeats() {
+    // STOMP heart-beat is a lone LF or CRLF on the byte stream — not a NUL-terminated frame.
+    private int leadingHeartbeatLength() {
         var frameBytes = buffer.toByteArray();
-        int position = 0;
-        while (position < frameBytes.length) {
-            if (frameBytes[position] == '\n') {
-                position++;
-                continue;
-            }
-            if (frameBytes[position] == '\r'
-                    && position + 1 < frameBytes.length
-                    && frameBytes[position + 1] == '\n') {
-                position += 2;
-                continue;
-            }
-            break;
+        if (frameBytes.length == 0) {
+            return 0;
         }
-        if (position == 0) {
-            return;
+        if (frameBytes[0] == '\n') {
+            return 1;
         }
-        buffer.reset();
-        if (position < frameBytes.length) {
-            buffer.write(frameBytes, position, frameBytes.length - position);
+        if (frameBytes.length >= 2 && frameBytes[0] == '\r' && frameBytes[1] == '\n') {
+            return 2;
         }
+        return 0;
     }
 
-    public boolean hasMessage() {
-        discardLeadingHeartbeats();
-        return indexOfNullTerminator() > 0;
+    private void consumeLeadingBytes(int length) {
+        var frameBytes = buffer.toByteArray();
+        buffer.reset();
+        if (length < frameBytes.length) {
+            buffer.write(frameBytes, length, frameBytes.length - length);
+        }
     }
 
     private int indexOfNullTerminator() {
@@ -73,7 +69,12 @@ public class MessageBuffer {
     }
 
     public Message message() {
-        discardLeadingHeartbeats();
+        var heartbeatLength = leadingHeartbeatLength();
+        if (heartbeatLength > 0) {
+            consumeLeadingBytes(heartbeatLength);
+            logger.debug("Heartbeat received");
+            return Message.HEARTBEAT;
+        }
         var nullIndex = indexOfNullTerminator();
         if (nullIndex <= 0) {
             throw new IllegalStateException("Message not complete");
@@ -81,14 +82,9 @@ public class MessageBuffer {
         var frameBytes = buffer.toByteArray();
         var messageContent = new byte[nullIndex];
         System.arraycopy(frameBytes, 0, messageContent, 0, nullIndex);
-        var deleteThrough = nullIndex + 1;
-        while (deleteThrough < frameBytes.length
-                && (frameBytes[deleteThrough] == '\n' || frameBytes[deleteThrough] == '\r')) {
-            deleteThrough++;
-        }
         buffer.reset();
-        if (deleteThrough < frameBytes.length) {
-            buffer.write(frameBytes, deleteThrough, frameBytes.length - deleteThrough);
+        if (nullIndex + 1 < frameBytes.length) {
+            buffer.write(frameBytes, nullIndex + 1, frameBytes.length - nullIndex - 1);
         }
         logger.info("Message received: {}", new String(messageContent, StandardCharsets.UTF_8));
         return FrameDecoder.decode(messageContent);
