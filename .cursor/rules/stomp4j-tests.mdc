@@ -1,5 +1,5 @@
 ---
-description: JUnit, Testcontainers, and integration test conventions
+description: JUnit, Testcontainers, domain-language narrative tests, meaningful assertions
 globs:
   - '**/src/test/**/*.java'
   - '**/commons/**'
@@ -10,7 +10,93 @@ alwaysApply: false
 
 # Test conventions
 
-When **creating** tests for new behaviour, follow TDD in [stomp4j-model.mdc](stomp4j-model.mdc) § TDD (Red creates the test before production code). This file covers layout, infra, and conventions for tests once they exist.
+When **creating** tests for new behaviour, follow TDD in [stomp4j-model.mdc](stomp4j-model.mdc) § TDD. This file covers **how tests read and assert** — layout, infra, narrative style, and conventions.
+
+## Domain language in tests
+
+Tests are executable specifications — use the same [ubiquitous language](../../docs/domain-specification.md) as production code.
+
+| Use | Avoid |
+|-----|-------|
+| `destination`, `subscription`, `frame`, `session`, `transport` | `data`, `msg`, `flag`, `result`, `obj` |
+| `shouldDeliverMessageToSubscribedDestination` | `testSubscribe`, `clientWorks` |
+| `givenConnectedClient`, `whenSendToDestination` | `setup`, `doStuff`, `helper1` |
+
+- **Method names:** `should<Outcome>In<Scenario>` — outcome and scenario in domain terms.
+- **`@DisplayName`:** plain sentence a product owner could read; mirrors the method name.
+- **Variables:** name what the thing *is* (`connectedFrame`, `inboundMessage`, `negotiatedVersion`), not its storage shape.
+
+## Tests tell a story
+
+Structure each test as a **short narrative**: arrange context → act → assert outcome. A reader should follow the scenario without decoding implementation detail.
+
+Use **blank lines** between acts and **one-line comments** only where the step is not obvious from names:
+
+```java
+@Test
+void shouldDeliverMessageToSubscribedDestination() {
+    try (var broker = givenArtemisBroker(stomp);
+         var client = givenConnectedClient(broker.tcpUrl())) {
+
+        var destination = givenDestination("/topic/orders");
+        var receivedBodies = new ArrayList<String>();
+        givenSubscription(client, destination, receivedBodies::add);
+        settleSubscription();
+
+        whenClientSends(client, destination, "order-42");
+
+        thenSubscriptionReceives(receivedBodies, "order-42");
+    }
+}
+```
+
+| Pattern | Role | Examples |
+|---------|------|----------|
+| **Given** | World before the behaviour under test | `givenEmbeddedServer()`, `givenConnectFrame()`, `givenDeniedSubscriptionHandler()` |
+| **When** | The action or event | `whenSubscribe()`, `whenSendFrame()`, `whenCommitTransaction()` |
+| **Then** | Observable outcome | `thenFrameIsConnected()`, `thenMessageWasDelivered()`, `thenSessionIsClosed()` |
+
+- Extract **given/when/then helpers** into the test class or `*.tests.infra` when reused — keep the test method as the story outline.
+- Prefer **try-with-resources** for servers, clients, and sockets so the story ends with cleanup implicit.
+- Order lines top-to-bottom in **chronological** order; do not jump between arrange/act/assert.
+
+## Meaningful assertions
+
+Every test must **assert domain-relevant outcomes**. If a test passes with all assertions removed, it is not a valid test.
+
+| Assert | Do not substitute with |
+|--------|--------------------------|
+| Frame `command`, `Header` values, body content | `assertThat(x).isNotNull()` alone |
+| Message delivered to subscription | “no exception thrown” |
+| Session closed, ERROR frame, receipt id | `assertTrue(true)` or empty `assertDoesNotThrow` |
+| Count, order, or absence of messages | Logging and eyeballing |
+
+Rules:
+
+1. **At least one assertion** must verify the behaviour named in the test method.
+2. Assertions must check **what** changed (destination, payload, protocol header, lifecycle), not only that code ran.
+3. Use **AssertJ** messages or `.as("…")` when the expected value alone is unclear.
+4. Async flows: await a **domain condition** (`receivedBodies` has size 1, `subscription.hasData()`) — then assert content.
+
+```java
+// ❌ No behavioural assertion
+client.subscribe("/topic/foo", messages::add);
+client.send("/topic/foo", "hi");
+// test passes if nothing throws
+
+// ✅ Asserts the scenario outcome
+await().atMost(Duration.ofSeconds(30)).until(() -> !messages.isEmpty());
+assertThat(messages).containsExactly("hi");
+```
+
+```java
+// ❌ Weak — does not prove CONNECTED negotiation
+assertThat(response).isNotNull();
+
+// ✅ Proves protocol outcome
+assertThat(response.command()).isEqualTo(Command.CONNECTED);
+assertThat(response.headers().get(Header.VERSION)).contains("1.2");
+```
 
 ## Docker required
 
@@ -51,32 +137,36 @@ Tiered commands: [stomp4j-testing.mdc](stomp4j-testing.mdc).
 - JUnit 5 lifecycle (`@BeforeAll`, `@AfterAll`) via extensions where shared containers are used.
 - `@Execution(ExecutionMode.SAME_THREAD)` on broker-backed or port-sharing tests.
 
-## Assertions
+## Assertions (tools)
 
-- **AssertJ** for fluent assertions.
+- **AssertJ** for fluent assertions — see § Meaningful assertions above.
 - **Awaitility** for async subscribe/receive flows — not `Thread.sleep()`.
 - Always set `atMost(...)`; any `pollDelay` must be **less than** `atMost`.
 
 ## Cookbook
 
-### Broker integration test class
+### Broker integration test — narrative style
 
 ```java
 @Tag("integration")
 @ExtendWith(StompContainer.class)
 @Execution(ExecutionMode.SAME_THREAD)
-class MyStompClientTest {
+class StompClientDeliveryTest {
 
     @ParameterizedTest
     @MethodSource("allVersions")
-    void shouldDeliverMessage(Stomp version, StompActiveMqContainer stomp) {
-        try (var client = StompClient.create(stomp.tcpUrl(), credentials, Set.of(version))) {
-            client.connect();
-            var messages = new ArrayList<String>();
-            client.subscribe("/topic/foo", messages::add);
-            StompTestSupport.settleSubscription(); // before SEND — avoids Artemis race
-            // publish via JMS or client.send…
-            StompTestSupport.awaitMessageCount(1, messages::size);
+    @DisplayName("Client receives MESSAGE on subscribed destination")
+    void shouldDeliverMessageToSubscribedDestination(Stomp version, StompActiveMqContainer broker) {
+        try (var client = givenConnectedClient(broker.tcpUrl(), version)) {
+            var destination = givenDestination("/topic/foo");
+            var received = new ArrayList<String>();
+
+            givenSubscription(client, destination, received::add);
+            StompTestSupport.settleSubscription();
+
+            whenPublishToDestination(broker, destination, "payload");
+
+            thenSubscriptionReceivesExactly(received, "payload");
         }
     }
 }
@@ -92,17 +182,23 @@ class MyStompClientTest {
 
 Do not use `61616` for STOMP WebSocket tests.
 
-### Embedded server test
+### Embedded server test — narrative style
 
 ```java
 @Execution(ExecutionMode.SAME_THREAD)
-class MyServerTest {
+class StompServerSessionTest {
+
     @Test
-    void scenario() {
-        var port = /* unique per test method — e.g. EphemeralPort or random */;
-        try (var server = StompServer.builder().port(port).build()) {
-            server.start();
-            // client connects to stomp://localhost:{port}
+    @DisplayName("Server answers CONNECT with CONNECTED and negotiated version")
+    void shouldAcceptConnectAndReturnConnectedFrame() {
+        var port = ServerTestSupport.uniquePort();
+        try (var server = givenEmbeddedServerOnPort(port);
+             var socket = givenTcpSocketTo("localhost", port)) {
+
+            whenSendFrame(socket, givenStompConnectFrame("1.2"));
+
+            var connected = thenReadNextFrame(socket);
+            thenFrameIsConnectedWithVersion(connected, "1.2");
         }
     }
 }
@@ -126,6 +222,9 @@ await().pollDelay(Duration.ofSeconds(5)).until(() -> true);
 
 ## Never
 
+- Tests **without assertions** on the behaviour named in the method.
+- Assertions that only check non-null / no-throw when a domain outcome exists.
+- Generic names (`data`, `test1`) or steps that hide the scenario (`setup`, `run`).
 - `Thread.sleep()` to fix timing — use Awaitility or proper synchronization.
 - `@Disabled` / ignore failures without fixing root cause.
 - Bypass `StompContainer` with raw broker URLs when the extension is available.

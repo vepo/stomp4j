@@ -1,77 +1,133 @@
 ---
-description: OOP design — Tell/Don't Ask, Law of Demeter, no method bypass
+description: OOP design — Seven Virtues of a Good Object (Yegor256) + Tell/Don't Ask, Demeter, no bypass
 globs: "**/*.java"
 alwaysApply: false
 ---
 
 # OOP design
 
-Naming follows [docs/domain-specification.md](../../docs/domain-specification.md).
+Based on [Seven Virtues of a Good Object](https://www.yegor256.com/2014/11/20/seven-virtues-of-good-object.html). Naming and terms: [docs/domain-specification.md](../../docs/domain-specification.md).
 
-## Tell, Don't Ask
+Apply on **new or touched** behaviour; do not mandate big-bang refactors.
 
-**Tell:** call an intent method (`connect`, `subscribe`, `processConnect`) that owns the decision.
+## 1. Exists in real life
 
-**Don't ask:** avoid `if (session.getStatus() == X) { session.setStatus(Y); … }` spread across callers.
+An object is a **representative** of something outside the program scope — not a bag of functions.
 
-```
-StompClient API  →  StompClientImpl  →  Transport / Stomp protocol
-StompServer      →  Session          →  MessageHandler / SubscriptionHandler
-```
+| Good (domain nouns) | Avoid (job titles / invented roles) |
+|---------------------|-------------------------------------|
+| `Frame`, `Message`, `Destination`, `Subscription`, `Session`, `Transport` | `FrameParser`, `ConnectionManager`, `MessageValidator`, `StompServiceLocator` |
+| `StompClient` (connected peer), `StompDelivery` (inbound MESSAGE) | `ClientFactory`, `ProtocolHandler` (unless it *is* the protocol object) |
 
-- **Public API:** thin facade; delegate to implementation.
-- **Session / StompClientImpl:** own connection state machine and frame handling.
-- **Handlers:** callbacks; server tells `MessageHandler.process`, not raw frame parsing in handlers.
+Ask: *“What real-life entity does this object represent?”* If none, rename or merge into an existing domain type.
+
+**Tell, Don't Ask** — the living object owns decisions; callers send commands:
 
 ```java
-// ❌ Caller owns CONNECT transition
-if (status == Status.STARTED) { status = Status.CONNECTED; channel.write(connectedFrame); }
+// ❌ Caller inspects state and mutates
+if (session.getStatus() == Status.STARTED) { session.setStatus(Status.CONNECTED); … }
 
-// ✅ Session owns the transition
+// ✅ Session owns the CONNECT transition
 session.processConnect(message);
 ```
 
-Apply on **new or touched** behaviour; consolidate legacy ask-then-set in the same change.
+Layers: `StompClient` → `StompClientImpl` → `Transport` / `Stomp`; `StompServer` → `Session` → handlers.
 
-## Law of Demeter
+## 2. Works by contracts
 
-Call only on self, objects you create, parameters, and **direct** components — not on objects returned by those calls.
+Every **public** capability on a type consumers use should come from an **interface** (or sealed public API like `StompClient`).
+
+- Handlers: `MessageHandler`, `SubscriptionHandler`, `StompAuthenticator` — not ad-hoc lambdas with undocumented shapes in public API.
+- SPI: `Transport`, `TransportProvider`, `Stomp` — extend via `provides` + `META-INF/services`.
+- Prefer **program to the interface** in tests (mocks implement the contract).
+
+Public methods that exist only on a concrete class and are not part of a contract are hard to mock and decorate.
+
+## 3. Is unique
+
+Each instance should **encapsulate** something that distinguishes it — not be a stateless clone of every sibling.
 
 ```java
-// ❌ train wreck
+// ❌ Every HTTPStatus clone is identical — nothing encapsulated
+class HTTPStatus { URL page = new URL("http://localhost"); … }
+
+// ✅ Stomp4J — transport bound to a URI and listener
+TcpTransport(SocketChannel channel, TransportListener listener)
+```
+
+Avoid utility classes with only static methods for domain behaviour; prefer an object that **is** the thing (`Message`, `Headers`, `SubscribeOptions`).
+
+## 4. Is immutable (values) / stable identity (lifecycle)
+
+- **Value objects** — immutable: `Message` (record), `SubscribeOptions`, `SendOptions`, `UserCredential`, encoded frame data. No setters; new instance for change.
+- **Lifecycle representatives** — `Session`, `StompClientImpl`, `Transport` may hold mutable connection state, but **do not expose setters**; mutate only through intent methods (`connect`, `processConnect`, `close`).
+- Prefer `final` fields; return defensive copies or unmodifiable views when exposing collections.
+
+Immutability simplifies tests, threading, and caching — see the article’s rationale.
+
+## 5. Class has no static behaviour (with Stomp4J exceptions)
+
+Static methods belong to the **class as global procedure**, not to an object. Minimize them.
+
+| Allowed | Avoid |
+|---------|-------|
+| `StompClient.create(url, …)` — public factory on the **interface** entry point | `StompUtils.parseFrame(…)` for core protocol |
+| `module-info` / SPI bootstrap | Static mutable caches without thread safety |
+| Package-private test helpers | `public static` domain logic on non-final classes |
+
+New domain behaviour → instance methods on objects that represent domain entities.
+
+## 6. Name is not a job title
+
+Names say **what it is**, not what it does. Avoid `-er` / `-or` suffixes unless they are established domain terms.
+
+| Prefer | Avoid |
+|--------|-------|
+| `MessageBuffer` (buffer of wire bytes) | `FrameDecoder`, `StreamReader` |
+| `Stomp1_2` (protocol for version 1.2) | `StompProtocolHandler` |
+| `OutboundChannel` (channel for outbound frames) | `MessageDispatcher` |
+
+## 7. Class is final or abstract
+
+- **`final`** — black box; extend via **decoration** (wrap the interface), not inheritance override.
+- **`abstract`** — template with explicit extension points (`abstract` methods); guard other methods with `final`.
+
+```java
+// ❌ Override parent method — risks breaking parent invariants
+class OnlyValidStatus extends HTTPStatus { @Override int read() { … } }
+
+// ✅ Decorate the contract
+final class ValidatedStatus implements Status {
+    private final Status origin;
+    …
+}
+```
+
+New public types: default **`final`**. Use `abstract` only for intentional shared skeletons (e.g. `Stomp` base with version hooks). Non-final concrete public classes need a documented reason.
+
+## Collaboration rules (support virtues 1–2)
+
+### Law of Demeter
+
+Call only on self, parameters, objects you create, and **direct** collaborators — not train wrecks:
+
+```java
+// ❌
 if (client.getTransport().getListener().isConnected()) { … }
 
 // ✅
 if (client.isConnected()) { … }
 ```
 
-| Layer | Rule |
-|-------|------|
-| Public API | No reaching into `internal` from outside the module |
-| Session / StompClientImpl | Expose `isConnected()`, `getProtocolVersion()` instead of deep graphs |
-| Handlers | Receive only what they need (`topic`, `body`, `OutboundChannel`) |
+Handlers receive only what they need (`topic`, `body`, `OutboundChannel`). One step is fine: `message.headers().get(Header.DESTINATION)`.
 
-Allowed: one direct step — `message.headers().get(Header.DESTINATION)`.
+### No method bypass
 
-## No method bypass
-
-A **bypass** forwards the same arguments with no added behaviour. Call the target directly.
-
-```java
-// ❌ bypass chain
-public void foo(X x) { helper.foo(x); }  // helper only forwards
-
-// ✅ intentional public factory
-StompClient.create(url) → StompClientImpl.create(url)
-```
-
-| Allowed wrapper | Bypass |
-|-----------------|--------|
-| Public API hiding internal types | `helper.create(url)` → `StompClient.create(url)` with no logic |
-| Validation, mapping, SPI contract | Same-args pass-through to callee |
+Do not forward same arguments with no added behaviour. **Allowed:** `StompClient.create` hiding `StompClientImpl`; validation, mapping, SPI wiring.
 
 ## Never
 
 - Duplicate state-check + mutation in multiple callers.
-- Parse STOMP frames in handler callbacks when `Session` should own protocol logic.
+- Parse STOMP frames in application handlers when `Session` owns protocol logic.
 - Copy the same getter chain into a second class — extract on the owning type.
+- Introduce controllers, parsers, validators, or factories that do not represent a domain entity.

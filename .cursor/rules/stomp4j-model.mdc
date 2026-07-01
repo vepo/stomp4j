@@ -17,7 +17,7 @@ Canonical references: [ARCHITECTURE.md](../../ARCHITECTURE.md), [docs/domain-spe
 
 - Use domain terms: `Destination`, `Subscription`, `Frame`, `Session`, `Transport` — not `Data`, `Handler2`, `stateFlag`.
 - Handler signatures: `topic`/`destination` and `message`/`body` consistently with existing handlers.
-- Test names describe STOMP scenarios: `shouldDeliverMessageToSubscribedDestination()`.
+- Test names: `shouldDeliverMessageToSubscribedDestination()` — full narrative and assertion rules in [stomp4j-tests.mdc](stomp4j-tests.mdc).
 
 ## Module placement
 

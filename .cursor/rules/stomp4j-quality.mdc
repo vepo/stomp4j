@@ -35,7 +35,7 @@ Pre-existing issues elsewhere: fix only if trivial; no scope creep.
 | Java style, logging, `var`, streams | [stomp4j-java.mdc](stomp4j-java.mdc) |
 | Imports and formatting | [stomp4j-format-imports.mdc](stomp4j-format-imports.mdc) |
 | String building | [stomp4j-strings.mdc](stomp4j-strings.mdc) |
-| Tell/Don't Ask, Demeter, no bypass | [stomp4j-oop-design.mdc](stomp4j-oop-design.mdc) |
+| Tell/Don't Ask, Demeter, no bypass, [Seven Virtues](https://www.yegor256.com/2014/11/20/seven-virtues-of-good-object.html) | [stomp4j-oop-design.mdc](stomp4j-oop-design.mdc) |
 | Non-obvious comments | [stomp4j-in-code-documentation.mdc](stomp4j-in-code-documentation.mdc) |
 
 ## Report to user

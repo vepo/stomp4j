@@ -36,12 +36,12 @@ No content is duplicated across pillars — each hub links to file-scoped rules 
 | Rule | Globs | Topic |
 |------|-------|-------|
 | [stomp4j-protocol.mdc](.cursor/rules/stomp4j-protocol.mdc) | `commons/**`, `client/**`, `server/**`, `bridge/**` | STOMP spec compliance |
-| [stomp4j-oop-design.mdc](.cursor/rules/stomp4j-oop-design.mdc) | `**/*.java` | Tell/Don't Ask, Demeter, no bypass |
+| [stomp4j-oop-design.mdc](.cursor/rules/stomp4j-oop-design.mdc) | `**/*.java` | Seven Virtues, Tell/Don't Ask, Demeter, no bypass |
 | [stomp4j-java.mdc](.cursor/rules/stomp4j-java.mdc) | `**/*.java` | Style, logging, `var`, streams, JPMS |
 | [stomp4j-format-imports.mdc](.cursor/rules/stomp4j-format-imports.mdc) | `**/*.java` | Imports and formatting |
 | [stomp4j-strings.mdc](.cursor/rules/stomp4j-strings.mdc) | `**/*.java` | String building |
 | [stomp4j-in-code-documentation.mdc](.cursor/rules/stomp4j-in-code-documentation.mdc) | `**/*.java` | Non-obvious comments |
-| [stomp4j-tests.mdc](.cursor/rules/stomp4j-tests.mdc) | test + core module paths | JUnit, Testcontainers, cookbooks |
+| [stomp4j-tests.mdc](.cursor/rules/stomp4j-tests.mdc) | test + core module paths | Domain narrative, assertions, JUnit, Testcontainers |
 | [stomp4j-test-failure-diagnosis.mdc](.cursor/rules/stomp4j-test-failure-diagnosis.mdc) | `src/test/**`, surefire reports | Failure classification and reports |
 | [documentation.mdc](.cursor/rules/documentation.mdc) | `docs/**`, README | User-facing docs maintenance |
 | [stomp4j-kafka-bridge.mdc](.cursor/rules/stomp4j-kafka-bridge.mdc) | `bridge/**` | Kafka bridge sync requirements |

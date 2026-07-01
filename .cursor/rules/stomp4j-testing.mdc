@@ -41,7 +41,7 @@ Use `-Pfast` for unit/embedded coverage. Run **without** `-Pfast` for transport,
 | `bridge/` | `mvn -pl bridge/stomp4j-kafka-bridge test` |
 | Test infra (`broker.xml`, `*.tests.infra`) | At minimum `mvn -pl client test` |
 
-Detail: [stomp4j-tests.mdc](stomp4j-tests.mdc). Docker: § Docker in that file.
+Detail: [stomp4j-tests.mdc](stomp4j-tests.mdc) — domain language, narrative (given/when/then), meaningful assertions, Docker, cookbooks.
 
 Test-first development (TDD) is **development guidance**, not part of this pillar — see [stomp4j-model.mdc](stomp4j-model.mdc) § TDD.
 
