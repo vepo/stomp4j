@@ -348,7 +348,6 @@ public class TcpChannel implements Channel {
             return;
         }
         logger.info("Starting TCP Channel at port {}", port);
-        this.running.set(true);
         try {
             if (runtime.sslSettings().isPresent()) {
                 sslServerSocket = (SSLServerSocket) runtime.sslSettings()
@@ -356,6 +355,7 @@ public class TcpChannel implements Channel {
                                                            .sslContext()
                                                            .getServerSocketFactory()
                                                            .createServerSocket(port);
+                running.set(true);
                 threadPool.submit(this::acceptSsl);
             } else {
                 this.selector = Selector.open();
@@ -363,11 +363,42 @@ public class TcpChannel implements Channel {
                 channel.configureBlocking(false);
                 channel.bind(new InetSocketAddress(port));
                 channel.register(selector, SelectionKey.OP_ACCEPT);
+                running.set(true);
                 threadPool.submit(this::accept);
             }
             logger.info("TCP Channel started! port={}", port);
-        } catch (IOException ex) {
-            logger.error("Could not start channel", ex);
+        } catch (Exception ex) {
+            logger.error("Could not start channel on port {}", port, ex);
+            rollbackStartup();
+            throw new IllegalStateException("Could not start TCP channel on port %d".formatted(port), ex);
+        }
+    }
+
+    private void rollbackStartup() {
+        running.set(false);
+        if (Objects.nonNull(sslServerSocket)) {
+            try {
+                sslServerSocket.close();
+            } catch (IOException ex) {
+                logger.debug("Error closing SSL server socket during startup rollback", ex);
+            }
+            sslServerSocket = null;
+        }
+        if (Objects.nonNull(selector)) {
+            try {
+                selector.close();
+            } catch (IOException ex) {
+                logger.debug("Error closing selector during startup rollback", ex);
+            }
+            selector = null;
+        }
+        if (Objects.nonNull(channel)) {
+            try {
+                channel.close();
+            } catch (IOException ex) {
+                logger.debug("Error closing server channel during startup rollback", ex);
+            }
+            channel = null;
         }
     }
 
