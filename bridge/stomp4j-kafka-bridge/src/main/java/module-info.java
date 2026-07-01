@@ -4,4 +4,6 @@ module stomp4j.kafka.bridge {
     requires org.slf4j;
 
     exports dev.vepo.stomp4j.bridge;
+
+    opens dev.vepo.stomp4j.bridge to stomp4j.kafka.bridge.test;
 }
