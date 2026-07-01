@@ -84,6 +84,8 @@ public class SecureTcpTransport implements Transport {
     @Override
     public void connect() {
         logger.info("Trying to connect securely to {}:{}", host, port);
+        running.set(true);
+        var connected = false;
         try {
             SSLSocketFactory factory = sslContext.getSocketFactory();
             this.socket = factory.createSocket(host, port);
@@ -92,10 +94,34 @@ public class SecureTcpTransport implements Transport {
             }
             executor.submit(this::readMessages);
             listener.onConnected(this);
+            connected = true;
         } catch (UnknownHostException ex) {
+            logger.error("Secure TCP connect failed for {}:{}", host, port, ex);
             throw TransportFailures.connectFailed("%s:%d".formatted(host, port), ex);
         } catch (IOException ex) {
+            logger.error("Secure TCP connect failed for {}:{}", host, port, ex);
             throw TransportFailures.connectFailed("%s:%d".formatted(host, port), ex);
+        } finally {
+            if (!connected) {
+                abortConnect();
+            }
+        }
+    }
+
+    private void abortConnect() {
+        running.set(false);
+        if (Objects.nonNull(socket)) {
+            try {
+                socket.close();
+            } catch (IOException ex) {
+                logger.debug("Error closing socket after connect failure", ex);
+            }
+            socket = null;
+        }
+        try {
+            done.await(1, TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+            logger.error("Interrupted while waiting for reader after connect failure", ex);
         }
     }
 
