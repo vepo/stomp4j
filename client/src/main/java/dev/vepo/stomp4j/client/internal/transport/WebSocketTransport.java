@@ -149,6 +149,11 @@ public class WebSocketTransport implements Transport {
     }
 
     @Override
+    public long outboundSilentTime() {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastSentMessage);
+    }
+
+    @Override
     public void send(Message message) {
         if (Objects.isNull(webSocketClient)) {
             throw TransportFailures.notConnected();
@@ -165,11 +170,6 @@ public class WebSocketTransport implements Transport {
         } catch (RuntimeException ex) {
             throw TransportFailures.sendFailed(ex);
         }
-    }
-
-    @Override
-    public long outboundSilentTime() {
-        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastSentMessage);
     }
 
     @Override

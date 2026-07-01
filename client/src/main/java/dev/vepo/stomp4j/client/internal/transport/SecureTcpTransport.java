@@ -104,6 +104,11 @@ public class SecureTcpTransport implements Transport {
         return host;
     }
 
+    @Override
+    public long outboundSilentTime() {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastSentMessage);
+    }
+
     private void readMessages() {
         lastReceivedMessage = System.nanoTime();
         try {
@@ -143,11 +148,6 @@ public class SecureTcpTransport implements Transport {
         } catch (Exception ex) {
             throw TransportFailures.sendFailed(ex);
         }
-    }
-
-    @Override
-    public long outboundSilentTime() {
-        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastSentMessage);
     }
 
     @Override

@@ -13,11 +13,15 @@ public interface Transport extends Closeable {
 
     String host();
 
+    /**
+     * Milliseconds since the last outbound wire activity (including heart-beats).
+     */
+    long outboundSilentTime();
+
     void send(Message message);
 
-    /** Milliseconds since the last inbound wire activity (including heart-beats). */
+    /**
+     * Milliseconds since the last inbound wire activity (including heart-beats).
+     */
     long silentTime();
-
-    /** Milliseconds since the last outbound wire activity (including heart-beats). */
-    long outboundSilentTime();
 }

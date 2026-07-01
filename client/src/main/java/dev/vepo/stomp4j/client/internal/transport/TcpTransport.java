@@ -78,6 +78,11 @@ public class TcpTransport implements Transport {
         return host;
     };
 
+    @Override
+    public long outboundSilentTime() {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastSentMessage);
+    }
+
     private void readMessages() {
         this.lastReceivedMessaged = System.nanoTime();
         try {
@@ -121,11 +126,6 @@ public class TcpTransport implements Transport {
         } catch (Exception e) {
             throw TransportFailures.sendFailed(e);
         }
-    }
-
-    @Override
-    public long outboundSilentTime() {
-        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - lastSentMessage);
     }
 
     @Override

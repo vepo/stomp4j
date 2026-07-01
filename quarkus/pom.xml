@@ -15,7 +15,7 @@
     <name>Stomp4J :: Quarkus</name>
 
     <properties>
-        <quarkus.version>3.17.8</quarkus.version>
+        <quarkus.version>3.37.1</quarkus.version>
     </properties>
 
     <dependencyManagement>
@@ -55,7 +55,7 @@
             <dependency>
                 <groupId>org.assertj</groupId>
                 <artifactId>assertj-core</artifactId>
-                <version>3.27.6</version>
+                <version>4.0.0-M1</version>
             </dependency>
             <dependency>
                 <groupId>org.awaitility</groupId>
@@ -65,12 +65,12 @@
             <dependency>
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter-engine</artifactId>
-                <version>5.10.5</version>
+                <version>6.1.1</version>
             </dependency>
             <dependency>
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter-params</artifactId>
-                <version>5.10.5</version>
+                <version>6.1.1</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
