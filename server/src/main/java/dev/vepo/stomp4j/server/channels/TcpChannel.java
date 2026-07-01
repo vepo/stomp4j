@@ -188,13 +188,25 @@ public class TcpChannel implements Channel {
 
     private void acceptSsl() {
         while (running.get()) {
+            SSLSocket sslSocket = null;
+            var handedOffToReader = false;
             try {
-                var sslSocket = (SSLSocket) sslServerSocket.accept();
+                sslSocket = (SSLSocket) sslServerSocket.accept();
                 sslSocket.startHandshake();
-                threadPool.submit(() -> readSslSocket(sslSocket));
-            } catch (IOException ex) {
+                var readerSocket = sslSocket;
+                threadPool.submit(() -> readSslSocket(readerSocket));
+                handedOffToReader = true;
+            } catch (Exception ex) {
                 if (running.get()) {
                     logger.error("SSL accept error", ex);
+                }
+            } finally {
+                if (!handedOffToReader && Objects.nonNull(sslSocket)) {
+                    try {
+                        sslSocket.close();
+                    } catch (IOException closeEx) {
+                        logger.debug("Error closing SSL socket after handshake failure", closeEx);
+                    }
                 }
             }
         }
