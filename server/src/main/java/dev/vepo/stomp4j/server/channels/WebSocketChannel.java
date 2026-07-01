@@ -6,6 +6,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -125,7 +126,6 @@ public class WebSocketChannel implements Channel {
     @Override
     public void start() {
         logger.info("Starting WebSocket Channel at port {}", port);
-        this.running.set(true);
 
         vertx = Vertx.vertx();
         var options = new HttpServerOptions().setPort(port);
@@ -171,24 +171,35 @@ public class WebSocketChannel implements Channel {
         });
 
         listenLatch = new CountDownLatch(1);
+        var listenFailure = new AtomicReference<Throwable>();
         server.listen()
               .onSuccess(httpServer -> {
+                  running.set(true);
                   logger.info("WebSocket server started on port {}", httpServer.actualPort());
                   listenLatch.countDown();
               })
               .onFailure(error -> {
                   logger.error("Failed to start WebSocket server on port {}", port, error);
-                  running.set(false);
+                  listenFailure.set(error);
                   listenLatch.countDown();
               });
         try {
             if (!listenLatch.await(10, TimeUnit.SECONDS)) {
-                throw new IllegalStateException("WebSocket server did not start in time on port %d".formatted(port));
+                failStart(new IllegalStateException("WebSocket server did not start in time on port %d".formatted(port)));
+            }
+            if (!running.get()) {
+                failStart(new IllegalStateException("Failed to start WebSocket server on port %d".formatted(port),
+                                                    listenFailure.get()));
             }
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Interrupted while starting WebSocket server", ex);
+            failStart(new IllegalStateException("Interrupted while starting WebSocket server", ex));
         }
+    }
+
+    private void failStart(IllegalStateException failure) {
+        close();
+        throw failure;
     }
 
     @Override
