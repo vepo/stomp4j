@@ -11,4 +11,8 @@ module stomp4j.server {
 
     exports dev.vepo.stomp4j.server;
     exports dev.vepo.stomp4j.server.auth;
+    exports dev.vepo.stomp4j.server.channels to stomp4j.server.test;
+    exports dev.vepo.stomp4j.server.session to stomp4j.server.test;
+
+    opens dev.vepo.stomp4j.server.channels to stomp4j.server.test;
 }

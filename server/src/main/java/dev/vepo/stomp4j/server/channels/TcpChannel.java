@@ -1,7 +1,6 @@
 package dev.vepo.stomp4j.server.channels;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -148,25 +147,42 @@ public class TcpChannel implements Channel {
     }
 
     private void acceptSession(SelectionKey key) {
+        SocketChannel clientChannel = null;
+        Session session = null;
+        var sessionRegistered = false;
         try {
-            ServerSocketChannel serverSocketChannel = (ServerSocketChannel) key.channel();
-            SocketChannel clientChannel = serverSocketChannel.accept();
+            var serverSocketChannel = (ServerSocketChannel) key.channel();
+            clientChannel = serverSocketChannel.accept();
             clientChannel.configureBlocking(false);
 
             var outbound = new TcpSessionOutboundChannel(clientChannel);
-            var session = new Session(outbound,
-                                      listener,
-                                      runtime.sessionConfig(),
-                                      sessionCloser,
-                                      runtime.heartbeatExecutor());
+            session = new Session(outbound,
+                                  listener,
+                                  runtime.sessionConfig(),
+                                  sessionCloser,
+                                  runtime.heartbeatExecutor());
 
             var attachment = new SessionAttachment(session, clientChannel);
             sessionAttachments.put(session, attachment);
             clientChannel.register(selector, SelectionKey.OP_READ, attachment);
+            sessionRegistered = true;
 
             logger.info("Session started, waiting for CONNECT: {}", session);
-        } catch (IOException ex) {
+        } catch (Exception ex) {
             logger.error("Error accepting session", ex);
+        } finally {
+            if (!sessionRegistered) {
+                if (Objects.nonNull(session)) {
+                    sessionAttachments.remove(session);
+                }
+                if (Objects.nonNull(clientChannel)) {
+                    try {
+                        clientChannel.close();
+                    } catch (IOException closeEx) {
+                        logger.debug("Error closing accepted socket after setup failure", closeEx);
+                    }
+                }
+            }
         }
     }
 
