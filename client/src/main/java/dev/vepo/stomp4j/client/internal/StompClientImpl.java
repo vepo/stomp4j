@@ -310,22 +310,32 @@ public class StompClientImpl implements StompClient {
     @Override
     public StompClient connect() {
         logger.info("Connecting with server {}", transport);
-        transport.connect();
+        try {
+            transport.connect();
+        } catch (StompException ex) {
+            throw abortConnect(ex);
+        }
         logger.info("Waiting for client connection");
         try {
             connectedLatch.await();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        } catch (InterruptedException ex) {
+            throw abortConnect(new StompException("Connection interrupted", ex));
         }
         var error = connectionError.get();
         if (Objects.nonNull(error)) {
-            throw error;
+            throw abortConnect(error);
         }
         if (Objects.isNull(selectedProtocol.get())) {
-            throw new StompException("Connection failed");
+            throw abortConnect(new StompException("Connection failed"));
         }
         logger.info("Client connected");
         return this;
+    }
+
+    private StompException abortConnect(StompException failure) {
+        logger.error("STOMP connect failed for transport {}", transport, failure);
+        close();
+        return failure;
     }
 
     private void consumeMessage(Message message) {

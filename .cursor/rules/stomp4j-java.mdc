@@ -38,6 +38,8 @@ Imports and formatting: [stomp4j-format-imports.mdc](stomp4j-format-imports.mdc)
 - Use **parameterized** messages — not concatenation.
 - Do not log secrets, passwords, or full credentials.
 
+Exceptions and error paths: [stomp4j-exceptions.mdc](stomp4j-exceptions.mdc) — domain types, no broad `catch (Exception)`, ERROR logging on failures.
+
 ## JPMS
 
 - Public API types must be in `exports` packages.

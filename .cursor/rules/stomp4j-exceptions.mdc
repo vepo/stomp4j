@@ -1,0 +1,149 @@
+---
+description: Domain exceptions, meaningful names, error logging, no broad JDK catch
+globs: "**/*.java"
+alwaysApply: false
+---
+
+# Exceptions and error logging
+
+Operational failures must use **specific domain exception types** whose **names describe what went wrong**, plus **explicit ERROR logging** — not broad JDK catches or generic library-wide wrappers.
+
+## Naming — the type is the diagnosis
+
+A caller reading the `catch` or stack trace should know **what failed** without parsing the message string.
+
+| Avoid (too generic) | Prefer (caller understands the situation) |
+|---------------------|-------------------------------------------|
+| `StompException` for every client failure | `ConnectFailed`, `AuthenticationRejected`, `SubscriptionDenied`, … |
+| `StompFrameException` / vague “protocol error” | `MalformedDataFrame` — bad command, headers, body length, or NUL |
+| `IllegalStateException` for channel start | `ChannelStartFailed`, `PortAlreadyInUse`, … |
+| `Exception` / `RuntimeException` catch-and-rethrow | Wrap once into a **named** domain type at the module boundary |
+
+**Good name pattern:** `[WhatIsWrong][DomainNoun]` or `[DomainNoun][WhatIsWrong]` — e.g. `MalformedDataFrame`, `ConnectTimeout`, `InvalidDestination`.
+
+**Bad name pattern:** module prefix only (`StompException`, `StompError`) — says *where* in the library, not *what* happened.
+
+When adding behaviour, **introduce or reuse a specific type**. Do not add new throw sites of a generic umbrella exception unless you are touching legacy API that has not been split yet.
+
+### Target types by scenario (prefer when introducing or refactoring)
+
+| Scenario | Preferred type name (example) | Notes |
+|----------|-------------------------------|--------|
+| Invalid / incomplete wire frame | `MalformedDataFrame` | Command, headers, `content-length`, missing NUL |
+| TCP/TLS/WebSocket open failed | `ConnectFailed` | Wrap `IOException` at transport boundary |
+| Broker ERROR frame / bad credentials | `AuthenticationRejected` or `BrokerError` | Distinct from transport failure |
+| Subscribe not allowed | `SubscriptionDenied` | Server rejected destination |
+| Session protocol violation (server) | `SessionProtocolViolation` | Internal server session package |
+| Programmer misuse (null URL, bad arg) | `IllegalArgumentException` | Public API preconditions only |
+
+**Legacy:** `StompException` and `StompFrameException` exist in the codebase today. Treat them as **technical debt** — catch specific subtypes where they exist; when changing failure paths, split toward the names above (or add a subtype) instead of reusing the generic type.
+
+## Domain types over JDK exceptions
+
+Do **not** throw or propagate generic JDK types (`IllegalStateException`, bare `IOException`, etc.) for **recoverable operational failures** when a domain type exists or should be introduced.
+
+`IOException` in NIO/transport code is caught **once** at the boundary and wrapped:
+
+```java
+} catch (IOException ex) {
+    throw new ConnectFailed(target, ex);
+}
+```
+
+## Catching — forbidden patterns
+
+```java
+// ❌ Hides meaning; encourages generic rethrow
+} catch (RuntimeException ex) {
+    throw ex;
+}
+
+// ❌ Same for checked supertype
+} catch (Exception ex) {
+    logger.warn("failed");
+}
+
+// ❌ Catch generic library type when a specific subtype applies
+} catch (StompException ex) {
+    throw ex;
+}
+```
+
+Catch **specific** types at each boundary:
+
+```java
+// ✅ Specific failure type
+try {
+    transport.connect();
+} catch (ConnectFailed ex) {
+    throw abortConnect(ex);
+}
+
+// ✅ Framing layer
+} catch (MalformedDataFrame ex) {
+    logger.error("Invalid STOMP frame from {}", peer, ex);
+    closeSession(session);
+    throw ex;
+}
+```
+
+Use `catch (Exception)` or `catch (RuntimeException)` **only** when the block **immediately** wraps into a named domain type or performs documented last-resort cleanup — never to rethrow bare.
+
+## Logging on failure paths
+
+Every operational failure path must log at **ERROR** with the exception as the **last** argument (stack trace preserved):
+
+```java
+private ConnectFailed abortConnect(ConnectFailed failure) {
+    logger.error("STOMP connect failed for transport {}", transport, failure);
+    close();
+    return failure;
+}
+```
+
+| Level | Use |
+|-------|-----|
+| **ERROR** | Connect/send/subscribe failed; malformed frame; channel start failed; cleanup after failure |
+| **WARN** | Recoverable anomaly, retry possible, degraded mode |
+| **DEBUG** | Expected close, timeout on shutdown, peer disconnect during teardown |
+
+Log each failure **once** at the point of cleanup or translation — not in both the catch block and the wrapper.
+
+## `InterruptedException`
+
+When the handler **throws** a domain exception or **returns an error**, do **not** call `Thread.currentThread().interrupt()` — the failure is already surfaced to the caller. Re-interrupting is for methods that **return normally** after catching interrupt (e.g. cooperative shutdown loops) so upstream code can still observe the flag.
+
+```java
+// ❌ Throw path — interrupt is redundant; caller gets StompException instead
+} catch (InterruptedException ex) {
+    Thread.currentThread().interrupt();
+    throw abortConnect(new StompException("Connection interrupted", ex));
+}
+
+// ✅ Throw path — propagate as domain failure
+} catch (InterruptedException ex) {
+    throw abortConnect(new StompException("Connection interrupted", ex));
+}
+
+// ✅ Normal return after interrupt — restore flag for caller
+} catch (InterruptedException ex) {
+    Thread.currentThread().interrupt();
+}
+```
+
+## Cleanup before rethrow
+
+When a failure leaves resources open (connect, start, accept), release them **before** rethrowing — see [resource-leak-audit.md](../../reports/resource-leak-audit.md).
+
+Pattern: **log → cleanup → throw** (or helper that returns the exception for `throw abortConnect(ex)`).
+
+## Tests
+
+- Assert on the **specific** domain exception type (`MalformedDataFrame`, `ConnectFailed`, …), not `RuntimeException` or generic `StompException` when a narrower type exists.
+- Failure-path tests should verify cleanup (closed flag, executor shutdown) where applicable.
+
+## Related
+
+- [stomp4j-java.mdc](stomp4j-java.mdc) — SLF4J logging
+- [stomp4j-in-code-documentation.mdc](stomp4j-in-code-documentation.mdc) — when to comment rejected alternatives
+- [docs/domain-specification.md](../../docs/domain-specification.md) — ubiquitous language for type names
