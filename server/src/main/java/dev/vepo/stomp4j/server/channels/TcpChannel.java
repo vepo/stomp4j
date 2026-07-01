@@ -245,11 +245,7 @@ public class TcpChannel implements Channel {
                 channel.close();
                 channel = null;
             }
-            threadPool.shutdown();
-            threadPool.awaitTermination(1, TimeUnit.SECONDS);
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            logger.error("Thread interrupted while closing channel", ex);
+            shutdownThreadPool();
         } catch (IOException ex) {
             logger.error("Error closing channel", ex);
         }
@@ -399,6 +395,20 @@ public class TcpChannel implements Channel {
                 logger.debug("Error closing server channel during startup rollback", ex);
             }
             channel = null;
+        }
+        shutdownThreadPool();
+    }
+
+    private void shutdownThreadPool() {
+        if (threadPool.isShutdown()) {
+            return;
+        }
+        threadPool.shutdown();
+        try {
+            threadPool.awaitTermination(1, TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            logger.error("Thread interrupted while shutting down channel thread pool", ex);
         }
     }
 

@@ -238,17 +238,18 @@ public class StompServer implements AutoCloseable {
                                          .map(channel -> Channel.load(channel, listener, channelRuntime))
                                          .toList();
             var startedChannels = new ArrayList<Channel>();
-            try {
-                for (var channel : loadedChannels) {
+            for (var channel : loadedChannels) {
+                try {
                     channel.start();
                     startedChannels.add(channel);
+                } catch (RuntimeException ex) {
+                    channel.close();
+                    startedChannels.forEach(Channel::close);
+                    throw ex;
                 }
-                this.activeChannels = List.copyOf(startedChannels);
-                this.running = true;
-            } catch (RuntimeException ex) {
-                startedChannels.forEach(Channel::close);
-                throw ex;
             }
+            this.activeChannels = List.copyOf(startedChannels);
+            this.running = true;
         }
     }
 }
