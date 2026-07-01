@@ -5,15 +5,18 @@ import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.net.ssl.SSLContext;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import dev.vepo.stomp4j.client.exceptions.StompException;
 import dev.vepo.stomp4j.client.transport.Transport;
 import dev.vepo.stomp4j.client.transport.TransportListener;
 import dev.vepo.stomp4j.commons.protocol.Command;
@@ -21,6 +24,10 @@ import dev.vepo.stomp4j.commons.protocol.Message;
 
 public class SecureWebSocketTransport implements Transport {
     private static final Logger logger = LoggerFactory.getLogger(SecureWebSocketTransport.class);
+
+    private static int connectTimeoutSeconds() {
+        return Integer.getInteger("stomp4j.websocket.connectTimeoutSeconds", 30);
+    }
 
     private static SSLContext defaultSslContext() {
         try {
@@ -38,6 +45,8 @@ public class SecureWebSocketTransport implements Transport {
     private volatile long lastSentMessage = System.nanoTime();
     private final Object sendLock = new Object();
     private WebSocket webSocketClient;
+    private CompletableFuture<WebSocket> connectFuture;
+    private final AtomicBoolean connectFailed = new AtomicBoolean();
     private final CountDownLatch openLatch = new CountDownLatch(1);
     private final CountDownLatch closeLatch = new CountDownLatch(1);
 
@@ -54,12 +63,30 @@ public class SecureWebSocketTransport implements Transport {
 
     private void awaitWebSocketOpen() {
         try {
-            if (!openLatch.await(30, TimeUnit.SECONDS)) {
-                throw TransportFailures.connectFailed(uri.toString(), new IllegalStateException("WebSocket open timed out"));
+            if (!openLatch.await(connectTimeoutSeconds(), TimeUnit.SECONDS)) {
+                throw TransportFailures.connectFailed(uri.toString(),
+                                                      new IllegalStateException("WebSocket open timed out"));
             }
         } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
             throw TransportFailures.connectFailed(uri.toString(), ex);
+        }
+        if (connectFailed.get() || Objects.isNull(webSocketClient)) {
+            throw TransportFailures.connectFailed(uri.toString(),
+                                                  new IllegalStateException("WebSocket connect failed"));
+        }
+    }
+
+    private void abortConnectAttempt() {
+        if (Objects.nonNull(connectFuture)) {
+            connectFuture.whenComplete((webSocket, error) -> {
+                if (Objects.nonNull(webSocket)) {
+                    webSocket.abort();
+                }
+            });
+        }
+        if (Objects.nonNull(webSocketClient)) {
+            webSocketClient.abort();
+            webSocketClient = null;
         }
     }
 
@@ -88,62 +115,74 @@ public class SecureWebSocketTransport implements Transport {
     @Override
     public void connect() {
         logger.info("Opening secure WebSocket connection with: {}", uri);
-        httpClient.newWebSocketBuilder()
-                  .header("uuid", key.toHex())
-                  // STOMP over WebSocket negotiates the application protocol during the HTTP
-                  // upgrade
-                  // via Sec-WebSocket-Protocol (v12.stomp, v11.stomp, …), not ordinary HTTP
-                  // content
-                  // negotiation. After the handshake, frames use the STOMP wire format — see
-                  // https://stomp.github.io/stomp-specification-1.2.html and
-                  // https://stomp.github.io/
-                  .subprotocols("v12.stomp", "v11.stomp", "v10.stomp", "stomp")
-                  .buildAsync(uri, new WebSocket.Listener() {
-                      @Override
-                      public CompletionStage<?> onBinary(WebSocket webSocket, ByteBuffer data, boolean last) {
-                          var bytes = new byte[data.remaining()];
-                          data.get(bytes);
-                          framer.offer(bytes, listener);
-                          webSocket.request(1);
-                          return null;
-                      }
+        connectFailed.set(false);
+        try {
+            connectFuture = httpClient.newWebSocketBuilder()
+                      .header("uuid", key.toHex())
+                      // STOMP over WebSocket negotiates the application protocol during the HTTP
+                      // upgrade
+                      // via Sec-WebSocket-Protocol (v12.stomp, v11.stomp, …), not ordinary HTTP
+                      // content
+                      // negotiation. After the handshake, frames use the STOMP wire format — see
+                      // https://stomp.github.io/stomp-specification-1.2.html and
+                      // https://stomp.github.io/
+                      .subprotocols("v12.stomp", "v11.stomp", "v10.stomp", "stomp")
+                      .buildAsync(uri, new WebSocket.Listener() {
+                          @Override
+                          public CompletionStage<?> onBinary(WebSocket webSocket, ByteBuffer data, boolean last) {
+                              var bytes = new byte[data.remaining()];
+                              data.get(bytes);
+                              framer.offer(bytes, listener);
+                              webSocket.request(1);
+                              return null;
+                          }
 
-                      @Override
-                      public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
-                          logger.warn("Secure connection closed! statusCode={}, reason={}", statusCode, reason);
-                          closeLatch.countDown();
-                          return null;
-                      }
+                          @Override
+                          public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
+                              logger.warn("Secure connection closed! statusCode={}, reason={}", statusCode, reason);
+                              closeLatch.countDown();
+                              return null;
+                          }
 
-                      @Override
-                      public void onError(WebSocket webSocket, Throwable error) {
-                          logger.error("Error on secure WebSocket connection!", error);
-                          openLatch.countDown();
-                          closeLatch.countDown();
-                          listener.onError(new Message(Command.ERROR,
-                                                       dev.vepo.stomp4j.commons.protocol.Headers.builder()
-                                                                                                .with("message", error.getMessage())
-                                                                                                .build(),
-                                                       error.getMessage()));
-                      }
+                          @Override
+                          public void onError(WebSocket webSocket, Throwable error) {
+                              logger.error("Error on secure WebSocket connection!", error);
+                              connectFailed.set(true);
+                              openLatch.countDown();
+                              closeLatch.countDown();
+                              if (Objects.isNull(webSocketClient)) {
+                                  webSocket.abort();
+                              }
+                              listener.onError(new Message(Command.ERROR,
+                                                           dev.vepo.stomp4j.commons.protocol.Headers.builder()
+                                                                                                    .with("message", error.getMessage())
+                                                                                                    .build(),
+                                                           error.getMessage()));
+                          }
 
-                      @Override
-                      public void onOpen(WebSocket webSocket) {
-                          logger.info("Secure connection open!");
-                          webSocketClient = webSocket;
-                          webSocket.request(1);
-                          openLatch.countDown();
-                          listener.onConnected(SecureWebSocketTransport.this);
-                      }
+                          @Override
+                          public void onOpen(WebSocket webSocket) {
+                              logger.info("Secure connection open!");
+                              webSocketClient = webSocket;
+                              webSocket.request(1);
+                              openLatch.countDown();
+                              listener.onConnected(SecureWebSocketTransport.this);
+                          }
 
-                      @Override
-                      public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
-                          framer.offer(data, listener);
-                          webSocket.request(1);
-                          return null;
-                      }
-                  });
-        awaitWebSocketOpen();
+                          @Override
+                          public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
+                              framer.offer(data, listener);
+                              webSocket.request(1);
+                              return null;
+                          }
+                      });
+            awaitWebSocketOpen();
+        } catch (StompException ex) {
+            logger.error("Secure WebSocket connect failed for {}", uri, ex);
+            abortConnectAttempt();
+            close();
+            throw ex;
+        }
     }
 
     @Override

@@ -14,6 +14,7 @@ module stomp4j.client {
     exports dev.vepo.stomp4j.client.protocol.v1_0;
     exports dev.vepo.stomp4j.client.protocol.v1_1;
     exports dev.vepo.stomp4j.client.protocol.v1_2;
+    exports dev.vepo.stomp4j.client.transport to stomp4j.client.test;
 
     exports dev.vepo.stomp4j.client.internal to stomp4j.client.test;
     exports dev.vepo.stomp4j.client.internal.transport to stomp4j.client.test;
