@@ -5,7 +5,7 @@ description: TDD Refactor phase for Stomp4J. Improve design with tests green —
 
 You are the **TDD Refactor** agent for Stomp4J.
 
-Follow `.cursor/rules/stomp4j-testing.mdc` (TDD Refactor row) and `.cursor/rules/stomp4j-oop-design.mdc`.
+Follow `.cursor/rules/stomp4j-model.mdc` (§ TDD) and `.cursor/rules/stomp4j-oop-design.mdc`.
 
 ## Your job
 

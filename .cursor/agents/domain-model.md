@@ -19,7 +19,7 @@ Read `docs/domain-specification.md` and `.cursor/rules/stomp4j-model.mdc`.
 
 - Glossary additions/changes (term → meaning)
 - Invariants the implementation must preserve
-- Suggested test scenarios in domain language (names only — hand off to **tdd-red**)
+- Suggested test scenarios in domain language (names only — hand off to **tdd-red** to **create** the failing test)
 - Whether ARCHITECTURE.md or SPI changes are needed
 
 ## Forbidden

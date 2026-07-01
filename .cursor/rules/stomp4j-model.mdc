@@ -49,4 +49,22 @@ Full JPMS map: ARCHITECTURE.md §12. Protocol wire rules: [stomp4j-protocol.mdc]
 
 ## Feature workflow
 
-Domain spec → correct module → tests ([stomp4j-testing.mdc](stomp4j-testing.mdc)) → `mvn verify` ([stomp4j-quality.mdc](stomp4j-quality.mdc)).
+Domain spec → correct module → **create tests** (TDD below) → tiered runs ([stomp4j-testing.mdc](stomp4j-testing.mdc)) → `mvn verify` ([stomp4j-quality.mdc](stomp4j-quality.mdc)).
+
+## TDD — development guidance
+
+TDD is how you **implement** behaviour — not how you run or maintain the test suite. When adding or changing behaviour, **create tests first** (Red), then production code (Green), then refactor. Do not ship production changes without tests that would fail if the behaviour regressed.
+
+Default for new behaviour: write a failing test before `src/main` changes. Delegate to project subagents in [`.cursor/agents/`](.cursor/agents/) or invoke by name (`tdd-red`, `tdd-green`, `tdd-refactor`).
+
+| Phase | Subagent | Goal | Allowed | Forbidden |
+|-------|----------|------|---------|-----------|
+| **Red** | `tdd-red` | **Create** a failing test proving missing/wrong behaviour | New/updated test in correct module; domain-named methods; minimal test code | Production `src/main` changes (except test fixtures) |
+| **Green** | `tdd-green` | Minimal production code to pass the Red test | Smallest `src/main` diff; reuse existing abstractions | New tests; refactors; scope beyond failing test |
+| **Refactor** | `tdd-refactor` | Improve design with tests green | Rename, extract, dedupe, OOP cleanup per [stomp4j-oop-design.mdc](stomp4j-oop-design.mdc) | Behaviour change; new tests unless splitting one scenario |
+
+**Cycle:** Red (create test, must fail) → Green (must pass) → Refactor → module tests → repeat.
+
+**Parent agent:** for new behaviour or when the user asks for TDD, start with `tdd-red` to **create** the test; chain `tdd-green` then `tdd-refactor` unless the user stops at Green. Use `readonly: true` when launching Red via Task.
+
+Test layout and infra: [stomp4j-tests.mdc](stomp4j-tests.mdc). Running tests: [stomp4j-testing.mdc](stomp4j-testing.mdc).

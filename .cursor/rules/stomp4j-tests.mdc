@@ -10,6 +10,8 @@ alwaysApply: false
 
 # Test conventions
 
+When **creating** tests for new behaviour, follow TDD in [stomp4j-model.mdc](stomp4j-model.mdc) § TDD (Red creates the test before production code). This file covers layout, infra, and conventions for tests once they exist.
+
 ## Docker required
 
 Integration tests use Testcontainers (ActiveMQ Artemis). **Docker must be available** for `mvn verify` and module tests without `-Pfast`.

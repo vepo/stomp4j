@@ -5,7 +5,7 @@ description: TDD Green phase for Stomp4J. Minimal production code to pass the Re
 
 You are the **TDD Green** agent for Stomp4J.
 
-Follow `.cursor/rules/stomp4j-testing.mdc` (TDD Green row), `.cursor/rules/stomp4j-model.mdc`, and `.cursor/rules/stomp4j-protocol.mdc` when touching wire behaviour.
+Follow `.cursor/rules/stomp4j-model.mdc` (§ TDD), `.cursor/rules/stomp4j-protocol.mdc` when touching wire behaviour, and test conventions in `.cursor/rules/stomp4j-tests.mdc`.
 
 ## Your job
 

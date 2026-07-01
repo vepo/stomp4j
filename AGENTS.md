@@ -11,21 +11,21 @@ Read these before changing code or tests:
 | [.cursor/rules/](.cursor/rules/) | Four pillars + file-scoped detail |
 | [.cursor/agents/](.cursor/agents/) | Project subagents (specialized behaviour) |
 
-**Workflow:** domain spec → correct module → tiered tests → `mvn verify` once → update docs when public API changes.
+**Workflow:** domain spec → correct module → create tests (TDD) → tiered test runs → `mvn verify` once → update docs when public API changes.
 
 ## Agents vs commands
 
 | Surface | Location | Purpose |
 |---------|----------|---------|
-| **Subagents** | `.cursor/agents/*.md` | Specialized system prompts — TDD phases, domain modeling, protocol review. Delegate by name or let Cursor route from `description`. |
+| **Subagents** | `.cursor/agents/*.md` | Specialized system prompts — TDD (development), domain modeling, protocol review. Delegate by name or let Cursor route from `description`. |
 | **Commands** | `.cursor/commands/*.md` | Repeatable workflows you slash-invoke — fix all tests, Sonar loop, coverage loop. |
 
 ## Rules — four pillars (always on)
 
 | Pillar | Rule | Covers |
 |--------|------|--------|
-| 1. Building the model | [stomp4j-model.mdc](.cursor/rules/stomp4j-model.mdc) | Domain language, architecture, modules, JPMS placement, doc triggers |
-| 2. Testing | [stomp4j-testing.mdc](.cursor/rules/stomp4j-testing.mdc) | Tiered Maven commands, impact map, TDD subagents, failure workflow |
+| 1. Building the model | [stomp4j-model.mdc](.cursor/rules/stomp4j-model.mdc) | Domain language, architecture, modules, JPMS placement, **TDD development guidance**, doc triggers |
+| 2. Testing | [stomp4j-testing.mdc](.cursor/rules/stomp4j-testing.mdc) | Tiered Maven commands, impact map, failure workflow |
 | 3. Coding quality | [stomp4j-quality.mdc](.cursor/rules/stomp4j-quality.mdc) | Finish gate, ReadLints, `mvn verify`, standards index |
 | 4. Platform usage | [stomp4j-platform.mdc](.cursor/rules/stomp4j-platform.mdc) | Java 21, Maven, JPMS, approved libraries, tooling boundaries |
 
@@ -50,17 +50,17 @@ No content is duplicated across pillars — each hub links to file-scoped rules 
 
 | Subagent | When to delegate |
 |----------|------------------|
-| [tdd-red](.cursor/agents/tdd-red.md) | New behaviour — write failing test only |
-| [tdd-green](.cursor/agents/tdd-green.md) | After Red — minimal production code |
+| [tdd-red](.cursor/agents/tdd-red.md) | New behaviour — **create** a failing test only (no production code) |
+| [tdd-green](.cursor/agents/tdd-green.md) | After Red — minimal production code to pass the test |
 | [tdd-refactor](.cursor/agents/tdd-refactor.md) | After Green — design cleanup, tests stay green |
 | [domain-model](.cursor/agents/domain-model.md) | Before coding — domain-spec and vocabulary |
 | [protocol-compliance](.cursor/agents/protocol-compliance.md) | Before merge — STOMP spec review |
 | [bridge-integration](.cursor/agents/bridge-integration.md) | Kafka bridge mapping, config, tests |
 | [docs-sync](.cursor/agents/docs-sync.md) | After API/behaviour change — user docs |
 
-**TDD cycle:** `tdd-red` → `tdd-green` → `tdd-refactor` unless the user stops after Green.
+**TDD cycle (development):** `tdd-red` (create test) → `tdd-green` → `tdd-refactor` unless the user stops after Green.
 
-Example: *"Use the tdd-red subagent to add a test for …"*
+Example: *"Use tdd-red to create a test for …"*
 
 ## Built-in Task subagents
 
