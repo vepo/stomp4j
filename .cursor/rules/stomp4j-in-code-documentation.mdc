@@ -66,6 +66,6 @@ awaitSubscriptionReceipt(subscription);
 
 ## Related
 
-- [stomp-protocol-compliance.mdc](stomp-protocol-compliance.mdc) — normative STOMP rules
-- [domain-model.mdc](domain-model.mdc) — ubiquitous language in tests and code
+- [stomp4j-protocol.mdc](stomp4j-protocol.mdc) — normative STOMP rules
+- [stomp4j-model.mdc](stomp4j-model.mdc) — ubiquitous language in tests and code
 - [stomp4j-java.mdc](stomp4j-java.mdc) — Java style and logging

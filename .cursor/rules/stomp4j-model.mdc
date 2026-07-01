@@ -1,0 +1,52 @@
+---
+description: Pillar 1 — domain model, architecture, modules, STOMP vocabulary
+alwaysApply: true
+---
+
+# Building the model
+
+Canonical references: [ARCHITECTURE.md](../../ARCHITECTURE.md), [docs/domain-specification.md](../../docs/domain-specification.md).
+
+## Before any change
+
+1. Read **domain specification** (Ubiquitous Language) for protocol, client, or server work.
+2. Read **ARCHITECTURE.md** §2–§3 (module placement), §4 (threading), §12 (JPMS), §14 (workflow).
+3. Follow patterns in the package you edit.
+
+## Domain vocabulary in code and tests
+
+- Use domain terms: `Destination`, `Subscription`, `Frame`, `Session`, `Transport` — not `Data`, `Handler2`, `stateFlag`.
+- Handler signatures: `topic`/`destination` and `message`/`body` consistently with existing handlers.
+- Test names describe STOMP scenarios: `shouldDeliverMessageToSubscribedDestination()`.
+
+## Module placement
+
+Dependencies flow **downward only**: `commons` ← `client`, `commons` ← `server`.
+
+| Change | Module |
+|--------|--------|
+| Wire format, framing, headers | `commons` |
+| Client API, transport, protocol versions | `client` |
+| Server, sessions, channels | `server` |
+| STOMP ↔ Kafka | `bridge/` only |
+
+- **commons** must not depend on `client` or `server`.
+- **client** / **server** production code require `commons` only (`client` is test-scoped in server).
+- Public API: `StompClient.create(…)`, `StompServer.builder()` — implementation in non-exported packages.
+- SPI (transports, protocol): implement interface → `module-info.java` `provides` → `META-INF/services/…`.
+
+Full JPMS map: ARCHITECTURE.md §12. Protocol wire rules: [stomp4j-protocol.mdc](stomp4j-protocol.mdc).
+
+## After model-affecting changes
+
+| Trigger | Update |
+|---------|--------|
+| New domain terms or invariants | [domain-specification.md](../../docs/domain-specification.md) |
+| User-visible capability | [features.md](../../docs/features.md) |
+| Module, SPI, public API, CI, WIP | [ARCHITECTURE.md](../../ARCHITECTURE.md) §13 |
+| User-facing docs | [documentation.mdc](documentation.mdc) |
+| Kafka bridge | [stomp4j-kafka-bridge.mdc](stomp4j-kafka-bridge.mdc) |
+
+## Feature workflow
+
+Domain spec → correct module → tests ([stomp4j-testing.mdc](stomp4j-testing.mdc)) → `mvn verify` ([stomp4j-quality.mdc](stomp4j-quality.mdc)).

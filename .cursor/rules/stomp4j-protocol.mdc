@@ -1,0 +1,52 @@
+---
+description: STOMP wire protocol compliance — normative spec at stomp.github.io
+globs:
+  - '**/commons/**'
+  - '**/client/**'
+  - '**/server/**'
+  - '**/bridge/**'
+alwaysApply: false
+---
+
+# STOMP protocol compliance
+
+All client, server, and wire-format code **must** conform to the official STOMP specification:
+
+- **Index:** [stomp.github.io](https://stomp.github.io/)
+- **STOMP 1.2** (latest): [stomp.github.io/stomp-1.2.html](https://stomp.github.io/stomp-1.2.html)
+- **STOMP 1.1:** [stomp.github.io/stomp-1.1.html](https://stomp.github.io/stomp-1.1.html)
+- **STOMP 1.0:** [stomp.github.io/stomp-1.0.html](https://stomp.github.io/stomp-1.0.html)
+
+[docs/domain-specification.md](../../docs/domain-specification.md) is **library vocabulary** and invariants. The spec is **normative** for frames, commands, headers, heart-beats, acks, version negotiation.
+
+## Before changing protocol behaviour
+
+1. Read the relevant spec section (`CONNECT`, `SUBSCRIBE`, `MESSAGE`, `ACK`, …).
+2. Identify target version (`1.0`, `1.1`, `1.2`) — behaviour differs.
+3. Check existing code in the same layer before inventing semantics.
+
+| Layer | Module / package | Responsibility |
+|-------|------------------|----------------|
+| Framing | `commons.protocol` | Frame structure, NUL, headers, `MessageBuffer` |
+| Client | `client.protocol.v1_*` | Version-specific subscribe, send, ack |
+| Server | `server.session` | CONNECT → CONNECTED, subscriptions, outbound frames |
+
+## Implementation rules
+
+- **Frames:** command, headers, blank line, body, NUL.
+- **Sequences:** client waits for `CONNECTED` before `SUBSCRIBE`/`SEND`; server rejects invalid order.
+- **Headers:** spec names and semantics (`destination`, `subscription`, `ack`, `heart-beat`, …).
+- **Version negotiation:** honour negotiated version; do not mix 1.0 and 1.2 on one session.
+- **Documented gaps:** comment + ARCHITECTURE.md §13.
+
+## Testing
+
+- **commons:** unit tests for framing against spec examples.
+- **client / server:** integration flows via `StompContainer` — [stomp4j-tests.mdc](stomp4j-tests.mdc).
+- Assertions reflect spec behaviour, not ad-hoc broker quirks.
+
+## Extending the protocol surface
+
+1. Confirm against spec — do not guess wire format.
+2. Update [domain-specification.md](../../docs/domain-specification.md).
+3. Add regression tests.

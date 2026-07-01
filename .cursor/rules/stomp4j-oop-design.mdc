@@ -1,0 +1,77 @@
+---
+description: OOP design — Tell/Don't Ask, Law of Demeter, no method bypass
+globs: "**/*.java"
+alwaysApply: false
+---
+
+# OOP design
+
+Naming follows [docs/domain-specification.md](../../docs/domain-specification.md).
+
+## Tell, Don't Ask
+
+**Tell:** call an intent method (`connect`, `subscribe`, `processConnect`) that owns the decision.
+
+**Don't ask:** avoid `if (session.getStatus() == X) { session.setStatus(Y); … }` spread across callers.
+
+```
+StompClient API  →  StompClientImpl  →  Transport / Stomp protocol
+StompServer      →  Session          →  MessageHandler / SubscriptionHandler
+```
+
+- **Public API:** thin facade; delegate to implementation.
+- **Session / StompClientImpl:** own connection state machine and frame handling.
+- **Handlers:** callbacks; server tells `MessageHandler.process`, not raw frame parsing in handlers.
+
+```java
+// ❌ Caller owns CONNECT transition
+if (status == Status.STARTED) { status = Status.CONNECTED; channel.write(connectedFrame); }
+
+// ✅ Session owns the transition
+session.processConnect(message);
+```
+
+Apply on **new or touched** behaviour; consolidate legacy ask-then-set in the same change.
+
+## Law of Demeter
+
+Call only on self, objects you create, parameters, and **direct** components — not on objects returned by those calls.
+
+```java
+// ❌ train wreck
+if (client.getTransport().getListener().isConnected()) { … }
+
+// ✅
+if (client.isConnected()) { … }
+```
+
+| Layer | Rule |
+|-------|------|
+| Public API | No reaching into `internal` from outside the module |
+| Session / StompClientImpl | Expose `isConnected()`, `getProtocolVersion()` instead of deep graphs |
+| Handlers | Receive only what they need (`topic`, `body`, `OutboundChannel`) |
+
+Allowed: one direct step — `message.headers().get(Header.DESTINATION)`.
+
+## No method bypass
+
+A **bypass** forwards the same arguments with no added behaviour. Call the target directly.
+
+```java
+// ❌ bypass chain
+public void foo(X x) { helper.foo(x); }  // helper only forwards
+
+// ✅ intentional public factory
+StompClient.create(url) → StompClientImpl.create(url)
+```
+
+| Allowed wrapper | Bypass |
+|-----------------|--------|
+| Public API hiding internal types | `helper.create(url)` → `StompClient.create(url)` with no logic |
+| Validation, mapping, SPI contract | Same-args pass-through to callee |
+
+## Never
+
+- Duplicate state-check + mutation in multiple callers.
+- Parse STOMP frames in handler callbacks when `Session` should own protocol logic.
+- Copy the same getter chain into a second class — extract on the owning type.

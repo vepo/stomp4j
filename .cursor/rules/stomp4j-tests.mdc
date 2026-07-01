@@ -12,9 +12,19 @@ alwaysApply: false
 
 ## Docker required
 
-Integration tests use Testcontainers (ActiveMQ Artemis). Docker must be running — see [stomp4j-test-docker.mdc](stomp4j-test-docker.mdc).
+Integration tests use Testcontainers (ActiveMQ Artemis). **Docker must be available** for `mvn verify` and module tests without `-Pfast`.
 
-Run tests during development per [stomp4j-test-during-development.mdc](stomp4j-test-during-development.mdc) — do not defer all testing to `mvn verify`.
+```bash
+mvn verify
+mvn -pl client test
+mvn -pl server test
+```
+
+Optional local broker: `docker compose -f scripts/docker/docker-compose.yaml up` — STOMP TCP **61613**, WebSocket **61614**, OpenWire **61616**, console **8161**.
+
+When changing `broker.xml` or `StompContainer`, document ports in ARCHITECTURE.md §9.
+
+Tiered commands: [stomp4j-testing.mdc](stomp4j-testing.mdc).
 
 ## Layout
 

@@ -1,0 +1,43 @@
+---
+description: Pillar 3 — coding standards, OOP design, finish gate
+alwaysApply: true
+---
+
+# Coding quality and standards
+
+## Finish gate (before marking done)
+
+1. **Mid-task:** tiered tests per [stomp4j-testing.mdc](stomp4j-testing.mdc).
+2. **Module scope:** affected module tests pass (Docker when integration applies).
+3. **Full suite:** `mvn verify` — same as [`.github/workflows/maven.yml`](../../.github/workflows/maven.yml).
+4. **IDE:** `ReadLints` on edited paths — fix **new** warnings (unused imports, unresolved types).
+
+Skip gates for docs-only, `.mdc`-only, or comment-only edits.
+
+## What to fix
+
+- Compile errors and test failures from `verify`.
+- New linter issues in touched files.
+- Smells you introduced: dead code, swallowed exceptions, `System.out` — see [stomp4j-java.mdc](stomp4j-java.mdc).
+
+Pre-existing issues elsewhere: fix only if trivial; no scope creep.
+
+## Do not finish while
+
+- `mvn verify` fails.
+- New linter problems in files you changed.
+- Failing tests remain in touched code.
+
+## Standards (file-scoped detail)
+
+| Topic | Rule |
+|-------|------|
+| Java style, logging, `var`, streams | [stomp4j-java.mdc](stomp4j-java.mdc) |
+| Imports and formatting | [stomp4j-format-imports.mdc](stomp4j-format-imports.mdc) |
+| String building | [stomp4j-strings.mdc](stomp4j-strings.mdc) |
+| Tell/Don't Ask, Demeter, no bypass | [stomp4j-oop-design.mdc](stomp4j-oop-design.mdc) |
+| Non-obvious comments | [stomp4j-in-code-documentation.mdc](stomp4j-in-code-documentation.mdc) |
+
+## Report to user
+
+Briefly note: mid-task tests run, `verify` result, linter status.

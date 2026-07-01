@@ -6,13 +6,7 @@ alwaysApply: false
 
 # Java conventions
 
-## Import order
-
-1. `java.*` / `javax.*`
-2. Third-party (`org.slf4j`, `io.vertx`, `org.apache`, …)
-3. `dev.vepo.stomp4j.*`
-
-See [stomp4j-format-imports.mdc](stomp4j-format-imports.mdc).
+Imports and formatting: [stomp4j-format-imports.mdc](stomp4j-format-imports.mdc) (required on every Java edit).
 
 ## Style
 
@@ -50,8 +44,6 @@ See [stomp4j-format-imports.mdc](stomp4j-format-imports.mdc).
 - Internal implementation stays in non-exported packages (`internal`, `channels`, `session`).
 - When adding SPI, update both `module-info.java` and `META-INF/services`.
 
-## Tell, Don't Ask / Demeter / bypass
+## OOP design
 
-- [stomp4j-tell-dont-ask.mdc](stomp4j-tell-dont-ask.mdc)
-- [stomp4j-law-of-demeter.mdc](stomp4j-law-of-demeter.mdc)
-- [stomp4j-no-method-bypass-allowed.mdc](stomp4j-no-method-bypass-allowed.mdc)
+See [stomp4j-oop-design.mdc](stomp4j-oop-design.mdc).

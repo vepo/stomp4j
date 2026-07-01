@@ -1,6 +1,7 @@
 ---
 description: Keep Kafka Bridge code, config, and docs in sync
-alwaysApply: true
+globs: '**/bridge/**'
+alwaysApply: false
 ---
 
 # Kafka Bridge — read and maintain
@@ -33,5 +34,5 @@ The STOMP ↔ Kafka bridge lives in `bridge/` and [docs/kafka-bridge-guide.md](.
 ## Related
 
 - [documentation.mdc](documentation.mdc)
-- [stomp4j-module-architecture.mdc](stomp4j-module-architecture.mdc)
-- [development-experience.mdc](development-experience.mdc)
+- [stomp4j-model.mdc](stomp4j-model.mdc)
+- [stomp4j-platform.mdc](stomp4j-platform.mdc)

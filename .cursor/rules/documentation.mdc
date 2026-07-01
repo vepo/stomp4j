@@ -1,6 +1,10 @@
 ---
 description: Keep user-facing documentation in sync with public API and behaviour
-alwaysApply: true
+globs:
+  - 'docs/**'
+  - 'README.md'
+  - '**/features.md'
+alwaysApply: false
 ---
 
 # Documentation — read and maintain
@@ -65,5 +69,5 @@ Put new detail in the deepest applicable layer; add a one-line pointer in shallo
 ## Related
 
 - Agent index: [AGENTS.md](../../AGENTS.md)
-- Architecture rule: [architecture.mdc](architecture.mdc)
-- Protocol compliance: [stomp-protocol-compliance.mdc](stomp-protocol-compliance.mdc)
+- Architecture rule: [stomp4j-model.mdc](stomp4j-model.mdc)
+- Protocol compliance: [stomp4j-protocol.mdc](stomp4j-protocol.mdc)

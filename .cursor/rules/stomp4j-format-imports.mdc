@@ -31,4 +31,4 @@ public void merge(List<String> ids, dev.vepo.stomp4j.server.Session session) { .
 ## Before finishing Java changes
 
 1. `ReadLints` on edited paths — fix unused-import warnings and unresolved types.
-2. Full gate: [static-analysis.mdc](static-analysis.mdc) (`mvn verify`).
+2. Full gate: [stomp4j-quality.mdc](stomp4j-quality.mdc) (`mvn verify`).

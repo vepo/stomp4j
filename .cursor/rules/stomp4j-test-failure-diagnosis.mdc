@@ -1,6 +1,9 @@
 ---
 description: Diagnose and fix failing tests — collect logs, classify root cause, preserve STOMP spec compliance, write reports
-alwaysApply: true
+globs:
+  - '**/src/test/**'
+  - '**/target/surefire-reports/**'
+alwaysApply: false
 ---
 
 # Test failure diagnosis and fix
@@ -48,7 +51,7 @@ Write a one-paragraph analysis with a **single primary bucket**:
 
 - STOMP spec: [stomp.github.io](https://stomp.github.io/) — wire format, command order, headers, heart-beats, ack semantics
 - Library vocabulary: [docs/domain-specification.md](../../docs/domain-specification.md)
-- Protocol rule: [stomp-protocol-compliance.mdc](stomp-protocol-compliance.mdc)
+- Protocol rule: [stomp4j-protocol.mdc](stomp4j-protocol.mdc)
 
 ## 3. Decision rules (mandatory)
 
@@ -162,8 +165,7 @@ Point to the report path: `${mavenRoot}/reports/<sequential>-test-failure-….md
 
 ## Related
 
-- [stomp4j-test-during-development.mdc](stomp4j-test-during-development.mdc) — tiered tests to prevent failures
-- [stomp4j-tests.mdc](stomp4j-tests.mdc) — layout and annotations
-- [stomp4j-test-docker.mdc](stomp4j-test-docker.mdc) — Docker commands and ports
+- [stomp4j-testing.mdc](stomp4j-testing.mdc) — tiered tests to prevent failures
+- [stomp4j-tests.mdc](stomp4j-tests.mdc) — layout, Docker, annotations
 - [stomp4j-in-code-documentation.mdc](stomp4j-in-code-documentation.mdc) — when to add comments for non-obvious fixes
-- [static-analysis.mdc](static-analysis.mdc) — `mvn verify` gate
+- [stomp4j-quality.mdc](stomp4j-quality.mdc) — `mvn verify` gate

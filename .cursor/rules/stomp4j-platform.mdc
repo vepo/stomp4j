@@ -1,0 +1,53 @@
+---
+description: Pillar 4 — Java, Maven, JPMS, approved libraries, tooling boundaries
+alwaysApply: true
+---
+
+# Libraries, language, and frameworks
+
+## Stack
+
+- **Java 21**, **Maven** multi-module, **JPMS** (`module-info.java` in every module).
+- **Logging:** SLF4J only — never `System.out`, `System.err`, or JUL.
+- Core library: **no** Spring, Quarkus, or web UI in `commons` / `client` / `server` production code.
+
+## Approved usage by layer
+
+| Layer | Use | Do not |
+|-------|-----|--------|
+| Protocol / framing | JDK, `commons` types | Client/server imports in `commons` |
+| Client transport | JDK NIO, WebSocket APIs, SPI | Reach into consumer `internal` packages |
+| Server channels | Vert.x (WebSocket), JDK NIO (TCP) | Expose `channels` / `session` in public API |
+| Tests | JUnit 5, AssertJ, Awaitility, Testcontainers | `Thread.sleep()` for sync; raw broker URLs when `StompContainer` exists |
+| Bridge | Kafka client (in `bridge/` only) | Kafka deps in core modules |
+| Integrations | Spring / Quarkus in their modules only | Frameworks in core production code |
+| Scripts | Bash (`set -euo pipefail`) or JBang | Python, Node, `.mjs` in `scripts/` |
+
+## JPMS
+
+- Export only intentional public API packages.
+- Internal: `client.internal`, `server.channels`, `server.session`.
+- SPI: update `module-info.java` **and** `META-INF/services/…`.
+- Test reflective access: `opens` in test `module-info.java` only.
+
+## Local development
+
+```bash
+mvn verify                                              # full gate (Docker)
+mvn -Pfast -pl commons,client,server test               # fast loop
+docker compose -f scripts/docker/docker-compose.yaml up # optional Artemis
+```
+
+Ports (compose): STOMP TCP **61613**, WebSocket **61614**, OpenWire **61616**, console **8161**.
+
+Testcontainers reuse: `src/test/resources/testcontainers.properties`.
+
+## CI and hooks
+
+GitHub Actions: **bash** or **Maven** — not Python or Node runners. No `.py` files in the repository.
+
+## Never
+
+- Add `package.json` or bundlers to the library.
+- Import `client.internal` or server internal packages from outside their module.
+- Ship protocol changes without `commons` tests + integration test when client/server behaviour changes.

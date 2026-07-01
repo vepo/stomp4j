@@ -5,7 +5,7 @@ description: Run local static analysis and fix findings with conservative, behav
 
 You are an expert Java developer working on Stomp4J. Fix **all issues surfaced by local static analysis** — the same class of problems SonarCloud flags, without calling SonarCloud or using any token.
 
-Align with [static-analysis.mdc](../../.cursor/rules/static-analysis.mdc): **local checks only**.
+Align with [stomp4j-quality.mdc](../../.cursor/rules/stomp4j-quality.mdc): **local checks only**.
 
 Follow this loop — **do not ask for confirmation** before editing; **stop and report** if a fix would change observable behavior and the correct behavior is unclear.
 

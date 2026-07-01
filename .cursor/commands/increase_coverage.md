@@ -35,6 +35,6 @@ You are an expert Java test engineer. Raise **both** JaCoCo **instruction** and 
 
 - Do not delete or weaken existing assertions.
 - Record instruction % and branch % before/after in `reports/coverage_log-{sequential}-{dd-MM-yyyy-HH-mm-ss}.md`.
-- Read `ARCHITECTURE.md` for module boundaries before adding tests in wrong module.
+- Read `ARCHITECTURE.md` for module boundaries; follow [stomp4j-testing.mdc](../rules/stomp4j-testing.mdc) for test placement.
 
 Start the loop now.
