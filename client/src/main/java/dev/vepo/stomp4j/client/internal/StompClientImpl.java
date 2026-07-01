@@ -472,6 +472,12 @@ public class StompClientImpl implements StompClient {
         }
     }
 
+    // Reader thread must not block on transport.send — heartbeats and ACKs share
+    // this executor.
+    private void scheduleOutbound(Runnable task) {
+        heartBeatService.execute(task);
+    }
+
     @Override
     public StompReceipt send(String destination, String body, SendOptions options) {
         Objects.requireNonNull(options, "options cannot be null");
@@ -527,7 +533,8 @@ public class StompClientImpl implements StompClient {
                    }).ifPresent(interval -> {
                        if (interval > 0) {
                            logger.info("Setting up heart beat with interval: {}", interval);
-                           // Check more often than the send interval so scheduling jitter does not miss the deadline.
+                           // Check more often than the send interval so scheduling jitter does not miss
+                           // the deadline.
                            var checkPeriodMs = Math.max(1_000L, interval / 4);
                            heartBeatTask = heartBeatService.scheduleAtFixedRate(() -> {
                                try {
@@ -551,11 +558,6 @@ public class StompClientImpl implements StompClient {
         if (Objects.nonNull(heartBeatTask)) {
             heartBeatTask.cancel(false);
         }
-    }
-
-    // Reader thread must not block on transport.send — heartbeats and ACKs share this executor.
-    private void scheduleOutbound(Runnable task) {
-        heartBeatService.execute(task);
     }
 
     @Override
