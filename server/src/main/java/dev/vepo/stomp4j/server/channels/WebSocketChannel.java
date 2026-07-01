@@ -4,7 +4,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -18,6 +20,7 @@ import dev.vepo.stomp4j.server.SubscriberAckListener;
 import dev.vepo.stomp4j.server.session.Session;
 import dev.vepo.stomp4j.server.session.SessionCloser;
 import dev.vepo.stomp4j.server.session.Status;
+import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
@@ -58,6 +61,7 @@ public class WebSocketChannel implements Channel {
     }
 
     private static final Logger logger = LoggerFactory.getLogger(WebSocketChannel.class);
+    private static final long CLOSE_TIMEOUT_SECONDS = 10;
 
     private final int port;
     private final ChannelListener listener;
@@ -82,7 +86,7 @@ public class WebSocketChannel implements Channel {
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
         logger.info("Closing WebSocket channel... port={}", port);
         this.running.set(false);
 
@@ -94,18 +98,30 @@ public class WebSocketChannel implements Channel {
         activeSessions.clear();
 
         if (Objects.nonNull(server)) {
-            server.close()
-                  .onSuccess(v -> logger.info("WebSocket server closed"))
-                  .onFailure(error -> logger.error("Error closing WebSocket server", error));
+            awaitShutdown(server.close(), "WebSocket server");
+            server = null;
         }
 
         if (Objects.nonNull(vertx)) {
-            vertx.close()
-                 .onSuccess(v -> logger.info("Vertx closed"))
-                 .onFailure(error -> logger.error("Error closing Vertx", error));
+            awaitShutdown(vertx.close(), "Vertx");
+            vertx = null;
         }
 
         logger.info("WebSocket channel closed port={}", port);
+    }
+
+    private void awaitShutdown(Future<Void> shutdown, String resourceName) {
+        try {
+            shutdown.toCompletionStage()
+                    .toCompletableFuture()
+                    .get(CLOSE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            logger.info("{} closed", resourceName);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            logger.error("Interrupted while closing {}", resourceName, ex);
+        } catch (TimeoutException | ExecutionException ex) {
+            logger.error("Error closing {}", resourceName, ex);
+        }
     }
 
     private void closeSession(Session session) {

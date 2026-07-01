@@ -1,13 +1,12 @@
 package dev.vepo.stomp4j.server.tests;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 import java.net.InetSocketAddress;
 import java.nio.channels.ServerSocketChannel;
 import java.util.Optional;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -15,72 +14,54 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
 
-import dev.vepo.stomp4j.commons.TransportType;
 import dev.vepo.stomp4j.commons.protocol.Message;
-import dev.vepo.stomp4j.server.StompServer;
 import dev.vepo.stomp4j.server.channels.ChannelListener;
 import dev.vepo.stomp4j.server.channels.ChannelRuntime;
 import dev.vepo.stomp4j.server.channels.WebSocketChannel;
 import dev.vepo.stomp4j.server.session.Session;
 import dev.vepo.stomp4j.server.session.SessionConfig;
 import dev.vepo.stomp4j.server.tests.infra.EphemeralPorts;
+import io.vertx.core.Vertx;
 
 @Execution(ExecutionMode.SAME_THREAD)
-class WebSocketChannelStartupFailureTest {
+class WebSocketChannelCloseTest {
 
     private WebSocketChannel channel;
 
-    private ServerSocketChannel portHolder;
-
     @Test
-    @DisplayName("WebSocketChannel tears down Vert.x when listen fails on occupied port")
-    void shouldCloseVertxWhenListenFails() throws Exception {
+    @DisplayName("WebSocketChannel close waits for Vert.x shutdown before returning")
+    void shouldAwaitVertxShutdownBeforeCloseReturns() throws Exception {
         var port = EphemeralPorts.allocate();
         var heartbeatExecutor = Executors.newSingleThreadScheduledExecutor();
-        portHolder = ServerSocketChannel.open();
         try {
-            portHolder.bind(new InetSocketAddress(port));
-
             channel = new WebSocketChannel(port, noopListener(), new ChannelRuntime(
                     SessionConfig.defaults(),
                     Optional.empty(),
                     heartbeatExecutor));
+            channel.start();
 
-            assertThatThrownBy(channel::start)
-                    .isInstanceOf(IllegalStateException.class)
-                    .hasMessageContaining(String.valueOf(port));
+            var vertx = (Vertx) fieldValue(channel, "vertx");
+            assertThat(vertx).isNotNull();
 
-            assertThat(running(channel)).isFalse();
+            channel.close();
+
             assertThat(fieldValue(channel, "vertx")).isNull();
             assertThat(fieldValue(channel, "server")).isNull();
+            assertThat(vertx.close().isComplete()).isTrue();
+            assertThatCode(() -> {
+                try (var portProbe = ServerSocketChannel.open()) {
+                    portProbe.bind(new InetSocketAddress(port));
+                }
+            }).doesNotThrowAnyException();
         } finally {
             heartbeatExecutor.shutdownNow();
         }
-    }
-
-    @Test
-    @DisplayName("StompServer propagates WebSocket listen failure without leaving the server running")
-    void shouldPropagateWebSocketListenFailureFromStompServer() throws Exception {
-        var port = EphemeralPorts.allocate();
-        portHolder = ServerSocketChannel.open();
-        portHolder.bind(new InetSocketAddress(port));
-
-        assertThatThrownBy(() -> StompServer.builder()
-                                            .channel(TransportType.WEB_SOCKET, port)
-                                            .handler(message -> {})
-                                            .subscription(topic -> true)
-                                            .start())
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining(String.valueOf(port));
     }
 
     @AfterEach
     void tearDown() throws Exception {
         if (channel != null && running(channel)) {
             channel.close();
-        }
-        if (portHolder != null && portHolder.isOpen()) {
-            portHolder.close();
         }
     }
 
@@ -111,6 +92,6 @@ class WebSocketChannelStartupFailureTest {
     private static boolean running(WebSocketChannel webSocketChannel) throws Exception {
         var field = WebSocketChannel.class.getDeclaredField("running");
         field.setAccessible(true);
-        return ((AtomicBoolean) field.get(webSocketChannel)).get();
+        return ((java.util.concurrent.atomic.AtomicBoolean) field.get(webSocketChannel)).get();
     }
 }
