@@ -15,7 +15,7 @@
     <name>Stomp4J :: Quarkus</name>
 
     <properties>
-        <quarkus.version>3.17.8</quarkus.version>
+        <quarkus.version>3.37.1</quarkus.version>
     </properties>
 
     <dependencyManagement>
