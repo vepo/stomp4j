@@ -1,7 +1,6 @@
 package dev.vepo.stomp4j.server.channels;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -148,37 +147,66 @@ public class TcpChannel implements Channel {
     }
 
     private void acceptSession(SelectionKey key) {
+        SocketChannel clientChannel = null;
+        Session session = null;
+        var sessionRegistered = false;
         try {
-            ServerSocketChannel serverSocketChannel = (ServerSocketChannel) key.channel();
-            SocketChannel clientChannel = serverSocketChannel.accept();
+            var serverSocketChannel = (ServerSocketChannel) key.channel();
+            clientChannel = serverSocketChannel.accept();
             clientChannel.configureBlocking(false);
 
             var outbound = new TcpSessionOutboundChannel(clientChannel);
-            var session = new Session(outbound,
-                                      listener,
-                                      runtime.sessionConfig(),
-                                      sessionCloser,
-                                      runtime.heartbeatExecutor());
+            session = new Session(outbound,
+                                  listener,
+                                  runtime.sessionConfig(),
+                                  sessionCloser,
+                                  runtime.heartbeatExecutor());
 
             var attachment = new SessionAttachment(session, clientChannel);
             sessionAttachments.put(session, attachment);
             clientChannel.register(selector, SelectionKey.OP_READ, attachment);
+            sessionRegistered = true;
 
             logger.info("Session started, waiting for CONNECT: {}", session);
-        } catch (IOException ex) {
+        } catch (Exception ex) {
             logger.error("Error accepting session", ex);
+        } finally {
+            if (!sessionRegistered) {
+                if (Objects.nonNull(session)) {
+                    sessionAttachments.remove(session);
+                }
+                if (Objects.nonNull(clientChannel)) {
+                    try {
+                        clientChannel.close();
+                    } catch (IOException closeEx) {
+                        logger.debug("Error closing accepted socket after setup failure", closeEx);
+                    }
+                }
+            }
         }
     }
 
     private void acceptSsl() {
         while (running.get()) {
+            SSLSocket sslSocket = null;
+            var handedOffToReader = false;
             try {
-                var sslSocket = (SSLSocket) sslServerSocket.accept();
+                sslSocket = (SSLSocket) sslServerSocket.accept();
                 sslSocket.startHandshake();
-                threadPool.submit(() -> readSslSocket(sslSocket));
-            } catch (IOException ex) {
+                var readerSocket = sslSocket;
+                threadPool.submit(() -> readSslSocket(readerSocket));
+                handedOffToReader = true;
+            } catch (Exception ex) {
                 if (running.get()) {
                     logger.error("SSL accept error", ex);
+                }
+            } finally {
+                if (!handedOffToReader && Objects.nonNull(sslSocket)) {
+                    try {
+                        sslSocket.close();
+                    } catch (IOException closeEx) {
+                        logger.debug("Error closing SSL socket after handshake failure", closeEx);
+                    }
                 }
             }
         }
@@ -217,11 +245,7 @@ public class TcpChannel implements Channel {
                 channel.close();
                 channel = null;
             }
-            threadPool.shutdown();
-            threadPool.awaitTermination(1, TimeUnit.SECONDS);
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            logger.error("Thread interrupted while closing channel", ex);
+            shutdownThreadPool();
         } catch (IOException ex) {
             logger.error("Error closing channel", ex);
         }
@@ -320,7 +344,6 @@ public class TcpChannel implements Channel {
             return;
         }
         logger.info("Starting TCP Channel at port {}", port);
-        this.running.set(true);
         try {
             if (runtime.sslSettings().isPresent()) {
                 sslServerSocket = (SSLServerSocket) runtime.sslSettings()
@@ -328,6 +351,7 @@ public class TcpChannel implements Channel {
                                                            .sslContext()
                                                            .getServerSocketFactory()
                                                            .createServerSocket(port);
+                running.set(true);
                 threadPool.submit(this::acceptSsl);
             } else {
                 this.selector = Selector.open();
@@ -335,11 +359,56 @@ public class TcpChannel implements Channel {
                 channel.configureBlocking(false);
                 channel.bind(new InetSocketAddress(port));
                 channel.register(selector, SelectionKey.OP_ACCEPT);
+                running.set(true);
                 threadPool.submit(this::accept);
             }
             logger.info("TCP Channel started! port={}", port);
-        } catch (IOException ex) {
-            logger.error("Could not start channel", ex);
+        } catch (Exception ex) {
+            logger.error("Could not start channel on port {}", port, ex);
+            rollbackStartup();
+            throw new IllegalStateException("Could not start TCP channel on port %d".formatted(port), ex);
+        }
+    }
+
+    private void rollbackStartup() {
+        running.set(false);
+        if (Objects.nonNull(sslServerSocket)) {
+            try {
+                sslServerSocket.close();
+            } catch (IOException ex) {
+                logger.debug("Error closing SSL server socket during startup rollback", ex);
+            }
+            sslServerSocket = null;
+        }
+        if (Objects.nonNull(selector)) {
+            try {
+                selector.close();
+            } catch (IOException ex) {
+                logger.debug("Error closing selector during startup rollback", ex);
+            }
+            selector = null;
+        }
+        if (Objects.nonNull(channel)) {
+            try {
+                channel.close();
+            } catch (IOException ex) {
+                logger.debug("Error closing server channel during startup rollback", ex);
+            }
+            channel = null;
+        }
+        shutdownThreadPool();
+    }
+
+    private void shutdownThreadPool() {
+        if (threadPool.isShutdown()) {
+            return;
+        }
+        threadPool.shutdown();
+        try {
+            threadPool.awaitTermination(1, TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            logger.error("Thread interrupted while shutting down channel thread pool", ex);
         }
     }
 

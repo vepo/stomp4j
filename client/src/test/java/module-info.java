@@ -1,5 +1,6 @@
 module stomp4j.client.test {
     requires transitive stomp4j.client;
+    requires java.net.http;
     requires awaitility;
     requires org.junit.jupiter.api;
     requires activemq.client;

@@ -8,6 +8,9 @@ import java.util.concurrent.CountDownLatch;
 
 import javax.net.ssl.SSLContext;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import dev.vepo.stomp4j.bridge.internal.BridgeMessageHandler;
 import dev.vepo.stomp4j.bridge.internal.KafkaProducerFacade;
 import dev.vepo.stomp4j.bridge.internal.KafkaRecordToStompMapper;
@@ -20,6 +23,8 @@ import dev.vepo.stomp4j.server.SubscriptionHandler;
 import dev.vepo.stomp4j.server.auth.StompAuthenticator;
 
 public final class StompKafkaBridge implements AutoCloseable {
+    private static final Logger logger = LoggerFactory.getLogger(StompKafkaBridge.class);
+
     public static final class Builder {
         private final Set<TransportChannel> channels = new HashSet<>();
         private KafkaBridgeConfig kafkaConfig;
@@ -177,33 +182,39 @@ public final class StompKafkaBridge implements AutoCloseable {
 
     private void start() {
         producer = new KafkaProducerFacade(kafkaConfig);
-        var messageHandler = new BridgeMessageHandler(destinationMapper,
-                                                      producer,
-                                                      new StompToKafkaRecordMapper());
-        var subscriptionHandler = bridgeSubscriptionHandler();
+        try {
+            var messageHandler = new BridgeMessageHandler(destinationMapper,
+                                                          producer,
+                                                          new StompToKafkaRecordMapper());
+            var subscriptionHandler = bridgeSubscriptionHandler();
 
-        var serverBuilder = StompServer.builder()
-                                       .serverName(serverName)
-                                       .heartbeat(heartbeat)
-                                       .handler(messageHandler)
-                                       .subscription(subscriptionHandler);
-        channels.forEach(channel -> serverBuilder.channel(channel.type(), channel.port()));
-        if (Objects.nonNull(authenticator)) {
-            serverBuilder.authenticator(authenticator);
-        }
-        if (Objects.nonNull(sslContext)) {
-            if (Objects.nonNull(sslKeyStorePath)) {
-                serverBuilder.ssl(sslContext, sslKeyStorePath, sslKeyStorePassword);
-            } else {
-                serverBuilder.ssl(sslContext);
+            var serverBuilder = StompServer.builder()
+                                           .serverName(serverName)
+                                           .heartbeat(heartbeat)
+                                           .handler(messageHandler)
+                                           .subscription(subscriptionHandler);
+            channels.forEach(channel -> serverBuilder.channel(channel.type(), channel.port()));
+            if (Objects.nonNull(authenticator)) {
+                serverBuilder.authenticator(authenticator);
             }
-        }
+            if (Objects.nonNull(sslContext)) {
+                if (Objects.nonNull(sslKeyStorePath)) {
+                    serverBuilder.ssl(sslContext, sslKeyStorePath, sslKeyStorePassword);
+                } else {
+                    serverBuilder.ssl(sslContext);
+                }
+            }
 
-        server = serverBuilder.start();
-        consumerManager = new TopicConsumerManager(destinationMapper,
-                                                   kafkaConfig,
-                                                   server.outboundChannel(),
-                                                   new KafkaRecordToStompMapper());
+            server = serverBuilder.start();
+            consumerManager = new TopicConsumerManager(destinationMapper,
+                                                       kafkaConfig,
+                                                       server.outboundChannel(),
+                                                       new KafkaRecordToStompMapper());
+        } catch (RuntimeException ex) {
+            logger.error("STOMP Kafka bridge startup failed", ex);
+            close();
+            throw ex;
+        }
     }
 
     public StompServer stompServer() {

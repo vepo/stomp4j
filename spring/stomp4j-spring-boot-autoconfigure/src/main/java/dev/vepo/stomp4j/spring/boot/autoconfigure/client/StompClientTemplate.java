@@ -6,16 +6,16 @@ import dev.vepo.stomp4j.client.StompReceipt;
 
 public class StompClientTemplate {
 
-    private final StompClientConnectionManager connectionManager;
+    private final StompClientLifecycle clientLifecycle;
     private final StompClientProperties properties;
 
-    public StompClientTemplate(StompClientConnectionManager connectionManager, StompClientProperties properties) {
-        this.connectionManager = connectionManager;
+    public StompClientTemplate(StompClientLifecycle clientLifecycle, StompClientProperties properties) {
+        this.clientLifecycle = clientLifecycle;
         this.properties = properties;
     }
 
     public StompClient client() {
-        return connectionManager.client();
+        return clientLifecycle.client();
     }
 
     public StompReceipt send(String destination, String body, SendOptions options) {

@@ -36,7 +36,9 @@ Pre-existing issues elsewhere: fix only if trivial; no scope creep.
 | Imports and formatting | [stomp4j-format-imports.mdc](stomp4j-format-imports.mdc) |
 | String building | [stomp4j-strings.mdc](stomp4j-strings.mdc) |
 | Tell/Don't Ask, Demeter, no bypass, [Seven Virtues](https://www.yegor256.com/2014/11/20/seven-virtues-of-good-object.html) | [stomp4j-oop-design.mdc](stomp4j-oop-design.mdc) |
+| Class responsibility blocks (Knowing / Doing / Collaborators) | [stomp4j-class-responsibilities.mdc](stomp4j-class-responsibilities.mdc) |
 | Non-obvious comments | [stomp4j-in-code-documentation.mdc](stomp4j-in-code-documentation.mdc) |
+| Exceptions, error logging | [stomp4j-exceptions.mdc](stomp4j-exceptions.mdc) |
 
 ## Report to user
 

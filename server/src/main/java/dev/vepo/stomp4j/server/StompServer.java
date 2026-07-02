@@ -1,6 +1,7 @@
 package dev.vepo.stomp4j.server;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -233,10 +234,21 @@ public class StompServer implements AutoCloseable {
             if (channels.isEmpty()) {
                 throw new IllegalArgumentException("No channel is defined!");
             }
-            this.activeChannels = channels.stream()
-                                          .map(channel -> Channel.load(channel, listener, channelRuntime))
-                                          .toList();
-            this.activeChannels.forEach(Channel::start);
+            var loadedChannels = channels.stream()
+                                         .map(channel -> Channel.load(channel, listener, channelRuntime))
+                                         .toList();
+            var startedChannels = new ArrayList<Channel>();
+            for (var channel : loadedChannels) {
+                try {
+                    channel.start();
+                    startedChannels.add(channel);
+                } catch (RuntimeException ex) {
+                    channel.close();
+                    startedChannels.forEach(Channel::close);
+                    throw ex;
+                }
+            }
+            this.activeChannels = List.copyOf(startedChannels);
             this.running = true;
         }
     }

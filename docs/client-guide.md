@@ -46,7 +46,11 @@ try (var client = StompClient.create(url, credentials)) {
 }
 ```
 
-- **`connect()`** returns `this` for chaining.
+If {@code connect()} throws, the client closes itself — do not reuse that instance. When not using
+try-with-resources, call {@code close()} in a {@code finally} block only if you need to guard a
+path where {@code connect()} succeeded; after a failed {@code connect()}, cleanup is already done.
+
+- **`connect()`** returns `this` for chaining; releases resources automatically on failure.
 - **`join()`** blocks the current thread until the client is closed — useful for callback-driven apps that have no other event loop.
 - Always close the client to send `DISCONNECT` and free sockets.
 - **`close(Duration)`** sends `DISCONNECT` with a `receipt` header and waits up to the grace period for the matching `RECEIPT` before closing the transport.

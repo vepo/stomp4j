@@ -41,6 +41,8 @@ No content is duplicated across pillars — each hub links to file-scoped rules 
 | [stomp4j-format-imports.mdc](.cursor/rules/stomp4j-format-imports.mdc) | `**/*.java` | Imports and formatting |
 | [stomp4j-strings.mdc](.cursor/rules/stomp4j-strings.mdc) | `**/*.java` | String building |
 | [stomp4j-in-code-documentation.mdc](.cursor/rules/stomp4j-in-code-documentation.mdc) | `**/*.java` | Non-obvious comments |
+| [stomp4j-class-responsibilities.mdc](.cursor/rules/stomp4j-class-responsibilities.mdc) | `**/*.java` | Class responsibility blocks (Knowing / Doing / Collaborators) |
+| [stomp4j-exceptions.mdc](.cursor/rules/stomp4j-exceptions.mdc) | `**/*.java` | Domain exceptions, ERROR logging, no broad catch |
 | [stomp4j-tests.mdc](.cursor/rules/stomp4j-tests.mdc) | test + core module paths | Domain narrative, assertions, JUnit, Testcontainers |
 | [stomp4j-test-failure-diagnosis.mdc](.cursor/rules/stomp4j-test-failure-diagnosis.mdc) | `src/test/**`, surefire reports | Failure classification and reports |
 | [documentation.mdc](.cursor/rules/documentation.mdc) | `docs/**`, README | User-facing docs maintenance |
