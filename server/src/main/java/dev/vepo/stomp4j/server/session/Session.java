@@ -141,7 +141,7 @@ public class Session implements StompSession {
     }
 
     private void closeSession() {
-        endSession();
+        disconnect();
     }
 
     private void commitTransaction(Message message) {
@@ -173,7 +173,12 @@ public class Session implements StompSession {
         channel.send(builder.build());
     }
 
-    private void endSession() {
+    /**
+     * Ends the session lifecycle: abort transactions, stop heartbeats, notify
+     * subscriptions, inform the channel listener, and close transport resources.
+     * Idempotent.
+     */
+    public void disconnect() {
         if (status == Status.END) {
             return;
         }
@@ -313,7 +318,7 @@ public class Session implements StompSession {
             case BEGIN -> beginTransaction(message);
             case COMMIT -> commitTransaction(message);
             case ABORT -> abortTransaction(message);
-            case DISCONNECT -> endSession();
+            case DISCONNECT -> disconnect();
             default -> throw new SessionProtocolException("Unsupported command: %s".formatted(message.command()));
         }
         ReceiptDispatcher.sendReceiptIfRequested(channel, message);

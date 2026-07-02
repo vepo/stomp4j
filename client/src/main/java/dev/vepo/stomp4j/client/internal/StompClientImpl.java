@@ -42,11 +42,7 @@ import dev.vepo.stomp4j.client.SubscribeOptions;
 import dev.vepo.stomp4j.client.exceptions.StompException;
 import dev.vepo.stomp4j.client.Subscription;
 import dev.vepo.stomp4j.client.UserCredential;
-import dev.vepo.stomp4j.client.internal.transport.NioSecureTcpTransport;
-import dev.vepo.stomp4j.client.internal.transport.NioTcpTransport;
-import dev.vepo.stomp4j.client.internal.transport.SecureWebSocketTransport;
 import dev.vepo.stomp4j.client.internal.transport.TransportFactory;
-import dev.vepo.stomp4j.client.internal.transport.WebSocketTransport;
 import dev.vepo.stomp4j.client.protocol.SendParameters;
 import dev.vepo.stomp4j.client.protocol.Stomp;
 import dev.vepo.stomp4j.client.transport.Transport;
@@ -251,10 +247,7 @@ public class StompClientImpl implements StompClient {
             if (Objects.isNull(transportType)) {
                 this.transport = createTransport(uri, this.listener);
             } else {
-                this.transport = switch (transportType) {
-                    case WEB_SOCKET -> createWebSocketTransport(uri, this.listener);
-                    case TCP -> createTcpTransport(uri, this.listener);
-                };
+                this.transport = createTransport(uri, this.listener, transportType);
             }
             this.session = Optional.empty();
             this.credentials = credentials;
@@ -382,34 +375,17 @@ public class StompClientImpl implements StompClient {
         }
     }
 
-    private Transport createTcpTransport(URI uri, TransportListener transportListener) {
-        if ("stomps".equals(uri.getScheme())) {
-            return Objects.isNull(sslContext)
-                                              ? new NioSecureTcpTransport(uri, transportListener)
-                                              : new NioSecureTcpTransport(uri, transportListener, sslContext);
-        }
-        return new NioTcpTransport(uri, transportListener);
+    private Transport createTransport(URI uri, TransportListener transportListener) {
+        return createTransport(uri, transportListener, null);
     }
 
-    private Transport createTransport(URI uri, TransportListener transportListener) {
-        var scheme = uri.getScheme();
+    private Transport createTransport(URI uri, TransportListener transportListener, TransportType transportType) {
+        var scheme = resolveScheme(uri, transportType);
         if (Objects.isNull(scheme)) {
             throw new IllegalArgumentException("No transport found for protocol null");
         }
-        return switch (scheme) {
-            case "stomps" -> createTcpTransport(uri, transportListener);
-            case "wss" -> createWebSocketTransport(uri, transportListener);
-            default -> TransportFactory.create(uri, transportListener);
-        };
-    }
-
-    private Transport createWebSocketTransport(URI uri, TransportListener transportListener) {
-        if ("wss".equals(uri.getScheme())) {
-            return Objects.isNull(sslContext)
-                                              ? new SecureWebSocketTransport(uri, transportListener)
-                                              : new SecureWebSocketTransport(uri, transportListener, sslContext);
-        }
-        return new WebSocketTransport(uri, transportListener);
+        var transportUri = scheme.equals(uri.getScheme()) ? uri : uriWithScheme(uri, scheme);
+        return TransportFactory.create(transportUri, transportListener, sslContext);
     }
 
     private void failPendingReceipts() {
@@ -480,6 +456,16 @@ public class StompClientImpl implements StompClient {
                 Thread.currentThread().interrupt();
             }
         }
+    }
+
+    private String resolveScheme(URI uri, TransportType transportType) {
+        if (Objects.isNull(transportType)) {
+            return uri.getScheme();
+        }
+        return switch (transportType) {
+            case TCP -> "stomps".equals(uri.getScheme()) ? "stomps" : "stomp";
+            case WEB_SOCKET -> "wss".equals(uri.getScheme()) ? "wss" : "ws";
+        };
     }
 
     // Reader thread must not block on transport.send — heartbeats and ACKs share
@@ -641,5 +627,13 @@ public class StompClientImpl implements StompClient {
         this.polling.remove(subscription);
         this.receivedMessages.remove(subscription);
         return this;
+    }
+
+    private URI uriWithScheme(URI uri, String scheme) {
+        try {
+            return new URI(scheme, uri.getUserInfo(), uri.getHost(), uri.getPort(), uri.getPath(), uri.getQuery(), uri.getFragment());
+        } catch (URISyntaxException ex) {
+            throw new IllegalArgumentException("Invalid transport URI for scheme %s".formatted(scheme), ex);
+        }
     }
 }

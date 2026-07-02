@@ -125,12 +125,13 @@ public class WebSocketChannel implements Channel {
     }
 
     private void closeSession(Session session) {
+        if (session.status() != Status.END) {
+            session.disconnect();
+            return;
+        }
         var webSocket = activeSessions.remove(session);
         if (Objects.nonNull(webSocket) && !webSocket.isClosed()) {
             webSocket.close();
-        }
-        if (session.status() != Status.END) {
-            listener.sessionDisconnected(session);
         }
     }
 

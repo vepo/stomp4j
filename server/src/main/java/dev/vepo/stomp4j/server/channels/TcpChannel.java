@@ -303,6 +303,10 @@ public class TcpChannel implements Channel {
     }
 
     private void closeSession(Session session) {
+        if (session.status() != Status.END) {
+            session.disconnect();
+            return;
+        }
         var attachment = sessionAttachments.remove(session);
         if (Objects.nonNull(attachment)) {
             synchronized (attachment.ioLock()) {
@@ -313,9 +317,6 @@ public class TcpChannel implements Channel {
                     logger.debug("Error closing socket", ex);
                 }
             }
-        }
-        if (session.status() != Status.END) {
-            listener.sessionDisconnected(session);
         }
     }
 
