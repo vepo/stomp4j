@@ -54,6 +54,7 @@ public class WebSocketChannel implements Channel {
     private final Map<Session, ServerWebSocket> activeSessions;
     private final SessionBroadcastOutbound outboundChannel;
     private final SessionCloser sessionCloser;
+    private final ChannelSessions sessions;
 
     private Vertx vertx;
     private HttpServer server;
@@ -69,6 +70,7 @@ public class WebSocketChannel implements Channel {
                                                             activeSessions::size,
                                                             () -> activeSessions.keySet().stream());
         this.sessionCloser = this::closeSession;
+        this.sessions = new ChannelSessions(listener, runtime, sessionCloser);
     }
 
     private void awaitShutdown(Future<Void> shutdown, String resourceName) {
@@ -155,11 +157,7 @@ public class WebSocketChannel implements Channel {
             logger.info("New WebSocket connection: {}", webSocket.remoteAddress());
 
             var sessionOutboundChannel = new WebSocketSessionOutboundChannel(webSocket);
-            var session = new Session(sessionOutboundChannel,
-                                      listener,
-                                      runtime.sessionConfig(),
-                                      sessionCloser,
-                                      runtime.heartbeatExecutor());
+            var session = sessions.open(sessionOutboundChannel);
             activeSessions.put(session, webSocket);
 
             webSocket.textMessageHandler(text -> {

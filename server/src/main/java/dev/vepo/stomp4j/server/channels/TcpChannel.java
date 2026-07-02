@@ -124,6 +124,7 @@ public class TcpChannel implements Channel {
     private final Map<Session, SessionAttachment> sessionAttachments;
     private final SessionBroadcastOutbound outboundChannel;
     private final SessionCloser sessionCloser;
+    private final ChannelSessions sessions;
     private Thread ioThread;
     private Selector selector;
     private ServerSocketChannel channel;
@@ -141,6 +142,7 @@ public class TcpChannel implements Channel {
                                                                                     .stream()
                                                                                     .map(SessionAttachment::session));
         this.sessionCloser = this::closeSession;
+        this.sessions = new ChannelSessions(listener, runtime, sessionCloser);
     }
 
     private void accept() {
@@ -195,11 +197,7 @@ public class TcpChannel implements Channel {
     private Session acceptPlainSession(SocketChannel clientChannel) throws Exception {
         var attachment = new SessionAttachment(clientChannel);
         var outbound = new TcpSessionOutboundChannel(attachment);
-        var session = new Session(outbound,
-                                  listener,
-                                  runtime.sessionConfig(),
-                                  sessionCloser,
-                                  runtime.heartbeatExecutor());
+        var session = sessions.open(outbound);
         attachment.bind(session);
         attachment.selectionKey(clientChannel.register(selector, SelectionKey.OP_READ, attachment));
         sessionAttachments.put(session, attachment);
@@ -324,11 +322,7 @@ public class TcpChannel implements Channel {
 
     private void completeTlsHandshake(SessionAttachment attachment, SelectionKey key) throws Exception {
         var outbound = new TcpSessionOutboundChannel(attachment);
-        var session = new Session(outbound,
-                                  listener,
-                                  runtime.sessionConfig(),
-                                  sessionCloser,
-                                  runtime.heartbeatExecutor());
+        var session = sessions.open(outbound);
         attachment.bind(session);
         sessionAttachments.put(session, attachment);
         key.interestOps(SelectionKey.OP_READ);
