@@ -42,8 +42,8 @@ import dev.vepo.stomp4j.client.SubscribeOptions;
 import dev.vepo.stomp4j.client.exceptions.StompException;
 import dev.vepo.stomp4j.client.Subscription;
 import dev.vepo.stomp4j.client.UserCredential;
+import dev.vepo.stomp4j.client.internal.transport.NioSecureTcpTransport;
 import dev.vepo.stomp4j.client.internal.transport.NioTcpTransport;
-import dev.vepo.stomp4j.client.internal.transport.SecureTcpTransport;
 import dev.vepo.stomp4j.client.internal.transport.SecureWebSocketTransport;
 import dev.vepo.stomp4j.client.internal.transport.TransportFactory;
 import dev.vepo.stomp4j.client.internal.transport.WebSocketTransport;
@@ -385,8 +385,8 @@ public class StompClientImpl implements StompClient {
     private Transport createTcpTransport(URI uri, TransportListener transportListener) {
         if ("stomps".equals(uri.getScheme())) {
             return Objects.isNull(sslContext)
-                                              ? new SecureTcpTransport(uri, transportListener)
-                                              : new SecureTcpTransport(uri, transportListener, sslContext);
+                                              ? new NioSecureTcpTransport(uri, transportListener)
+                                              : new NioSecureTcpTransport(uri, transportListener, sslContext);
         }
         return new NioTcpTransport(uri, transportListener);
     }

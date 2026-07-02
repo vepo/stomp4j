@@ -8,18 +8,17 @@ import java.net.ServerSocket;
 import java.net.URI;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import dev.vepo.stomp4j.client.exceptions.StompException;
+import dev.vepo.stomp4j.client.internal.transport.NioSecureTcpTransport;
 import dev.vepo.stomp4j.client.internal.transport.NioTcpTransport;
 import dev.vepo.stomp4j.client.internal.transport.SecureTcpTransport;
 import dev.vepo.stomp4j.client.internal.transport.TcpTransport;
@@ -31,8 +30,11 @@ import dev.vepo.stomp4j.commons.protocol.Message;
 class TcpTransportConnectFailureTest {
 
     private static void assertSocketReleased(Transport transport) throws Exception {
-        var fieldName = transport instanceof NioTcpTransport ? "socketChannel" : "socket";
-        assertThat(fieldValue(transport, fieldName)).isNull();
+        if (transport instanceof NioTcpTransport || transport instanceof NioSecureTcpTransport) {
+            assertThat(fieldValue(transport, "socketChannel")).isNull();
+        } else {
+            assertThat(fieldValue(transport, "socket")).isNull();
+        }
     }
 
     private static Object fieldValue(Object target, String name) throws Exception {
@@ -76,6 +78,10 @@ class TcpTransportConnectFailureTest {
             @Override
             public void onMessage(Message message) {}
         };
+    }
+
+    private static Stream<Class<? extends Transport>> secureTcpTransports() {
+        return Stream.of(SecureTcpTransport.class, NioSecureTcpTransport.class);
     }
 
     private ExecutorService acceptExecutor;
@@ -123,9 +129,10 @@ class TcpTransportConnectFailureTest {
         }
     }
 
-    @Test
-    @DisplayName("SecureTcpTransport closes socket when TLS handshake fails")
-    void shouldCloseSocketWhenSslHandshakeFails() throws Exception {
+    @ParameterizedTest
+    @MethodSource("secureTcpTransports")
+    @DisplayName("Secure TCP transport closes socket when TLS handshake fails")
+    void shouldCloseSocketWhenSslHandshakeFails(Class<? extends Transport> transportType) throws Exception {
         try (var server = new ServerSocket(0)) {
             var port = server.getLocalPort();
             acceptExecutor = Executors.newSingleThreadExecutor();
@@ -137,8 +144,9 @@ class TcpTransportConnectFailureTest {
                 }
             });
 
-            var transport = new SecureTcpTransport(URI.create("stomps://127.0.0.1:%d".formatted(port)),
-                                                   noopListener());
+            var transport = newPlainTransport(transportType,
+                                              URI.create("stomps://127.0.0.1:%d".formatted(port)),
+                                              noopListener());
 
             assertThatThrownBy(transport::connect).isInstanceOf(StompException.class);
             assertSocketReleased(transport);

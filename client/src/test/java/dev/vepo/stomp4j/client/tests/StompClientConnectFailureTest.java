@@ -19,6 +19,7 @@ import dev.vepo.stomp4j.client.StompClient;
 import dev.vepo.stomp4j.client.UserCredential;
 import dev.vepo.stomp4j.client.exceptions.StompException;
 import dev.vepo.stomp4j.client.internal.StompClientImpl;
+import dev.vepo.stomp4j.client.internal.transport.NioSecureTcpTransport;
 import dev.vepo.stomp4j.client.internal.transport.NioTcpTransport;
 import dev.vepo.stomp4j.client.internal.transport.TcpTransport;
 import dev.vepo.stomp4j.client.tests.infra.StompActiveMqContainer;
@@ -42,6 +43,10 @@ class StompClientConnectFailureTest {
             assertThat(nioTcpTransportIoThread(nioTcpTransport)).satisfiesAnyOf(
                                                                                 thread -> assertThat(thread).isNull(),
                                                                                 thread -> assertThat(thread.isAlive()).isFalse());
+        } else if (transport instanceof NioSecureTcpTransport nioSecureTcpTransport) {
+            assertThat(nioSecureTcpTransportIoThread(nioSecureTcpTransport)).satisfiesAnyOf(
+                                                                                            thread -> assertThat(thread).isNull(),
+                                                                                            thread -> assertThat(thread.isAlive()).isFalse());
         }
     }
 
@@ -54,6 +59,12 @@ class StompClientConnectFailureTest {
         var field = StompClientImpl.class.getDeclaredField(name);
         field.setAccessible(true);
         return field.get(client);
+    }
+
+    private static Thread nioSecureTcpTransportIoThread(NioSecureTcpTransport transport) throws Exception {
+        var field = NioSecureTcpTransport.class.getDeclaredField("ioThread");
+        field.setAccessible(true);
+        return (Thread) field.get(transport);
     }
 
     private static Thread nioTcpTransportIoThread(NioTcpTransport transport) throws Exception {

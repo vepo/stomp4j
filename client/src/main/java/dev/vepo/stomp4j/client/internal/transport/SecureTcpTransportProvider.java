@@ -10,7 +10,7 @@ public class SecureTcpTransportProvider implements TransportProvider {
 
     @Override
     public Transport getTransport(URI uri, TransportListener listener) {
-        return new SecureTcpTransport(uri, listener);
+        return new NioSecureTcpTransport(uri, listener);
     }
 
     @Override

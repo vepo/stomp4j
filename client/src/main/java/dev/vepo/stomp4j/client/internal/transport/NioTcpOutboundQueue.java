@@ -51,4 +51,20 @@ final class NioTcpOutboundQueue {
     synchronized boolean hasPending() {
         return Objects.nonNull(current) || !pending.isEmpty();
     }
+
+    synchronized byte[] pollFrame() {
+        if (Objects.nonNull(current)) {
+            var bytes = new byte[current.remaining()];
+            current.get(bytes);
+            current = null;
+            return bytes;
+        }
+        var next = pending.poll();
+        if (Objects.isNull(next)) {
+            return null;
+        }
+        var bytes = new byte[next.remaining()];
+        next.get(bytes);
+        return bytes;
+    }
 }
