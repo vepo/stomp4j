@@ -248,10 +248,13 @@ public class TcpChannel implements Channel {
                 selector.wakeup();
                 for (var key : selector.keys()) {
                     if (key.attachment() instanceof SessionAttachment attachment) {
-                        try {
-                            attachment.socket().close();
-                        } catch (IOException ex) {
-                            logger.debug("Error closing socket during channel shutdown", ex);
+                        synchronized (attachment.ioLock()) {
+                            shutdownTlsIo(attachment);
+                            try {
+                                attachment.socket().close();
+                            } catch (IOException ex) {
+                                logger.debug("Error closing socket during channel shutdown", ex);
+                            }
                         }
                     }
                 }
@@ -278,6 +281,7 @@ public class TcpChannel implements Channel {
     }
 
     private void closePendingTlsAttachment(SessionAttachment attachment, SelectionKey key) {
+        shutdownTlsIo(attachment);
         try {
             attachment.socket().close();
         } catch (IOException ex) {
@@ -289,10 +293,13 @@ public class TcpChannel implements Channel {
     private void closeSession(Session session) {
         var attachment = sessionAttachments.remove(session);
         if (Objects.nonNull(attachment)) {
-            try {
-                attachment.socket().close();
-            } catch (IOException ex) {
-                logger.debug("Error closing socket", ex);
+            synchronized (attachment.ioLock()) {
+                shutdownTlsIo(attachment);
+                try {
+                    attachment.socket().close();
+                } catch (IOException ex) {
+                    logger.debug("Error closing socket", ex);
+                }
             }
         }
         if (session.status() != Status.END) {
@@ -382,11 +389,15 @@ public class TcpChannel implements Channel {
     }
 
     private void progressTlsHandshake(SessionAttachment attachment, SelectionKey key) {
+        var readAfterHandshake = false;
         synchronized (attachment.ioLock()) {
             try {
                 var progress = attachment.sslIo().handshake(attachment.socket());
                 switch (progress) {
-                    case COMPLETE -> completeTlsHandshake(attachment, key);
+                    case COMPLETE -> {
+                        completeTlsHandshake(attachment, key);
+                        readAfterHandshake = true;
+                    }
                     case FAILED -> closePendingTlsAttachment(attachment, key);
                     case CONTINUE -> key.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
                     default -> {}
@@ -395,6 +406,9 @@ public class TcpChannel implements Channel {
                 logger.debug("TLS handshake error", ex);
                 closePendingTlsAttachment(attachment, key);
             }
+        }
+        if (readAfterHandshake) {
+            readSession(key);
         }
     }
 
@@ -476,6 +490,13 @@ public class TcpChannel implements Channel {
         } catch (InterruptedException ex) {
             logger.error("Thread interrupted while shutting down channel thread pool", ex);
         }
+    }
+
+    private void shutdownTlsIo(SessionAttachment attachment) {
+        if (Objects.isNull(attachment.sslIo())) {
+            return;
+        }
+        attachment.sslIo().shutdown(attachment.socket());
     }
 
     @Override

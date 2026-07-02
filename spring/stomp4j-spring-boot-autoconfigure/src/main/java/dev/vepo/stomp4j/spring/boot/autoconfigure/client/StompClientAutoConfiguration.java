@@ -22,15 +22,15 @@ public class StompClientAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public StompClientLifecycle stompClientLifecycle(StompClientFactory factory) {
-        return new StompClientLifecycle(factory);
+    public StompClientFactory stompClientFactory(StompClientProperties properties,
+                                                 ObjectProvider<javax.net.ssl.SSLContext> sslContext) {
+        return new StompClientFactory(properties, sslContext.getIfAvailable());
     }
 
     @Bean
     @ConditionalOnMissingBean
-    public StompClientFactory stompClientFactory(StompClientProperties properties,
-                                                 ObjectProvider<javax.net.ssl.SSLContext> sslContext) {
-        return new StompClientFactory(properties, sslContext.getIfAvailable());
+    public StompClientLifecycle stompClientLifecycle(StompClientFactory factory) {
+        return new StompClientLifecycle(factory);
     }
 
     @Bean

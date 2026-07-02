@@ -23,8 +23,6 @@ import dev.vepo.stomp4j.server.SubscriptionHandler;
 import dev.vepo.stomp4j.server.auth.StompAuthenticator;
 
 public final class StompKafkaBridge implements AutoCloseable {
-    private static final Logger logger = LoggerFactory.getLogger(StompKafkaBridge.class);
-
     public static final class Builder {
         private final Set<TransportChannel> channels = new HashSet<>();
         private KafkaBridgeConfig kafkaConfig;
@@ -98,6 +96,8 @@ public final class StompKafkaBridge implements AutoCloseable {
     }
 
     public record TransportChannel(TransportType type, int port) {}
+
+    private static final Logger logger = LoggerFactory.getLogger(StompKafkaBridge.class);
 
     public static Builder builder() {
         return new Builder();

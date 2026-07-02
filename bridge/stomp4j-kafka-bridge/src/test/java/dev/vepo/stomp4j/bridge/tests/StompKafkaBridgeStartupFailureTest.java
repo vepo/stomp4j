@@ -24,55 +24,6 @@ import dev.vepo.stomp4j.commons.TransportType;
 @Execution(ExecutionMode.SAME_THREAD)
 class StompKafkaBridgeStartupFailureTest {
 
-    private ServerSocketChannel portHolder;
-
-    @Test
-    @DisplayName("StompKafkaBridge closes Kafka producer when STOMP bind fails")
-    void shouldCloseProducerWhenStompBindFails() throws Exception {
-        var port = allocatePort();
-        portHolder = ServerSocketChannel.open();
-        portHolder.bind(new InetSocketAddress(port));
-
-        var kafkaConfig = KafkaBridgeConfig.builder()
-                                           .bootstrapServers("127.0.0.1:9092")
-                                           .build();
-        var bridge = newBridge(kafkaConfig, port);
-
-        assertThatThrownBy(() -> invokeStart(bridge))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining(String.valueOf(port));
-        assertThat(fieldValue(bridge, "producer")).isNull();
-        assertThat(fieldValue(bridge, "server")).isNull();
-        assertThat(fieldValue(bridge, "consumerManager")).isNull();
-    }
-
-    @Test
-    @DisplayName("Builder.start() rolls back producer when STOMP bind fails")
-    void builderStartShouldRollbackProducerWhenStompBindFails() throws Exception {
-        var port = allocatePort();
-        portHolder = ServerSocketChannel.open();
-        portHolder.bind(new InetSocketAddress(port));
-
-        var kafkaConfig = KafkaBridgeConfig.builder()
-                                           .bootstrapServers("127.0.0.1:9092")
-                                           .build();
-
-        assertThatThrownBy(() -> StompKafkaBridge.builder()
-                                                 .kafkaConfig(kafkaConfig)
-                                                 .channel(TransportType.TCP, port)
-                                                 .start())
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining(String.valueOf(port));
-    }
-
-    @AfterEach
-    void tearDown() throws Exception {
-        if (portHolder != null && portHolder.isOpen()) {
-            portHolder.close();
-        }
-        portHolder = null;
-    }
-
     private static int allocatePort() {
         try (var socket = new ServerSocket(0)) {
             return socket.getLocalPort();
@@ -81,14 +32,10 @@ class StompKafkaBridgeStartupFailureTest {
         }
     }
 
-    private static StompKafkaBridge newBridge(KafkaBridgeConfig kafkaConfig, int port) throws Exception {
-        var builder = StompKafkaBridge.builder()
-                                      .kafkaConfig(kafkaConfig)
-                                      .channel(TransportType.TCP, port);
-        Constructor<StompKafkaBridge> constructor =
-                StompKafkaBridge.class.getDeclaredConstructor(StompKafkaBridge.Builder.class);
-        constructor.setAccessible(true);
-        return constructor.newInstance(builder);
+    private static Object fieldValue(StompKafkaBridge bridge, String name) throws Exception {
+        Field field = StompKafkaBridge.class.getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(bridge);
     }
 
     private static void invokeStart(StompKafkaBridge bridge) throws Exception {
@@ -108,9 +55,62 @@ class StompKafkaBridgeStartupFailureTest {
         }
     }
 
-    private static Object fieldValue(StompKafkaBridge bridge, String name) throws Exception {
-        Field field = StompKafkaBridge.class.getDeclaredField(name);
-        field.setAccessible(true);
-        return field.get(bridge);
+    private static StompKafkaBridge newBridge(KafkaBridgeConfig kafkaConfig, int port) throws Exception {
+        var builder = StompKafkaBridge.builder()
+                                      .kafkaConfig(kafkaConfig)
+                                      .channel(TransportType.TCP, port);
+        Constructor<StompKafkaBridge> constructor =
+                StompKafkaBridge.class.getDeclaredConstructor(StompKafkaBridge.Builder.class);
+        constructor.setAccessible(true);
+        return constructor.newInstance(builder);
+    }
+
+    private ServerSocketChannel portHolder;
+
+    @Test
+    @DisplayName("Builder.start() rolls back producer when STOMP bind fails")
+    void builderStartShouldRollbackProducerWhenStompBindFails() throws Exception {
+        var port = allocatePort();
+        portHolder = ServerSocketChannel.open();
+        portHolder.bind(new InetSocketAddress(port));
+
+        var kafkaConfig = KafkaBridgeConfig.builder()
+                                           .bootstrapServers("127.0.0.1:9092")
+                                           .build();
+
+        assertThatThrownBy(() -> StompKafkaBridge.builder()
+                                                 .kafkaConfig(kafkaConfig)
+                                                 .channel(TransportType.TCP, port)
+                                                 .start())
+                                                          .isInstanceOf(IllegalStateException.class)
+                                                          .hasMessageContaining(String.valueOf(port));
+    }
+
+    @Test
+    @DisplayName("StompKafkaBridge closes Kafka producer when STOMP bind fails")
+    void shouldCloseProducerWhenStompBindFails() throws Exception {
+        var port = allocatePort();
+        portHolder = ServerSocketChannel.open();
+        portHolder.bind(new InetSocketAddress(port));
+
+        var kafkaConfig = KafkaBridgeConfig.builder()
+                                           .bootstrapServers("127.0.0.1:9092")
+                                           .build();
+        var bridge = newBridge(kafkaConfig, port);
+
+        assertThatThrownBy(() -> invokeStart(bridge))
+                                                     .isInstanceOf(IllegalStateException.class)
+                                                     .hasMessageContaining(String.valueOf(port));
+        assertThat(fieldValue(bridge, "producer")).isNull();
+        assertThat(fieldValue(bridge, "server")).isNull();
+        assertThat(fieldValue(bridge, "consumerManager")).isNull();
+    }
+
+    @AfterEach
+    void tearDown() throws Exception {
+        if (portHolder != null && portHolder.isOpen()) {
+            portHolder.close();
+        }
+        portHolder = null;
     }
 }

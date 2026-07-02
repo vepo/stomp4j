@@ -20,6 +20,12 @@ import dev.vepo.stomp4j.spring.boot.autoconfigure.client.StompClientProperties;
 @Execution(ExecutionMode.SAME_THREAD)
 class StompClientLifecycleTest {
 
+    private static Object clientField(StompClientLifecycle lifecycle) throws Exception {
+        Field field = StompClientLifecycle.class.getDeclaredField("client");
+        field.setAccessible(true);
+        return field.get(lifecycle);
+    }
+
     @Test
     @DisplayName("Failed connect clears client reference and leaves lifecycle stopped")
     void shouldClearClientWhenConnectFails() throws Exception {
@@ -39,11 +45,5 @@ class StompClientLifecycleTest {
         assertThatThrownBy(lifecycle::client).isInstanceOf(IllegalStateException.class);
         assertThatCode(lifecycle::stop).doesNotThrowAnyException();
         assertThat(clientField(lifecycle)).isNull();
-    }
-
-    private static Object clientField(StompClientLifecycle lifecycle) throws Exception {
-        Field field = StompClientLifecycle.class.getDeclaredField("client");
-        field.setAccessible(true);
-        return field.get(lifecycle);
     }
 }

@@ -25,8 +25,8 @@ import javax.net.ssl.SSLException;
  * <b>Collaborators:</b> {@link TcpChannel}, {@link TcpOutboundQueue}
  * </p>
  * <p>
- * <b>Not responsible for:</b> {@link java.nio.channels.Selector} interest ops
- * or session lifecycle.
+ * <b>Not responsible for:</b> {@link java.nio.channels.SelectionKey} interest
+ * ops or session lifecycle.
  * </p>
  */
 public final class TcpSslIo {
@@ -47,6 +47,13 @@ public final class TcpSslIo {
 
     private static ByteBuffer allocateBuffer(int size) {
         return ByteBuffer.allocate(size);
+    }
+
+    private static ByteBuffer enlargeBuffer(ByteBuffer buffer, int newCapacity) {
+        var enlarged = ByteBuffer.allocate(newCapacity);
+        buffer.flip();
+        enlarged.put(buffer);
+        return enlarged;
     }
 
     private static void prepareForSocketRead(ByteBuffer buffer) {
@@ -71,9 +78,9 @@ public final class TcpSslIo {
     }
 
     private final SSLEngine engine;
-    private final ByteBuffer peerNetData;
-    private final ByteBuffer peerAppData;
-    private final ByteBuffer myNetData;
+    private ByteBuffer peerNetData;
+    private ByteBuffer peerAppData;
+    private ByteBuffer myNetData;
     private final ByteBuffer emptyAppBuffer;
     private ByteBuffer pendingAppWrite;
     private boolean handshakeComplete;
@@ -85,6 +92,14 @@ public final class TcpSslIo {
         this.myNetData = myNetData;
         this.emptyAppBuffer = ByteBuffer.allocate(0);
         prepareForSocketRead(this.peerNetData);
+    }
+
+    private void compactPeerNetData() {
+        if (peerNetData.hasRemaining()) {
+            peerNetData.compact();
+        } else {
+            prepareForSocketRead(peerNetData);
+        }
     }
 
     public boolean drainOutbound(SocketChannel socket, TcpOutboundQueue outbound) throws IOException {
@@ -107,7 +122,11 @@ public final class TcpSslIo {
             }
             myNetData.clear();
             var result = engine.wrap(pendingAppWrite, myNetData);
-            handleEngineStatus(result.getStatus());
+            if (result.getStatus() == Status.BUFFER_OVERFLOW) {
+                myNetData = enlargeBuffer(myNetData, myNetData.capacity() * 2);
+                continue;
+            }
+            handleTerminalStatus(result.getStatus());
             myNetData.flip();
             if (!pendingAppWrite.hasRemaining()) {
                 pendingAppWrite = null;
@@ -139,12 +158,9 @@ public final class TcpSslIo {
         return true;
     }
 
-    private void handleEngineStatus(Status status) throws SSLException {
+    private void handleTerminalStatus(Status status) throws SSLException {
         if (status == Status.CLOSED) {
             throw new SSLException("SSL engine closed");
-        }
-        if (status == Status.BUFFER_OVERFLOW) {
-            throw new SSLException("SSL buffer overflow");
         }
     }
 
@@ -187,41 +203,40 @@ public final class TcpSslIo {
 
     public void readApplication(SocketChannel socket, ApplicationDataHandler handler) throws IOException {
         try {
-            if (!ensurePeerNetData(socket)) {
-                return;
-            }
-            while (peerNetData.hasRemaining()) {
-                peerAppData.clear();
-                var result = engine.unwrap(peerNetData, peerAppData);
-                switch (result.getStatus()) {
-                    case OK, BUFFER_OVERFLOW -> {}
-                    case BUFFER_UNDERFLOW -> {
-                        return;
+            while (ensurePeerNetData(socket)) {
+                while (peerNetData.hasRemaining()) {
+                    peerAppData.clear();
+                    var result = engine.unwrap(peerNetData, peerAppData);
+                    if (result.getStatus() == Status.BUFFER_OVERFLOW) {
+                        peerAppData = enlargeBuffer(peerAppData, peerAppData.capacity() * 2);
+                        continue;
                     }
-                    case CLOSED -> {
-                        handler.onClose();
-                        return;
+                    switch (result.getStatus()) {
+                        case OK -> {}
+                        case BUFFER_UNDERFLOW -> {
+                            compactPeerNetData();
+                            return;
+                        }
+                        case CLOSED -> {
+                            handler.onClose();
+                            return;
+                        }
+                        default -> throw new SSLException("Unexpected unwrap status: %s".formatted(result.getStatus()));
                     }
-                    default -> throw new SSLException("Unexpected unwrap status: %s".formatted(result.getStatus()));
+                    if (result.getHandshakeStatus() == HandshakeStatus.NEED_TASK) {
+                        runDelegatedTasks();
+                    }
+                    peerAppData.flip();
+                    if (peerAppData.hasRemaining()) {
+                        var data = new byte[peerAppData.remaining()];
+                        peerAppData.get(data);
+                        handler.onData(data, data.length);
+                    }
                 }
-                if (result.getHandshakeStatus() == HandshakeStatus.NEED_TASK) {
-                    runDelegatedTasks();
-                }
-                peerAppData.flip();
-                if (peerAppData.hasRemaining()) {
-                    var data = new byte[peerAppData.remaining()];
-                    peerAppData.get(data);
-                    handler.onData(data, data.length);
-                }
+                compactPeerNetData();
             }
-        } catch (SSLException ex) {
+        } catch (IOException ex) {
             handler.onClose();
-        } finally {
-            if (peerNetData.hasRemaining()) {
-                peerNetData.compact();
-            } else {
-                prepareForSocketRead(peerNetData);
-            }
         }
     }
 
@@ -232,27 +247,56 @@ public final class TcpSslIo {
         }
     }
 
+    public void shutdown(SocketChannel socket) {
+        if (!handshakeComplete) {
+            return;
+        }
+        try {
+            if (!engine.isOutboundDone()) {
+                engine.closeOutbound();
+                writeEnginePackets(socket);
+            }
+        } catch (IOException ex) {
+            // Peer may already be gone during abrupt close.
+        }
+        try {
+            if (!engine.isInboundDone()) {
+                engine.closeInbound();
+            }
+        } catch (SSLException ex) {
+            // closing inbound before peer's close_notify is expected on abrupt close.
+        }
+    }
+
     private void unwrapHandshake(SocketChannel socket) throws IOException {
         if (!ensurePeerNetData(socket)) {
             return;
         }
         peerAppData.clear();
         var result = engine.unwrap(peerNetData, peerAppData);
-        handleEngineStatus(result.getStatus());
-        if (peerNetData.hasRemaining()) {
-            peerNetData.compact();
-        } else {
-            prepareForSocketRead(peerNetData);
+        if (result.getStatus() == Status.BUFFER_OVERFLOW) {
+            peerAppData = enlargeBuffer(peerAppData, peerAppData.capacity() * 2);
+            return;
         }
+        handleTerminalStatus(result.getStatus());
+        compactPeerNetData();
         if (result.getHandshakeStatus() == HandshakeStatus.NEED_TASK) {
             runDelegatedTasks();
         }
     }
 
     private void wrapHandshake(SocketChannel socket) throws IOException {
-        myNetData.clear();
-        var result = engine.wrap(emptyAppBuffer, myNetData);
-        handleEngineStatus(result.getStatus());
+        SSLEngineResult result;
+        while (true) {
+            myNetData.clear();
+            result = engine.wrap(emptyAppBuffer, myNetData);
+            if (result.getStatus() == Status.BUFFER_OVERFLOW) {
+                myNetData = enlargeBuffer(myNetData, myNetData.capacity() * 2);
+                continue;
+            }
+            break;
+        }
+        handleTerminalStatus(result.getStatus());
         myNetData.flip();
         while (myNetData.hasRemaining()) {
             var written = socket.write(myNetData);
@@ -262,6 +306,27 @@ public final class TcpSslIo {
         }
         if (result.getHandshakeStatus() == HandshakeStatus.NEED_TASK) {
             runDelegatedTasks();
+        }
+    }
+
+    private void writeEnginePackets(SocketChannel socket) throws IOException {
+        while (!engine.isOutboundDone()) {
+            myNetData.clear();
+            var result = engine.wrap(emptyAppBuffer, myNetData);
+            if (result.getStatus() == Status.BUFFER_OVERFLOW) {
+                myNetData = enlargeBuffer(myNetData, myNetData.capacity() * 2);
+                continue;
+            }
+            if (result.getStatus() == Status.CLOSED) {
+                break;
+            }
+            myNetData.flip();
+            while (myNetData.hasRemaining()) {
+                socket.write(myNetData);
+            }
+            if (result.getHandshakeStatus() == HandshakeStatus.NEED_TASK) {
+                runDelegatedTasks();
+            }
         }
     }
 }
