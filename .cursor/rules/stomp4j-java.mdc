@@ -29,6 +29,7 @@ Imports and formatting: [stomp4j-format-imports.mdc](stomp4j-format-imports.mdc)
 ## Comments
 
 - Explain **non-obvious** behaviour only — see [stomp4j-in-code-documentation.mdc](stomp4j-in-code-documentation.mdc).
+- Class-level **Responsibility Design** blocks — see [stomp4j-class-responsibilities.mdc](stomp4j-class-responsibilities.mdc).
 - STOMP spec rationale, architecture decisions, and rejected alternatives belong in comments at the decision point.
 
 ## Logging

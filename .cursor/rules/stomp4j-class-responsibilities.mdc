@@ -1,0 +1,89 @@
+---
+description: Class-level responsibility documentation — Knowing, Doing, Collaborators, Not responsible for
+globs: "**/*.java"
+alwaysApply: false
+---
+
+# Class responsibilities (Responsibility Design)
+
+Every **non-trivial type** must carry a class-level Javadoc block that states **what the type owns** in the collaboration — not a method-by-method recap.
+
+Use this on **new types** and when **materially changing** an existing type's role. Update the block when collaborators or boundaries shift.
+
+## When required
+
+| Require block | Exempt (unless role is non-obvious) |
+|---------------|-------------------------------------|
+| Lifecycle managers, channels, transports, bridge/server/client facades | One-field records, trivial enums, generated code |
+| Spring / Quarkus lifecycle beans | Lombok-style pure data DTOs with no behaviour |
+| Test fixtures and infra (`*.tests.infra`) | Private nested types under ~15 lines with a single obvious job |
+| SPI implementations, protocol/session handlers | |
+
+When unsure, **document** — the block is cheap and prevents scope creep.
+
+## Block template
+
+Use HTML sections (matches existing test infra and Spring integration types):
+
+```java
+/**
+ * <p>
+ * <b>Responsibilities</b>
+ * </p>
+ * <ul>
+ * <li><b>Knowing:</b> … state or facts this type is the source of truth for (optional).</li>
+ * <li><b>Doing:</b> … actions it performs — lifecycle, I/O, mapping, orchestration (required).</li>
+ * <li><b>Deciding:</b> … policy or branching only this type applies (optional).</li>
+ * </ul>
+ * <p>
+ * <b>Collaborators:</b> {@link OtherType}, …
+ * </p>
+ * <p>
+ * <b>Not responsible for:</b> … neighbouring concerns owned elsewhere.
+ * </p>
+ */
+public final class Example { … }
+```
+
+### Section rules
+
+| Section | Content |
+|---------|---------|
+| **Knowing** | Invariants, cached handles, lifecycle flags, configuration snapshots this type holds. |
+| **Doing** | Verbs: connect, close, route, map, subscribe, roll back — tie to domain terms from [domain-specification.md](../../docs/domain-specification.md). |
+| **Deciding** | Optional — acceptance rules, retry policy, version negotiation when not obvious from names. |
+| **Collaborators** | Types this class calls or is injected with; use `{@link …}` for project types. |
+| **Not responsible for** | Prevents “god class” drift — name the **owner** of the excluded concern. |
+
+Keep each bullet to **one line**. No tutorials; link ARCHITECTURE.md or user docs for long prose.
+
+## Examples in the repo
+
+| Type | Pattern |
+|------|---------|
+| [EphemeralPorts.java](../../server/src/test/java/dev/vepo/stomp4j/server/tests/infra/EphemeralPorts.java) | Doing + Not responsible for |
+| [EmbeddedServerFixture.java](../../server/src/test/java/dev/vepo/stomp4j/server/tests/infra/EmbeddedServerFixture.java) | Knowing + Doing + Collaborators |
+| [StompClientLifecycle.java](../../spring/stomp4j-spring-boot-autoconfigure/src/main/java/dev/vepo/stomp4j/spring/boot/autoconfigure/client/StompClientLifecycle.java) | Spring lifecycle manager |
+
+## Relationship to other comment rules
+
+| Rule | Use for |
+|------|---------|
+| **This rule** | **Class role** — who owns what in the design |
+| [stomp4j-in-code-documentation.mdc](stomp4j-in-code-documentation.mdc) | **Method/block** — spec detail, rejected alternatives, non-obvious invariants |
+| Public API Javadoc | Parameters, return values, `@throws` on exported methods |
+
+Do not duplicate the class block inside methods. Do not restate the block in markdown unless updating ARCHITECTURE.md module boundaries.
+
+## Agent checklist (new or changed type)
+
+1. Add or update the responsibility block before finishing.
+2. **Doing** lists at least one concrete verb.
+3. **Not responsible for** names at least one neighbour (factory, template, protocol layer, test assertion, etc.).
+4. If the type is user-visible capability, confirm [features.md](../../docs/features.md) / guides still accurate — see [documentation.mdc](documentation.mdc).
+
+## Related
+
+- [stomp4j-oop-design.mdc](stomp4j-oop-design.mdc) — single responsibility in code structure
+- [stomp4j-model.mdc](stomp4j-model.mdc) — domain vocabulary in Doing bullets
+- [stomp4j-in-code-documentation.mdc](stomp4j-in-code-documentation.mdc) — inline comments

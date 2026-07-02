@@ -14,6 +14,7 @@ Add a comment when at least one applies:
 
 | Situation | What to document |
 |-----------|------------------|
+| **New or changed type role** | Class-level responsibility block — [stomp4j-class-responsibilities.mdc](stomp4j-class-responsibilities.mdc). |
 | **STOMP spec detail** | Normative behaviour, version differences (1.0 vs 1.1 vs 1.2), header semantics, frame layout edge cases — cite spec section or command (e.g. `CONNECT` heart-beat negotiation). |
 | **Architecture decision** | Why this module/layer owns the logic, transport vs protocol boundary, thread model, why an internal package is used. |
 | **Rejected alternative** | Another approach considered and **why it was not chosen** (performance, spec violation, broker quirk, JPMS boundary). |

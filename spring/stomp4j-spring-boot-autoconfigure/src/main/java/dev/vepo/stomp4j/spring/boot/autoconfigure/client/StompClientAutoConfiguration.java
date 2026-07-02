@@ -22,8 +22,8 @@ public class StompClientAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public StompClientConnectionManager stompClientConnectionManager(StompClientFactory factory) {
-        return new StompClientConnectionManager(factory);
+    public StompClientLifecycle stompClientLifecycle(StompClientFactory factory) {
+        return new StompClientLifecycle(factory);
     }
 
     @Bean
@@ -35,17 +35,17 @@ public class StompClientAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public StompClientTemplate stompClientTemplate(StompClientConnectionManager connectionManager,
+    public StompClientTemplate stompClientTemplate(StompClientLifecycle clientLifecycle,
                                                    StompClientProperties properties) {
-        return new StompClientTemplate(connectionManager, properties);
+        return new StompClientTemplate(clientLifecycle, properties);
     }
 
     @Bean
     @ConditionalOnMissingBean
     public StompListenerEndpointRegistrar stompListenerEndpointRegistrar(
-                                                                         StompClientConnectionManager connectionManager,
+                                                                         StompClientLifecycle clientLifecycle,
                                                                          StompListenerMethodInvoker invoker) {
-        return new StompListenerEndpointRegistrar(connectionManager, invoker);
+        return new StompListenerEndpointRegistrar(clientLifecycle, invoker);
     }
 
     @Bean

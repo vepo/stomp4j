@@ -18,16 +18,16 @@ public class StompListenerEndpointRegistrar implements ApplicationContextAware, 
 
     record RegisteredEndpoint(Object bean, Method method, String destination, AckMode ackMode) {}
 
-    private final StompClientConnectionManager connectionManager;
+    private final StompClientLifecycle clientLifecycle;
     private final StompListenerMethodInvoker invoker;
     private ApplicationContext applicationContext;
     private final List<RegisteredEndpoint> endpoints = new ArrayList<>();
 
     private boolean running;
 
-    public StompListenerEndpointRegistrar(StompClientConnectionManager connectionManager,
+    public StompListenerEndpointRegistrar(StompClientLifecycle clientLifecycle,
                                           StompListenerMethodInvoker invoker) {
-        this.connectionManager = connectionManager;
+        this.clientLifecycle = clientLifecycle;
         this.invoker = invoker;
     }
 
@@ -69,7 +69,7 @@ public class StompListenerEndpointRegistrar implements ApplicationContextAware, 
             return;
         }
         discoverEndpoints();
-        var client = connectionManager.client();
+        var client = clientLifecycle.client();
         for (var endpoint : endpoints) {
             client.subscribe(endpoint.destination(), endpoint.ackMode(), delivery -> invoker.invoke(endpoint, delivery));
         }
