@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.net.ServerSocket;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -21,7 +20,6 @@ import dev.vepo.stomp4j.client.exceptions.StompException;
 import dev.vepo.stomp4j.client.internal.StompClientImpl;
 import dev.vepo.stomp4j.client.internal.transport.NioSecureTcpTransport;
 import dev.vepo.stomp4j.client.internal.transport.NioTcpTransport;
-import dev.vepo.stomp4j.client.internal.transport.TcpTransport;
 import dev.vepo.stomp4j.client.tests.infra.StompActiveMqContainer;
 import dev.vepo.stomp4j.client.tests.infra.StompContainer;
 
@@ -37,17 +35,16 @@ class StompClientConnectFailureTest {
 
         var transport = fieldValue(client, "transport");
         assertThat(transportFieldValue(transport, "running", AtomicBoolean.class).get()).isFalse();
-        if (transport instanceof TcpTransport tcpTransport) {
-            assertThat(tcpTransportExecutor(tcpTransport).isShutdown()).isTrue();
-        } else if (transport instanceof NioTcpTransport nioTcpTransport) {
-            assertThat(nioTcpTransportIoThread(nioTcpTransport)).satisfiesAnyOf(
-                                                                                thread -> assertThat(thread).isNull(),
-                                                                                thread -> assertThat(thread.isAlive()).isFalse());
-        } else if (transport instanceof NioSecureTcpTransport nioSecureTcpTransport) {
-            assertThat(nioSecureTcpTransportIoThread(nioSecureTcpTransport)).satisfiesAnyOf(
-                                                                                            thread -> assertThat(thread).isNull(),
-                                                                                            thread -> assertThat(thread.isAlive()).isFalse());
+        if (transport instanceof NioTcpTransport || transport instanceof NioSecureTcpTransport) {
+            assertNioTransportIoThreadReleased(transport);
         }
+    }
+
+    private static void assertNioTransportIoThreadReleased(Object transport) throws Exception {
+        var field = transport.getClass().getDeclaredField("ioThread");
+        field.setAccessible(true);
+        var thread = (Thread) field.get(transport);
+        assertThat(thread == null || !thread.isAlive()).isTrue();
     }
 
     private static boolean clientClosed(StompClient client) throws Exception {
@@ -59,24 +56,6 @@ class StompClientConnectFailureTest {
         var field = StompClientImpl.class.getDeclaredField(name);
         field.setAccessible(true);
         return field.get(client);
-    }
-
-    private static Thread nioSecureTcpTransportIoThread(NioSecureTcpTransport transport) throws Exception {
-        var field = NioSecureTcpTransport.class.getDeclaredField("ioThread");
-        field.setAccessible(true);
-        return (Thread) field.get(transport);
-    }
-
-    private static Thread nioTcpTransportIoThread(NioTcpTransport transport) throws Exception {
-        var field = NioTcpTransport.class.getDeclaredField("ioThread");
-        field.setAccessible(true);
-        return (Thread) field.get(transport);
-    }
-
-    private static ExecutorService tcpTransportExecutor(TcpTransport transport) throws Exception {
-        var field = TcpTransport.class.getDeclaredField("executor");
-        field.setAccessible(true);
-        return (ExecutorService) field.get(transport);
     }
 
     private static <T> T transportFieldValue(Object transport, String name, Class<T> type) throws Exception {

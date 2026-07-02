@@ -71,7 +71,7 @@ Full STOMP client — versions 1.0, 1.1, 1.2 over TCP and WebSocket.
 | `dev.vepo.stomp4j.client.protocol.v1_0/v1_1/v1_2` | Public | Version-specific subscribe/send/ack/unsubscribe |
 | `dev.vepo.stomp4j.client.transport` | Public | `Transport`, `TransportProvider`, `TransportListener` |
 | `dev.vepo.stomp4j.client.internal` | **Internal** | `StompClientImpl` |
-| `dev.vepo.stomp4j.client.internal.transport` | Internal | `TcpTransport`, `WebSocketTransport`, `TransportFactory`, providers |
+| `dev.vepo.stomp4j.client.internal.transport` | Internal | `NioTcpTransport`, `NioSecureTcpTransport`, `WebSocketTransport`, `TransportFactory`, providers |
 
 **Client lifecycle:**
 
@@ -167,7 +167,7 @@ User guide: [docs/kafka-bridge-guide.md](docs/kafka-bridge-guide.md).
 | Thread | Source | Calls into |
 |--------|--------|------------|
 | **Application** | Test or app code | `connect()`, `subscribe()`, `send()`, `close()`, `join()`, polling `hasData()` / `poll()` |
-| **Transport read** | `TcpTransport` / `SecureTcpTransport` single-thread executor; `java.net.http` WebSocket callbacks | `TransportListener.onMessage()` → `StompClientImpl` frame dispatch |
+| **Transport read** | `NioTcpTransport` / `NioSecureTcpTransport` selector I/O thread; `java.net.http` WebSocket callbacks | `TransportListener.onMessage()` → `StompClientImpl` frame dispatch |
 | **Heartbeat** | `StompClientImpl` single-thread `ScheduledExecutorService` | `transport.send(HEARTBEAT)` |
 
 **Inbound path:** transport read thread → `ConnectionListener.onMessage()` → `consumeMessage()` → user `Consumer` callback **or** enqueue on `ConcurrentLinkedQueue` for polling mode.
