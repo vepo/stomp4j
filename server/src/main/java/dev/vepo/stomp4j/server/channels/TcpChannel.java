@@ -16,6 +16,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import dev.vepo.stomp4j.commons.nio.SelectionKeys;
+import dev.vepo.stomp4j.commons.nio.SslEngineIo;
+import dev.vepo.stomp4j.commons.nio.TcpOutboundQueue;
 import dev.vepo.stomp4j.commons.protocol.Message;
 import dev.vepo.stomp4j.server.AcknowledgedOutboundChannel;
 import dev.vepo.stomp4j.server.OutboundChannel;
@@ -30,7 +33,7 @@ public class TcpChannel implements Channel {
 
         private Session session;
         private final SocketChannel socket;
-        private final TcpSslIo sslIo;
+        private final SslEngineIo sslIo;
         private final TcpOutboundQueue outbound = new TcpOutboundQueue();
         private final Object ioLock = new Object();
         private SelectionKey selectionKey;
@@ -39,7 +42,7 @@ public class TcpChannel implements Channel {
             this(socket, null);
         }
 
-        private SessionAttachment(SocketChannel socket, TcpSslIo sslIo) {
+        private SessionAttachment(SocketChannel socket, SslEngineIo sslIo) {
             this.socket = socket;
             this.sslIo = sslIo;
         }
@@ -76,7 +79,7 @@ public class TcpChannel implements Channel {
             return socket;
         }
 
-        private TcpSslIo sslIo() {
+        private SslEngineIo sslIo() {
             return sslIo;
         }
     }
@@ -238,19 +241,11 @@ public class TcpChannel implements Channel {
     }
 
     private void acceptTlsSession(SocketChannel clientChannel) throws IOException {
-        var sslIo = TcpSslIo.server(runtime.sslSettings().get().sslContext());
+        var sslIo = SslEngineIo.server(runtime.sslSettings().get().sslContext());
         var attachment = new SessionAttachment(clientChannel, sslIo);
         var selectionKey = clientChannel.register(selector, SelectionKey.OP_READ, attachment);
         attachment.selectionKey(selectionKey);
         progressTlsHandshake(attachment, selectionKey);
-    }
-
-    private void clearWriteInterest(SelectionKey key) {
-        var interestOps = key.interestOps() & ~SelectionKey.OP_WRITE;
-        if (interestOps == 0) {
-            interestOps = SelectionKey.OP_READ;
-        }
-        key.interestOps(interestOps);
     }
 
     @Override
@@ -354,7 +349,7 @@ public class TcpChannel implements Channel {
     private void flushOutbound(SessionAttachment attachment, SelectionKey key) {
         try {
             if (!hasOutboundPending(attachment)) {
-                clearWriteInterest(key);
+                SelectionKeys.clearWriteInterest(key);
                 return;
             }
             boolean pending;
@@ -364,7 +359,7 @@ public class TcpChannel implements Channel {
                 pending = attachment.outbound().drain(attachment.socket());
             }
             if (!pending) {
-                clearWriteInterest(key);
+                SelectionKeys.clearWriteInterest(key);
             }
         } catch (IOException ex) {
             logger.debug("Write error, closing session", ex);
@@ -447,7 +442,7 @@ public class TcpChannel implements Channel {
         synchronized (attachment.ioLock()) {
             try {
                 if (Objects.nonNull(attachment.sslIo())) {
-                    attachment.sslIo().readApplication(attachment.socket(), new TcpSslIo.ApplicationDataHandler() {
+                    attachment.sslIo().readApplication(attachment.socket(), new SslEngineIo.ApplicationDataHandler() {
                         @Override
                         public void onClose() {
                             closeSession(attachment.session());

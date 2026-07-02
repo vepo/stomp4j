@@ -19,6 +19,8 @@ import org.slf4j.LoggerFactory;
 
 import dev.vepo.stomp4j.client.transport.Transport;
 import dev.vepo.stomp4j.client.transport.TransportListener;
+import dev.vepo.stomp4j.commons.nio.SelectionKeys;
+import dev.vepo.stomp4j.commons.nio.TcpOutboundQueue;
 import dev.vepo.stomp4j.commons.protocol.Message;
 import dev.vepo.stomp4j.commons.protocol.MessageBuffer;
 
@@ -34,7 +36,7 @@ import dev.vepo.stomp4j.commons.protocol.MessageBuffer;
  * inbound data is read only on the selector I/O thread.</li>
  * </ul>
  * <p>
- * <b>Collaborators:</b> {@link NioTcpOutboundQueue}, {@link TransportListener},
+ * <b>Collaborators:</b> {@link TcpOutboundQueue}, {@link TransportListener},
  * {@link MessageBuffer}
  * </p>
  * <p>
@@ -49,7 +51,7 @@ public class NioTcpTransport implements Transport {
     private final String host;
     private final int port;
     private final TransportListener listener;
-    private final NioTcpOutboundQueue outbound = new NioTcpOutboundQueue();
+    private final TcpOutboundQueue outbound = new TcpOutboundQueue();
     private final MessageBuffer messageBuffer = new MessageBuffer();
     private final ByteBuffer readBuffer = ByteBuffer.allocate(1024);
     private final AtomicBoolean running = new AtomicBoolean(false);
@@ -82,14 +84,6 @@ public class NioTcpTransport implements Transport {
             logger.error("Interrupted while waiting for I/O thread after connect failure", ex);
         }
         closeOpenResources();
-    }
-
-    private void clearWriteInterest(SelectionKey key) {
-        var interestOps = key.interestOps() & ~SelectionKey.OP_WRITE;
-        if (interestOps == 0) {
-            interestOps = SelectionKey.OP_READ;
-        }
-        key.interestOps(interestOps);
     }
 
     @Override
@@ -209,7 +203,7 @@ public class NioTcpTransport implements Transport {
                     if (key.isValid() && key.isWritable()) {
                         synchronized (sendLock) {
                             if (!flushOutbound()) {
-                                clearWriteInterest(key);
+                                SelectionKeys.clearWriteInterest(key);
                             }
                         }
                     }
@@ -286,7 +280,7 @@ public class NioTcpTransport implements Transport {
                 var currentSelector = selector;
                 if (Objects.nonNull(key) && key.isValid()) {
                     if (!flushOutbound()) {
-                        clearWriteInterest(key);
+                        SelectionKeys.clearWriteInterest(key);
                     } else {
                         key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
                     }

@@ -1,4 +1,4 @@
-package dev.vepo.stomp4j.client.internal.transport;
+package dev.vepo.stomp4j.commons.nio;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -17,65 +17,59 @@ import javax.net.ssl.SSLException;
  * <b>Responsibilities</b>
  * </p>
  * <ul>
- * <li><b>Doing:</b> Run a non-blocking client {@link SSLEngine} handshake and
+ * <li><b>Doing:</b> Run a non-blocking {@link SSLEngine} handshake and
  * translate encrypted socket I/O to application plaintext for one TCP
  * session.</li>
  * </ul>
  * <p>
- * <b>Collaborators:</b> {@link NioSecureTcpTransport},
- * {@link NioTcpOutboundQueue}
+ * <b>Collaborators:</b> {@link TcpOutboundQueue}
  * </p>
  * <p>
  * <b>Not responsible for:</b> {@link java.nio.channels.SelectionKey} interest
- * ops or transport lifecycle.
+ * ops or connection lifecycle.
  * </p>
  */
-final class NioTcpSslIo {
+public final class SslEngineIo {
 
     @FunctionalInterface
-    interface ApplicationDataHandler {
+    public interface ApplicationDataHandler {
 
         default void onClose() {}
 
         void onData(byte[] data, int length);
     }
 
-    enum HandshakeProgress {
+    public enum HandshakeProgress {
         CONTINUE,
         COMPLETE,
         FAILED
     }
 
-    private static ByteBuffer allocateBuffer(int size) {
-        return ByteBuffer.allocate(size);
-    }
-
-    static NioTcpSslIo client(SSLContext sslContext, String host, int port) {
+    public static SslEngineIo client(SSLContext sslContext, String host, int port) {
         Objects.requireNonNull(sslContext, "sslContext");
         var engine = sslContext.createSSLEngine(host, port);
         engine.setUseClientMode(true);
+        return create(engine);
+    }
+
+    private static SslEngineIo create(SSLEngine engine) {
         try {
             engine.beginHandshake();
         } catch (SSLException ex) {
             throw new IllegalStateException("Could not begin TLS handshake", ex);
         }
         var session = engine.getSession();
-        return new NioTcpSslIo(engine,
-                               allocateBuffer(session.getPacketBufferSize()),
-                               allocateBuffer(session.getApplicationBufferSize()),
-                               allocateBuffer(session.getPacketBufferSize()));
+        return new SslEngineIo(engine,
+                               NioBuffers.allocate(session.getPacketBufferSize()),
+                               NioBuffers.allocate(session.getApplicationBufferSize()),
+                               NioBuffers.allocate(session.getPacketBufferSize()));
     }
 
-    private static ByteBuffer enlargeBuffer(ByteBuffer buffer, int newCapacity) {
-        var enlarged = ByteBuffer.allocate(newCapacity);
-        buffer.flip();
-        enlarged.put(buffer);
-        return enlarged;
-    }
-
-    private static void prepareForSocketRead(ByteBuffer buffer) {
-        buffer.clear();
-        buffer.limit(0);
+    public static SslEngineIo server(SSLContext sslContext) {
+        Objects.requireNonNull(sslContext, "sslContext");
+        var engine = sslContext.createSSLEngine();
+        engine.setUseClientMode(false);
+        return create(engine);
     }
 
     private final SSLEngine engine;
@@ -86,24 +80,24 @@ final class NioTcpSslIo {
     private ByteBuffer pendingAppWrite;
     private boolean handshakeComplete;
 
-    private NioTcpSslIo(SSLEngine engine, ByteBuffer peerNetData, ByteBuffer peerAppData, ByteBuffer myNetData) {
+    private SslEngineIo(SSLEngine engine, ByteBuffer peerNetData, ByteBuffer peerAppData, ByteBuffer myNetData) {
         this.engine = engine;
         this.peerNetData = peerNetData;
         this.peerAppData = peerAppData;
         this.myNetData = myNetData;
         this.emptyAppBuffer = ByteBuffer.allocate(0);
-        prepareForSocketRead(this.peerNetData);
+        NioBuffers.prepareForSocketRead(this.peerNetData);
     }
 
     private void compactPeerNetData() {
         if (peerNetData.hasRemaining()) {
             peerNetData.compact();
         } else {
-            prepareForSocketRead(peerNetData);
+            NioBuffers.prepareForSocketRead(peerNetData);
         }
     }
 
-    boolean drainOutbound(SocketChannel socket, NioTcpOutboundQueue outbound) throws IOException {
+    public boolean drainOutbound(SocketChannel socket, TcpOutboundQueue outbound) throws IOException {
         while (true) {
             if (myNetData.hasRemaining()) {
                 socket.write(myNetData);
@@ -124,7 +118,7 @@ final class NioTcpSslIo {
             myNetData.clear();
             var result = engine.wrap(pendingAppWrite, myNetData);
             if (result.getStatus() == Status.BUFFER_OVERFLOW) {
-                myNetData = enlargeBuffer(myNetData, myNetData.capacity() * 2);
+                myNetData = NioBuffers.enlarge(myNetData, myNetData.capacity() * 2);
                 continue;
             }
             handleTerminalStatus(result.getStatus());
@@ -145,14 +139,14 @@ final class NioTcpSslIo {
         if (peerNetData.hasRemaining()) {
             return true;
         }
-        prepareForSocketRead(peerNetData);
+        NioBuffers.prepareForSocketRead(peerNetData);
         peerNetData.clear();
         var read = socket.read(peerNetData);
         if (read < 0) {
             throw new SSLException("Peer closed connection");
         }
         if (read == 0) {
-            prepareForSocketRead(peerNetData);
+            NioBuffers.prepareForSocketRead(peerNetData);
             return false;
         }
         peerNetData.flip();
@@ -165,7 +159,7 @@ final class NioTcpSslIo {
         }
     }
 
-    HandshakeProgress handshake(SocketChannel socket) throws IOException {
+    public HandshakeProgress handshake(SocketChannel socket) throws IOException {
         if (handshakeComplete) {
             return HandshakeProgress.COMPLETE;
         }
@@ -194,22 +188,22 @@ final class NioTcpSslIo {
         }
     }
 
-    boolean hasEncryptedOutbound() {
+    public boolean hasEncryptedOutbound() {
         return myNetData.hasRemaining() || Objects.nonNull(pendingAppWrite);
     }
 
-    boolean isHandshakeComplete() {
+    public boolean isHandshakeComplete() {
         return handshakeComplete;
     }
 
-    void readApplication(SocketChannel socket, ApplicationDataHandler handler) throws IOException {
+    public void readApplication(SocketChannel socket, ApplicationDataHandler handler) throws IOException {
         try {
             while (ensurePeerNetData(socket)) {
                 while (peerNetData.hasRemaining()) {
                     peerAppData.clear();
                     var result = engine.unwrap(peerNetData, peerAppData);
                     if (result.getStatus() == Status.BUFFER_OVERFLOW) {
-                        peerAppData = enlargeBuffer(peerAppData, peerAppData.capacity() * 2);
+                        peerAppData = NioBuffers.enlarge(peerAppData, peerAppData.capacity() * 2);
                         continue;
                     }
                     switch (result.getStatus()) {
@@ -248,7 +242,7 @@ final class NioTcpSslIo {
         }
     }
 
-    void shutdown(SocketChannel socket) {
+    public void shutdown(SocketChannel socket) {
         if (!handshakeComplete) {
             return;
         }
@@ -276,7 +270,7 @@ final class NioTcpSslIo {
         peerAppData.clear();
         var result = engine.unwrap(peerNetData, peerAppData);
         if (result.getStatus() == Status.BUFFER_OVERFLOW) {
-            peerAppData = enlargeBuffer(peerAppData, peerAppData.capacity() * 2);
+            peerAppData = NioBuffers.enlarge(peerAppData, peerAppData.capacity() * 2);
             return;
         }
         handleTerminalStatus(result.getStatus());
@@ -292,7 +286,7 @@ final class NioTcpSslIo {
             myNetData.clear();
             result = engine.wrap(emptyAppBuffer, myNetData);
             if (result.getStatus() == Status.BUFFER_OVERFLOW) {
-                myNetData = enlargeBuffer(myNetData, myNetData.capacity() * 2);
+                myNetData = NioBuffers.enlarge(myNetData, myNetData.capacity() * 2);
                 continue;
             }
             break;
@@ -315,7 +309,7 @@ final class NioTcpSslIo {
             myNetData.clear();
             var result = engine.wrap(emptyAppBuffer, myNetData);
             if (result.getStatus() == Status.BUFFER_OVERFLOW) {
-                myNetData = enlargeBuffer(myNetData, myNetData.capacity() * 2);
+                myNetData = NioBuffers.enlarge(myNetData, myNetData.capacity() * 2);
                 continue;
             }
             if (result.getStatus() == Status.CLOSED) {

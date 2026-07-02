@@ -1,4 +1,4 @@
-package dev.vepo.stomp4j.server.tests;
+package dev.vepo.stomp4j.commons.tests.nio;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -12,7 +12,7 @@ import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import dev.vepo.stomp4j.server.channels.TcpOutboundQueue;
+import dev.vepo.stomp4j.commons.nio.TcpOutboundQueue;
 
 class TcpOutboundQueueTest {
 

@@ -21,6 +21,9 @@ import org.slf4j.LoggerFactory;
 
 import dev.vepo.stomp4j.client.transport.Transport;
 import dev.vepo.stomp4j.client.transport.TransportListener;
+import dev.vepo.stomp4j.commons.nio.SelectionKeys;
+import dev.vepo.stomp4j.commons.nio.SslEngineIo;
+import dev.vepo.stomp4j.commons.nio.TcpOutboundQueue;
 import dev.vepo.stomp4j.commons.protocol.Message;
 import dev.vepo.stomp4j.commons.protocol.MessageBuffer;
 
@@ -30,14 +33,14 @@ import dev.vepo.stomp4j.commons.protocol.MessageBuffer;
  * </p>
  * <ul>
  * <li><b>Doing:</b> Connect a TLS STOMP session with non-blocking
- * {@link SocketChannel} I/O and {@link NioTcpSslIo} on a dedicated selector
+ * {@link SocketChannel} I/O and {@link SslEngineIo} on a dedicated selector
  * thread; deliver inbound frames to {@link TransportListener} and send outbound
  * frames from any caller thread. Concurrent {@link #send} calls are serialised
  * on an internal lock; inbound data is read only on the selector I/O
  * thread.</li>
  * </ul>
  * <p>
- * <b>Collaborators:</b> {@link NioTcpSslIo}, {@link NioTcpOutboundQueue},
+ * <b>Collaborators:</b> {@link SslEngineIo}, {@link TcpOutboundQueue},
  * {@link TransportListener}, {@link MessageBuffer}
  * </p>
  * <p>
@@ -61,7 +64,7 @@ public class NioSecureTcpTransport implements Transport {
     private final int port;
     private final TransportListener listener;
     private final SSLContext sslContext;
-    private final NioTcpOutboundQueue outbound = new NioTcpOutboundQueue();
+    private final TcpOutboundQueue outbound = new TcpOutboundQueue();
     private final MessageBuffer messageBuffer = new MessageBuffer();
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final CountDownLatch done = new CountDownLatch(1);
@@ -70,7 +73,7 @@ public class NioSecureTcpTransport implements Transport {
     private SocketChannel socketChannel;
     private Selector selector;
     private SelectionKey selectionKey;
-    private NioTcpSslIo sslIo;
+    private SslEngineIo sslIo;
     private Thread ioThread;
     private volatile long lastReceivedMessage = System.nanoTime();
     private volatile long lastSentMessage = System.nanoTime();
@@ -99,14 +102,6 @@ public class NioSecureTcpTransport implements Transport {
             logger.error("Interrupted while waiting for I/O thread after connect failure", ex);
         }
         closeOpenResources();
-    }
-
-    private void clearWriteInterest(SelectionKey key) {
-        var interestOps = key.interestOps() & ~SelectionKey.OP_WRITE;
-        if (interestOps == 0) {
-            interestOps = SelectionKey.OP_READ;
-        }
-        key.interestOps(interestOps);
     }
 
     @Override
@@ -158,7 +153,7 @@ public class NioSecureTcpTransport implements Transport {
         try {
             while (!sslIo.isHandshakeComplete()) {
                 var progress = sslIo.handshake(socketChannel);
-                if (progress == NioTcpSslIo.HandshakeProgress.FAILED) {
+                if (progress == SslEngineIo.HandshakeProgress.FAILED) {
                     throw new SSLException("TLS handshake failed");
                 }
             }
@@ -175,7 +170,7 @@ public class NioSecureTcpTransport implements Transport {
         try {
             socketChannel = SocketChannel.open();
             socketChannel.connect(new InetSocketAddress(host, port));
-            sslIo = NioTcpSslIo.client(sslContext, host, port);
+            sslIo = SslEngineIo.client(sslContext, host, port);
             completeBlockingHandshake();
             selector = Selector.open();
             selectionKey = socketChannel.register(selector, SelectionKey.OP_READ);
@@ -251,7 +246,7 @@ public class NioSecureTcpTransport implements Transport {
                     if (key.isValid() && key.isWritable()) {
                         synchronized (sendLock) {
                             if (!flushOutbound()) {
-                                clearWriteInterest(key);
+                                SelectionKeys.clearWriteInterest(key);
                             }
                         }
                     }
@@ -288,7 +283,7 @@ public class NioSecureTcpTransport implements Transport {
     }
 
     private void readInbound() throws IOException {
-        sslIo.readApplication(socketChannel, new NioTcpSslIo.ApplicationDataHandler() {
+        sslIo.readApplication(socketChannel, new SslEngineIo.ApplicationDataHandler() {
             @Override
             public void onClose() {
                 running.set(false);
@@ -322,7 +317,7 @@ public class NioSecureTcpTransport implements Transport {
                 var currentSelector = selector;
                 if (Objects.nonNull(key) && key.isValid()) {
                     if (!flushOutbound()) {
-                        clearWriteInterest(key);
+                        SelectionKeys.clearWriteInterest(key);
                     } else {
                         key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
                     }

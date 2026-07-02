@@ -194,9 +194,13 @@ public class Session implements StompSession {
             return;
         }
         var destination = message.headers().destination().orElseThrow();
-        subscriptions.stream()
-                     .filter(subscription -> subscription.topic().equals(destination))
-                     .forEach(subscription -> deliverMessage(message, subscription, ackListener));
+        List<Subscription> targets;
+        synchronized (subscriptions) {
+            targets = subscriptions.stream()
+                                   .filter(subscription -> subscription.topic().equals(destination))
+                                   .toList();
+        }
+        targets.forEach(subscription -> deliverMessage(message, subscription, ackListener));
     }
 
     @Override

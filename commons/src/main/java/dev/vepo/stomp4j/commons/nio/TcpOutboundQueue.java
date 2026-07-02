@@ -1,4 +1,4 @@
-package dev.vepo.stomp4j.server.channels;
+package dev.vepo.stomp4j.commons.nio;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -15,9 +15,6 @@ import java.util.Queue;
  * <li><b>Doing:</b> Queue encoded STOMP frames and drain them to a non-blocking
  * {@link SocketChannel}, retrying partial writes.</li>
  * </ul>
- * <p>
- * <b>Collaborators:</b> {@link TcpChannel}
- * </p>
  * <p>
  * <b>Not responsible for:</b> {@link java.nio.channels.SelectionKey} interest
  * ops or selector wakeup.
@@ -53,10 +50,8 @@ public final class TcpOutboundQueue {
     }
 
     /**
-     * Writes as much queued data as the socket accepts.
-     *
-     * @return {@code true} when outbound data remains and {@code OP_WRITE} should
-     *         stay enabled
+     * Removes the next queued frame for TLS {@code wrap} when plaintext cannot be
+     * written directly to the socket.
      */
     public synchronized byte[] pollFrame() {
         if (Objects.nonNull(current)) {

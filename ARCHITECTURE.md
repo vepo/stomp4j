@@ -55,10 +55,11 @@ Shared STOMP wire-format model.
 |---------|----------------|
 | `dev.vepo.stomp4j.commons` | `TransportType` (`TCP`, `WEB_SOCKET`) |
 | `dev.vepo.stomp4j.commons.protocol` | `Command`, `Header`, `Headers`, `Message`, `MessageBuilder`, `MessageBuffer` |
+| `dev.vepo.stomp4j.commons.nio` | Internal NIO helpers: `TcpOutboundQueue`, `SslEngineIo`, `SelectionKeys`, `NioBuffers` (qualified export to `client` and `server` only) |
 
 `Message` is a record with `encode()` / `readMessage()` for STOMP framing. `MessageBuffer` accumulates stream bytes until the NUL (`\u0000`) terminator.
 
-**Exports:** `commons`, `commons.protocol`
+**Exports:** `commons`, `commons.protocol`; `commons.nio` → `stomp4j.client`, `stomp4j.server`
 
 ### 3.2 `stomp4j-client`
 
@@ -196,7 +197,7 @@ Application thread(s)          Transport read thread
 | `selectedProtocol`, `connectionError` | `AtomicReference` | Published after `CONNECTED` |
 | `consumers`, `deliveryConsumers` | Plain `HashMap` | **Not thread-safe** — concurrent subscribe/unsubscribe vs inbound dispatch can race |
 | `subscribe()` / `unsubscribe()` | No global lock | Concurrent API calls from multiple threads are not serialised |
-| Transport outbound (TCP/TLS) | `sendLock` + `NioTcpOutboundQueue` | Concurrent `send()` serialised; I/O thread drains queue without corrupting frames |
+| Transport outbound (TCP/TLS) | `sendLock` + `TcpOutboundQueue` (`commons.nio`) | Concurrent `send()` serialised; I/O thread drains queue without corrupting frames |
 | `join()` | `synchronized(lock)` + `wait()` | Woken from `close()` |
 
 **Callback threading:** `subscribe(topic, Consumer<…>)` invokes the consumer on the **transport read thread**. Callers must not perform blocking work or touch non-thread-safe test state without synchronisation. Prefer polling mode or hand off to an application executor inside the callback.
@@ -216,7 +217,7 @@ Application thread(s)          Transport read thread
 
 | Component | Thread model |
 |-----------|--------------|
-| `TcpChannel` | NIO `Selector` loop on one dedicated I/O thread; per-session outbound via `TcpOutboundQueue` + `ioLock` (handler/broadcast threads enqueue; I/O thread drains) |
+| `TcpChannel` | NIO `Selector` loop on one dedicated I/O thread; per-session outbound via `TcpOutboundQueue` + `ioLock` (handler/broadcast threads enqueue; I/O thread drains); TLS via `SslEngineIo` (`commons.nio`) |
 | `WebSocketChannel` | Vert.x 5 event loop |
 | `Session` | Frame handling on the channel I/O thread for that connection; `HashMap` / `HashSet` fields assume **single-threaded access per session** |
 | `MessageHandler` / `SubscriptionHandler` | Invoked on the session I/O thread — must return quickly; offload blocking work |
@@ -412,7 +413,7 @@ SonarCloud: org `vepo-github`, project `vepo_stomp4j`.
 PUBLIC (exported):
   client:  StompClient, Subscription, UserCredential, protocol.*, transport interfaces
   server:  StompServer, MessageHandler, SubscriptionHandler, OutboundChannel, auth.*
-  commons: TransportType, protocol.*
+  commons: TransportType, protocol.*; commons.nio (qualified to client, server)
 
 INTERNAL (do not use from outside module):
   client.internal.*

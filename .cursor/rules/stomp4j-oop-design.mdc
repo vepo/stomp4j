@@ -16,7 +16,7 @@ From David Parnas, [*On the Criteria To Be Used in Decomposing Systems into Modu
 
 | Hide (secret) | Expose (contract) |
 |---------------|-------------------|
-| `SSLEngine` handshake steps, net/app buffers | `TcpSslIo.handshake`, `readApplication`, `drainOutbound` |
+| `SSLEngine` handshake steps, net/app buffers | `SslEngineIo.handshake`, `readApplication`, `drainOutbound` (`commons.nio`) |
 | `Selector` interest ops, partial `SocketChannel` writes | `TcpChannel` session lifecycle; `OutboundChannel.send` |
 | Wire bytes, framing state | `Message`, `MessageBuffer`, `Session.offer` |
 | `StompClientImpl` maps, executors | `StompClient` public API |
