@@ -6,7 +6,7 @@ import dev.vepo.stomp4j.commons.protocol.Message;
 import dev.vepo.stomp4j.commons.protocol.MessageBuilder;
 import dev.vepo.stomp4j.server.OutboundChannel;
 
-final class ReceiptDispatcher {
+final class Receipts {
 
     static void sendReceipt(OutboundChannel channel, String receiptId) {
         channel.send(MessageBuilder.builder(Command.RECEIPT)
@@ -18,5 +18,5 @@ final class ReceiptDispatcher {
         message.headers().get(Header.RECEIPT).ifPresent(receiptId -> sendReceipt(channel, receiptId));
     }
 
-    private ReceiptDispatcher() {}
+    private Receipts() {}
 }

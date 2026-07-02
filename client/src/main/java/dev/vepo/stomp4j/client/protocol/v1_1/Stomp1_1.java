@@ -5,7 +5,6 @@ import java.util.Optional;
 
 import dev.vepo.stomp4j.client.AckMode;
 import dev.vepo.stomp4j.client.Subscription;
-import dev.vepo.stomp4j.client.protocol.SendParameters;
 import dev.vepo.stomp4j.client.protocol.Stomp;
 import dev.vepo.stomp4j.client.transport.Transport;
 import dev.vepo.stomp4j.commons.protocol.Command;
@@ -63,29 +62,6 @@ public class Stomp1_1 extends Stomp {
     @Override
     public void onMessage(Message message, Optional<String> session, Transport transport) {
         // acknowledgement is handled by StompClientImpl
-    }
-
-    @Override
-    public void send(String destination, String content, String contentType, Optional<String> session, Transport transport) {
-        send(destination, content, contentType, session, transport, SendParameters.plain());
-    }
-
-    @Override
-    public void send(String destination,
-                     String content,
-                     String contentType,
-                     Optional<String> session,
-                     Transport transport,
-                     SendParameters parameters) {
-        var builder = MessageBuilder.builder(Command.SEND)
-                                    .header(Header.DESTINATION, destination)
-                                    .header(Header.CONTENT_TYPE, contentType)
-                                    .header(Header.CONTENT_LENGTH, Integer.toString(content.length()))
-                                    .headerIfPresent(Header.SESSION, session);
-        applyCustomHeaders(builder, parameters.customHeaders());
-        applyTransaction(builder, parameters.transactionId());
-        parameters.receiptId().ifPresent(id -> builder.header(Header.RECEIPT, id));
-        transport.send(builder.body(content).build());
     }
 
     @Override

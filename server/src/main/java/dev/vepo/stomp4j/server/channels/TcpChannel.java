@@ -20,9 +20,7 @@ import dev.vepo.stomp4j.commons.nio.SelectionKeys;
 import dev.vepo.stomp4j.commons.nio.SslEngineIo;
 import dev.vepo.stomp4j.commons.nio.TcpOutboundQueue;
 import dev.vepo.stomp4j.commons.protocol.Message;
-import dev.vepo.stomp4j.server.AcknowledgedOutboundChannel;
 import dev.vepo.stomp4j.server.OutboundChannel;
-import dev.vepo.stomp4j.server.SubscriberAckListener;
 import dev.vepo.stomp4j.server.session.Session;
 import dev.vepo.stomp4j.server.session.SessionCloser;
 import dev.vepo.stomp4j.server.session.Status;
@@ -102,24 +100,6 @@ public class TcpChannel implements Channel {
         }
     }
 
-    private class TcpExternalOutboundChannel implements AcknowledgedOutboundChannel {
-
-        @Override
-        public void send(Message message) {
-            send(message, null);
-        }
-
-        @Override
-        public void send(Message message, SubscriberAckListener listener) {
-            logger.debug("Sending message to all active sessions: count={}", sessionAttachments.size());
-            var ackListener = java.util.Optional.ofNullable(listener);
-            sessionAttachments.values()
-                              .stream()
-                              .map(SessionAttachment::session)
-                              .forEach(session -> session.handle(message, ackListener));
-        }
-    }
-
     private class TcpSessionOutboundChannel implements OutboundChannel {
 
         private final SessionAttachment attachment;
@@ -142,7 +122,7 @@ public class TcpChannel implements Channel {
     private final AtomicBoolean running;
     private final BufferPool bufferPool;
     private final Map<Session, SessionAttachment> sessionAttachments;
-    private final TcpExternalOutboundChannel outboundChannel;
+    private final SessionBroadcastOutbound outboundChannel;
     private final SessionCloser sessionCloser;
     private Thread ioThread;
     private Selector selector;
@@ -155,7 +135,11 @@ public class TcpChannel implements Channel {
         this.running = new AtomicBoolean(false);
         this.bufferPool = new BufferPool(10, 1024);
         this.sessionAttachments = new ConcurrentHashMap<>();
-        this.outboundChannel = new TcpExternalOutboundChannel();
+        this.outboundChannel = new SessionBroadcastOutbound(logger,
+                                                            sessionAttachments::size,
+                                                            () -> sessionAttachments.values()
+                                                                                    .stream()
+                                                                                    .map(SessionAttachment::session));
         this.sessionCloser = this::closeSession;
     }
 

@@ -14,9 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import dev.vepo.stomp4j.commons.protocol.Message;
-import dev.vepo.stomp4j.server.AcknowledgedOutboundChannel;
 import dev.vepo.stomp4j.server.OutboundChannel;
-import dev.vepo.stomp4j.server.SubscriberAckListener;
 import dev.vepo.stomp4j.server.session.Session;
 import dev.vepo.stomp4j.server.session.SessionCloser;
 import dev.vepo.stomp4j.server.session.Status;
@@ -28,20 +26,6 @@ import io.vertx.core.http.ServerWebSocket;
 import io.vertx.core.net.PfxOptions;
 
 public class WebSocketChannel implements Channel {
-    private class WebSocketExternalOutboundChannel implements AcknowledgedOutboundChannel {
-
-        @Override
-        public void send(Message message) {
-            send(message, null);
-        }
-
-        @Override
-        public void send(Message message, SubscriberAckListener listener) {
-            logger.debug("Sending message to all active sessions: count={}", activeSessions.size());
-            var ackListener = java.util.Optional.ofNullable(listener);
-            activeSessions.keySet().forEach(session -> session.handle(message, ackListener));
-        }
-    }
 
     private class WebSocketSessionOutboundChannel implements OutboundChannel {
         private final ServerWebSocket webSocket;
@@ -68,7 +52,7 @@ public class WebSocketChannel implements Channel {
     private final ChannelRuntime runtime;
     private final AtomicBoolean running;
     private final Map<Session, ServerWebSocket> activeSessions;
-    private final WebSocketExternalOutboundChannel outboundChannel;
+    private final SessionBroadcastOutbound outboundChannel;
     private final SessionCloser sessionCloser;
 
     private Vertx vertx;
@@ -81,7 +65,9 @@ public class WebSocketChannel implements Channel {
         this.runtime = runtime;
         this.running = new AtomicBoolean(false);
         this.activeSessions = new ConcurrentHashMap<>();
-        this.outboundChannel = new WebSocketExternalOutboundChannel();
+        this.outboundChannel = new SessionBroadcastOutbound(logger,
+                                                            activeSessions::size,
+                                                            () -> activeSessions.keySet().stream());
         this.sessionCloser = this::closeSession;
     }
 

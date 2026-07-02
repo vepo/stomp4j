@@ -341,7 +341,7 @@ public class Session implements StompSession {
             case DISCONNECT -> disconnect();
             default -> throw new SessionProtocolException("Unsupported command: %s".formatted(message.command()));
         }
-        ReceiptDispatcher.sendReceiptIfRequested(channel, message);
+        Receipts.sendReceiptIfRequested(channel, message);
     }
 
     private void processInboundSend(Message message) {
@@ -384,7 +384,7 @@ public class Session implements StompSession {
         status = Status.CONNECTED;
         startHeartbeatTasks();
         listener.sessionConnected(this);
-        ReceiptDispatcher.sendReceiptIfRequested(channel, message);
+        Receipts.sendReceiptIfRequested(channel, message);
     }
 
     private void processSubscribe(Message message) {

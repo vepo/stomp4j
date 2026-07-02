@@ -107,11 +107,13 @@ public abstract class Stomp {
 
     public abstract void onMessage(Message message, Optional<String> session, Transport transport);
 
-    public abstract void send(String destination,
-                              String content,
-                              String contentType,
-                              Optional<String> session,
-                              Transport transport);
+    public void send(String destination,
+                     String content,
+                     String contentType,
+                     Optional<String> session,
+                     Transport transport) {
+        send(destination, content, contentType, session, transport, SendParameters.plain());
+    }
 
     public void send(String destination,
                      String content,
@@ -119,7 +121,15 @@ public abstract class Stomp {
                      Optional<String> session,
                      Transport transport,
                      SendParameters parameters) {
-        send(destination, content, contentType, session, transport);
+        var builder = MessageBuilder.builder(Command.SEND)
+                                    .header(Header.DESTINATION, destination)
+                                    .header(Header.CONTENT_TYPE, contentType)
+                                    .header(Header.CONTENT_LENGTH, Integer.toString(content.length()))
+                                    .headerIfPresent(Header.SESSION, session);
+        applyCustomHeaders(builder, parameters.customHeaders());
+        applyTransaction(builder, parameters.transactionId());
+        parameters.receiptId().ifPresent(id -> builder.header(Header.RECEIPT, id));
+        transport.send(builder.body(content).build());
     }
 
     public final void subscribe(Subscription subscription, Optional<String> session, Transport transport) {
