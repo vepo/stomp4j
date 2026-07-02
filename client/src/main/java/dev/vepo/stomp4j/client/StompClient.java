@@ -68,6 +68,12 @@ public interface StompClient extends AutoCloseable {
 
     void join();
 
+    /**
+     * Sends a message to {@code destination}. After {@link #connect()}, this method
+     * may be called from multiple application threads; TCP/TLS transports serialise
+     * outbound frames internally while inbound data is delivered on the transport
+     * I/O thread.
+     */
     StompReceipt send(String destination, String body, SendOptions options);
 
     void sendPlain(String destination, String content, String contentType);

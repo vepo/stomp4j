@@ -39,7 +39,7 @@ When you add, change, or remove user-visible behaviour, **update this page** in 
 | Custom protocol version (SPI) | Supported | Subclass `Stomp` — [advanced-topics.md#extending-protocol-versions](advanced-topics.md#extending-protocol-versions) |
 | `ERROR` frame / failed `CONNECT` | Supported | Throws `StompException` |
 | All transport failures as `StompException` | Supported | Connect and send failures on TCP and WebSocket transports |
-| Thread-safe `StompClient` API | Partial | Callbacks run on transport I/O thread; concurrent subscribe/send not fully serialised — [ARCHITECTURE.md §4](../ARCHITECTURE.md#4-threading-and-concurrency), [client-guide.md#threading](client-guide.md#threading) |
+| Thread-safe `StompClient` API | Partial | TCP/TLS transport serialises concurrent `send()` (NIO-009); callbacks run on transport I/O thread; `subscribe` / `unsubscribe` maps not fully serialised — [ARCHITECTURE.md §4](../ARCHITECTURE.md#4-threading-and-concurrency), [client-guide.md#threading](client-guide.md#threading) |
 
 ## Server (`stomp4j-server`)
 

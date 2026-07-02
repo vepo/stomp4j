@@ -61,10 +61,11 @@ path where {@code connect()} succeeded; after a failed {@code connect()}, cleanu
 
 | Topic | Behaviour today |
 |-------|-----------------|
-| **Callback subscriptions** | Your `Consumer` runs on the **transport I/O thread** (TCP read loop or WebSocket callback). Keep callbacks short; offload heavy work to your own executor. Do not touch non-thread-safe state without synchronisation. |
+| **Callback subscriptions** | Your `Consumer` runs on the **transport I/O thread** (TCP/TLS selector thread or WebSocket callback). Keep callbacks short; offload heavy work to your own executor. Do not touch non-thread-safe state without synchronisation. |
 | **Polling subscriptions** | `hasData()` / `poll()` from your thread; inbound messages are queued per subscription. |
+| **`send()` / `sendPlain()`** | After `connect()`, multiple application threads may call `send` concurrently on TCP/TLS; the transport serialises outbound frames on an internal queue while the I/O thread reads inbound data. |
 | **`join()`** | Blocks until `close()` completes on another thread. |
-| **Concurrent API calls** | Prefer serialising `subscribe` / `unsubscribe` from one thread until thread-safety work in §4.6 is complete. |
+| **Concurrent API calls** | Prefer serialising `subscribe` / `unsubscribe` from one thread until StompClient map serialisation in ARCHITECTURE §4.6 is complete. |
 
 For tests, avoid asserting from the test thread while messages arrive on the client I/O thread without `Awaitility` or latches — see ARCHITECTURE §4.5.
 

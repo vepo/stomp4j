@@ -172,7 +172,7 @@ User guide: [docs/kafka-bridge-guide.md](docs/kafka-bridge-guide.md).
 
 **Inbound path:** transport read thread → `ConnectionListener.onMessage()` → `consumeMessage()` → user `Consumer` callback **or** enqueue on `ConcurrentLinkedQueue` for polling mode.
 
-**Outbound path:** application thread → `Stomp` protocol → `transport.send()` (writes on the calling thread for TCP; WebSocket `sendBinary` on caller).
+**Outbound path:** application (or heartbeat) thread → `Stomp` protocol → `transport.send()` → per-connection outbound queue under `sendLock` (TCP/TLS) or synchronized WebSocket send; the transport I/O thread drains the queue and reads inbound data on the same selector loop (TCP/TLS).
 
 ```
 Application thread(s)          Transport read thread
@@ -195,7 +195,8 @@ Application thread(s)          Transport read thread
 | `closed` | `AtomicBoolean` | Idempotent `close()` |
 | `selectedProtocol`, `connectionError` | `AtomicReference` | Published after `CONNECTED` |
 | `consumers`, `deliveryConsumers` | Plain `HashMap` | **Not thread-safe** — concurrent subscribe/unsubscribe vs inbound dispatch can race |
-| `subscribe()` / `send()` / `unsubscribe()` | No global lock | Concurrent API calls from multiple threads are not serialised |
+| `subscribe()` / `unsubscribe()` | No global lock | Concurrent API calls from multiple threads are not serialised |
+| Transport outbound (TCP/TLS) | `sendLock` + `NioTcpOutboundQueue` | Concurrent `send()` serialised; I/O thread drains queue without corrupting frames |
 | `join()` | `synchronized(lock)` + `wait()` | Woken from `close()` |
 
 **Callback threading:** `subscribe(topic, Consumer<…>)` invokes the consumer on the **transport read thread**. Callers must not perform blocking work or touch non-thread-safe test state without synchronisation. Prefer polling mode or hand off to an application executor inside the callback.
@@ -215,7 +216,7 @@ Application thread(s)          Transport read thread
 
 | Component | Thread model |
 |-----------|--------------|
-| `TcpChannel` | NIO `Selector` loop on one dedicated I/O thread; one `Session` per connection |
+| `TcpChannel` | NIO `Selector` loop on one dedicated I/O thread; per-session outbound via `TcpOutboundQueue` + `ioLock` (handler/broadcast threads enqueue; I/O thread drains) |
 | `WebSocketChannel` | Vert.x 5 event loop |
 | `Session` | Frame handling on the channel I/O thread for that connection; `HashMap` / `HashSet` fields assume **single-threaded access per session** |
 | `MessageHandler` / `SubscriptionHandler` | Invoked on the session I/O thread — must return quickly; offload blocking work |
@@ -249,12 +250,12 @@ Server parallel safety relies on **exclusive destinations** (`TestDestinations`)
 2. **Replace non-concurrent maps** — `ConcurrentHashMap` for `consumers` and `deliveryConsumers`, or confine all access to the serial executor.
 3. **Document callback thread** in `StompClient` Javadoc and [client-guide.md](docs/client-guide.md); add optional `Executor` on `SubscribeOptions` for user dispatch.
 4. **Happens-before `connect()`** — ensure `connectedLatch` and published `selectedProtocol` visibility for threads that start sending immediately after `connect()` returns.
-5. **Transport `send` vs read** — audit TCP `OutputStream` / WebSocket concurrent send from app thread while read loop runs (document or synchronise on socket).
+5. **Transport `send` vs read** — **done (NIO-009):** client TCP/TLS transports serialise outbound data with `sendLock` and a per-connection queue; server `TcpChannel` uses `ioLock` + `TcpOutboundQueue`. Inbound reads run only on the transport I/O thread.
 
 **Tests — priority**
 
 1. **Stabilise client integration tests** on callback threading — use `CountDownLatch` / Awaitility patterns from `StompTestSupport`; remove `Thread.sleep` from `sendMessageTest`.
-2. **Add concurrent client stress test** (when production fix lands) — multiple threads `send` + subscribe on one `StompClient` against embedded server.
+2. **Concurrent client stress test** — **done (NIO-009):** `NioTcpTransportConcurrentSendTest`, `StompClientConcurrentSendTest`, `TcpChannelConcurrentOutboundTest`.
 3. **Revisit server `parallel.enabled`** — keep concurrent execution only where fixtures prove isolation; otherwise default embedded tests to `SAME_THREAD` until client thread-safety is complete.
 4. **Align ARCHITECTURE test docs** with actual `junit-platform.properties` per module (see §9).
 5. **Handler contract tests** — document that server handlers run on I/O thread; integration tests must not block in handlers.
@@ -424,7 +425,7 @@ When adding public API, update `module-info.java` `exports`. When adding SPI, up
 
 - Server: no durable message store or queue semantics (embeddable pub/sub only)
 - Kafka bridge: no STOMP transactions; client-ack ↔ Kafka offset not supported
-- **Client thread safety:** `consumers` / `deliveryConsumers` maps and concurrent API calls are not fully serialised; callback delivery runs on transport threads — see §4. Target: full `StompClient` thread-safe contract in §4.3.
+- **Client thread safety:** Transport outbound (`send` vs read) is serialised on TCP/TLS (NIO-009). `consumers` / `deliveryConsumers` maps and concurrent `subscribe` / `unsubscribe` vs inbound dispatch are not fully serialised — see §4.2–§4.3.
 
 Update this section when closing gaps.
 

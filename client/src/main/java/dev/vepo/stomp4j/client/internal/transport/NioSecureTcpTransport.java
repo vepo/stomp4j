@@ -32,7 +32,9 @@ import dev.vepo.stomp4j.commons.protocol.MessageBuffer;
  * <li><b>Doing:</b> Connect a TLS STOMP session with non-blocking
  * {@link SocketChannel} I/O and {@link NioTcpSslIo} on a dedicated selector
  * thread; deliver inbound frames to {@link TransportListener} and send outbound
- * frames from any caller thread.</li>
+ * frames from any caller thread. Concurrent {@link #send} calls are serialised
+ * on an internal lock; inbound data is read only on the selector I/O
+ * thread.</li>
  * </ul>
  * <p>
  * <b>Collaborators:</b> {@link NioTcpSslIo}, {@link NioTcpOutboundQueue},
