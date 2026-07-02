@@ -28,12 +28,6 @@ public final class TcpOutboundQueue {
     private final Queue<ByteBuffer> pending = new ArrayDeque<>();
     private ByteBuffer current;
 
-    /**
-     * Writes as much queued data as the socket accepts.
-     *
-     * @return {@code true} when outbound data remains and {@code OP_WRITE} should
-     *         stay enabled
-     */
     public synchronized boolean drain(SocketChannel socket) throws IOException {
         while (true) {
             if (Objects.isNull(current)) {
@@ -56,5 +50,27 @@ public final class TcpOutboundQueue {
 
     public synchronized boolean hasPending() {
         return Objects.nonNull(current) || !pending.isEmpty();
+    }
+
+    /**
+     * Writes as much queued data as the socket accepts.
+     *
+     * @return {@code true} when outbound data remains and {@code OP_WRITE} should
+     *         stay enabled
+     */
+    public synchronized byte[] pollFrame() {
+        if (Objects.nonNull(current)) {
+            var bytes = new byte[current.remaining()];
+            current.get(bytes);
+            current = null;
+            return bytes;
+        }
+        var next = pending.poll();
+        if (Objects.isNull(next)) {
+            return null;
+        }
+        var bytes = new byte[next.remaining()];
+        next.get(bytes);
+        return bytes;
     }
 }

@@ -59,8 +59,8 @@ class TcpChannelSslHandshakeFailureTest {
     }
 
     @SuppressWarnings("unchecked")
-    private static Map<Session, ?> sslSessions(TcpChannel tcpChannel) throws Exception {
-        var field = TcpChannel.class.getDeclaredField("sslSessions");
+    private static Map<Session, ?> sessionAttachments(TcpChannel tcpChannel) throws Exception {
+        var field = TcpChannel.class.getDeclaredField("sessionAttachments");
         field.setAccessible(true);
         return (Map<Session, ?>) field.get(tcpChannel);
     }
@@ -87,7 +87,7 @@ class TcpChannelSslHandshakeFailureTest {
 
                 await().atMost(Duration.ofSeconds(5)).until(() -> clientDisconnected(client));
 
-                assertThat(sslSessions(channel)).isEmpty();
+                assertThat(sessionAttachments(channel)).isEmpty();
             }
         } finally {
             heartbeatExecutor.shutdownNow();
