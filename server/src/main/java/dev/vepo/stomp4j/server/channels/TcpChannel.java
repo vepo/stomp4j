@@ -33,7 +33,47 @@ import dev.vepo.stomp4j.server.session.SessionCloser;
 import dev.vepo.stomp4j.server.session.Status;
 
 public class TcpChannel implements Channel {
-    private record SessionAttachment(Session session, SocketChannel socket) {}
+
+    private static final class SessionAttachment {
+
+        private Session session;
+        private final SocketChannel socket;
+        private final TcpOutboundQueue outbound = new TcpOutboundQueue();
+        private final Object ioLock = new Object();
+        private SelectionKey selectionKey;
+
+        private SessionAttachment(SocketChannel socket) {
+            this.socket = socket;
+        }
+
+        private void bind(Session session) {
+            this.session = session;
+        }
+
+        private Object ioLock() {
+            return ioLock;
+        }
+
+        private TcpOutboundQueue outbound() {
+            return outbound;
+        }
+
+        private SelectionKey selectionKey() {
+            return selectionKey;
+        }
+
+        private void selectionKey(SelectionKey selectionKey) {
+            this.selectionKey = selectionKey;
+        }
+
+        private Session session() {
+            return session;
+        }
+
+        private SocketChannel socket() {
+            return socket;
+        }
+    }
 
     private class StreamOutboundChannel implements OutboundChannel {
 
@@ -74,19 +114,15 @@ public class TcpChannel implements Channel {
 
     private class TcpSessionOutboundChannel implements OutboundChannel {
 
-        private final SocketChannel socket;
+        private final SessionAttachment attachment;
 
-        private TcpSessionOutboundChannel(SocketChannel socket) {
-            this.socket = socket;
+        private TcpSessionOutboundChannel(SessionAttachment attachment) {
+            this.attachment = attachment;
         }
 
         @Override
         public void send(Message message) {
-            try {
-                socket.write(ByteBuffer.wrap(message.encode().getBytes()));
-            } catch (IOException ex) {
-                logger.error("Error sending message: %s".formatted(message), ex);
-            }
+            enqueueOutbound(attachment, message.encode().getBytes());
         }
     }
 
@@ -135,8 +171,12 @@ public class TcpChannel implements Channel {
                     }
                     if (key.isAcceptable()) {
                         acceptSession(key);
-                    } else if (key.isReadable()) {
+                    }
+                    if (key.isValid() && key.isReadable()) {
                         readSession(key);
+                    }
+                    if (key.isValid() && key.isWritable()) {
+                        writeSession(key);
                     }
                     keyIterator.remove();
                 }
@@ -155,16 +195,17 @@ public class TcpChannel implements Channel {
             clientChannel = serverSocketChannel.accept();
             clientChannel.configureBlocking(false);
 
-            var outbound = new TcpSessionOutboundChannel(clientChannel);
+            var attachment = new SessionAttachment(clientChannel);
+            var outbound = new TcpSessionOutboundChannel(attachment);
             session = new Session(outbound,
                                   listener,
                                   runtime.sessionConfig(),
                                   sessionCloser,
                                   runtime.heartbeatExecutor());
+            attachment.bind(session);
 
-            var attachment = new SessionAttachment(session, clientChannel);
             sessionAttachments.put(session, attachment);
-            clientChannel.register(selector, SelectionKey.OP_READ, attachment);
+            attachment.selectionKey(clientChannel.register(selector, SelectionKey.OP_READ, attachment));
             sessionRegistered = true;
 
             logger.info("Session started, waiting for CONNECT: {}", session);
@@ -274,6 +315,39 @@ public class TcpChannel implements Channel {
         }
     }
 
+    private void enqueueOutbound(SessionAttachment attachment, byte[] frame) {
+        synchronized (attachment.ioLock()) {
+            attachment.outbound().enqueue(frame);
+            var key = attachment.selectionKey();
+            if (Objects.nonNull(key) && key.isValid()) {
+                key.interestOps(key.interestOps() | SelectionKey.OP_WRITE);
+                flushOutbound(attachment, key);
+                if (attachment.outbound().hasPending() && Objects.nonNull(selector)) {
+                    selector.wakeup();
+                }
+            }
+        }
+    }
+
+    private void flushOutbound(SessionAttachment attachment, SelectionKey key) {
+        try {
+            if (!attachment.outbound().hasPending()) {
+                return;
+            }
+            if (!attachment.outbound().drain(attachment.socket())) {
+                var interestOps = key.interestOps() & ~SelectionKey.OP_WRITE;
+                if (interestOps == 0) {
+                    interestOps = SelectionKey.OP_READ;
+                }
+                key.interestOps(interestOps);
+            }
+        } catch (IOException ex) {
+            logger.debug("Write error, closing session", ex);
+            closeSession(attachment.session());
+            key.cancel();
+        }
+    }
+
     @Override
     public OutboundChannel outboundChannel() {
         return outboundChannel;
@@ -281,31 +355,33 @@ public class TcpChannel implements Channel {
 
     private void readSession(SelectionKey key) {
         var attachment = (SessionAttachment) key.attachment();
-        try {
-            int length;
-            do {
-                var buffer = bufferPool.request();
-                try {
-                    length = attachment.socket().read(buffer);
-                    if (length < 0) {
-                        closeSession(attachment.session());
-                        key.cancel();
-                        return;
+        synchronized (attachment.ioLock()) {
+            try {
+                int length;
+                do {
+                    var buffer = bufferPool.request();
+                    try {
+                        length = attachment.socket().read(buffer);
+                        if (length < 0) {
+                            closeSession(attachment.session());
+                            key.cancel();
+                            return;
+                        }
+                        if (length > 0) {
+                            buffer.flip();
+                            var data = new byte[length];
+                            buffer.get(data, 0, length);
+                            attachment.session().offer(data, length);
+                        }
+                    } finally {
+                        bufferPool.release(buffer);
                     }
-                    if (length > 0) {
-                        buffer.flip();
-                        var data = new byte[length];
-                        buffer.get(data, 0, length);
-                        attachment.session().offer(data, length);
-                    }
-                } finally {
-                    bufferPool.release(buffer);
-                }
-            } while (length > 0);
-        } catch (IOException ex) {
-            logger.debug("Read error, closing session", ex);
-            closeSession(attachment.session());
-            key.cancel();
+                } while (length > 0);
+            } catch (IOException ex) {
+                logger.debug("Read error, closing session", ex);
+                closeSession(attachment.session());
+                key.cancel();
+            }
         }
     }
 
@@ -420,5 +496,12 @@ public class TcpChannel implements Channel {
     @Override
     public String toString() {
         return "TcpChannel[port=%d]".formatted(port);
+    }
+
+    private void writeSession(SelectionKey key) {
+        var attachment = (SessionAttachment) key.attachment();
+        synchronized (attachment.ioLock()) {
+            flushOutbound(attachment, key);
+        }
     }
 }
