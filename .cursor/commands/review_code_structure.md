@@ -80,7 +80,7 @@ Read [stomp4j-oop-design.mdc](../rules/stomp4j-oop-design.mdc) §1 (exists in re
 | Name overstates scope | `ConnectionManager` only closes a socket | major |
 | Job title, not entity | `FrameDecoder` only accumulates bytes until NUL | minor–major |
 | Wrong layer noun | `StompClient` logic in a server `*Handler` class | major |
-| Established name kept | `TopicConsumerManager` — note if Doing matches domain or flag for rename | case-by-case |
+| Established name kept | `DestinationConsumerRegistry` — note if Doing matches domain or flag for rename | case-by-case |
 
 **Established exceptions** (do not flag without evidence of mismatch): exported `*Handler`, `*Authenticator`, `TransportProvider`, `Stomp` protocol types, Spring/Quarkus `*Lifecycle`, test `*Fixture` / `*Support`.
 

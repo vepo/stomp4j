@@ -3,27 +3,16 @@ package dev.vepo.stomp4j.client.internal;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
@@ -39,9 +28,9 @@ import dev.vepo.stomp4j.client.StompDelivery;
 import dev.vepo.stomp4j.client.StompReceipt;
 import dev.vepo.stomp4j.client.StompTransaction;
 import dev.vepo.stomp4j.client.SubscribeOptions;
-import dev.vepo.stomp4j.client.exceptions.StompException;
 import dev.vepo.stomp4j.client.Subscription;
 import dev.vepo.stomp4j.client.UserCredential;
+import dev.vepo.stomp4j.client.exceptions.StompException;
 import dev.vepo.stomp4j.client.internal.transport.TransportFactory;
 import dev.vepo.stomp4j.client.protocol.SendParameters;
 import dev.vepo.stomp4j.client.protocol.Stomp;
@@ -58,60 +47,32 @@ import dev.vepo.stomp4j.commons.protocol.MessageBuilder;
  * <b>Responsibilities</b>
  * </p>
  * <ul>
- * <li><b>Knowing:</b> Selected STOMP protocol, transport handle, subscription
- * registries, and receipt correlation state for one connected client.</li>
+ * <li><b>Knowing:</b> Selected STOMP protocol, transport handle, and connection
+ * lifecycle for one connected client.</li>
  * <li><b>Doing:</b> Orchestrate transport connect, CONNECT negotiation,
- * heart-beats, subscribe/send/unsubscribe, and graceful disconnect.</li>
+ * subscribe/send/unsubscribe, and graceful disconnect.</li>
  * </ul>
  * <p>
- * <b>Collaborators:</b> {@link Transport}, {@link Stomp}, {@link Subscription}
+ * <b>Collaborators:</b> {@link Transport}, {@link Stomp},
+ * {@link SubscriptionDispatcher}, {@link ReceiptTracker},
+ * {@link ClientHeartbeat}
  * </p>
  * <p>
- * <b>Not responsible for:</b> Wire I/O and framing — owned by
- * {@link dev.vepo.stomp4j.client.internal.transport} transports.
+ * <b>Not responsible for:</b> Wire I/O and framing, inbound subscription
+ * routing, receipt correlation, heart-beat scheduling.
  * </p>
  */
 public class StompClientImpl implements StompClient {
 
     private class ConnectionListener implements TransportListener {
 
-        private void completeReceipt(Message message) {
-            message.headers()
-                   .get(Header.RECEIPT_ID)
-                   .ifPresent(receiptId -> {
-                       var pending = pendingReceipts.remove(receiptId);
-                       if (Objects.nonNull(pending)) {
-                           pending.complete(null);
-                       }
-                   });
-        }
-
-        private boolean failPendingReceipt(Message message) {
-            var receiptId = message.headers().get(Header.RECEIPT_ID);
-            if (receiptId.isPresent()) {
-                var pending = pendingReceipts.remove(receiptId.get());
-                if (Objects.nonNull(pending)) {
-                    var errorMessage = message.headers().get(Header.MESSAGE).orElse(message.body());
-                    pending.completeExceptionally(new StompException(errorMessage));
-                    return true;
-                }
-            }
-            var receiptHeader = message.headers().get(Header.RECEIPT);
-            if (receiptHeader.isPresent()) {
-                var pending = pendingReceipts.remove(receiptHeader.get());
-                if (Objects.nonNull(pending)) {
-                    var errorMessage = message.headers().get(Header.MESSAGE).orElse(message.body());
-                    pending.completeExceptionally(new StompException(errorMessage));
-                    return true;
-                }
-            }
-            return false;
-        }
-
         @Override
-        public void onConnected(Transport transport) {
-            logger.info("Connected with server {}", transport);
-            transport.send(Stomp.connect(transport.host(), credentials, protocols, DEFAULT_HEART_BEAT_INTERVAL));
+        public void onConnected(Transport connectedTransport) {
+            logger.info("Connected with server {}", connectedTransport);
+            connectedTransport.send(Stomp.connect(connectedTransport.host(),
+                                                  credentials,
+                                                  protocols,
+                                                  ClientHeartbeat.DEFAULT_HEART_BEAT_INTERVAL));
         }
 
         @Override
@@ -130,13 +91,13 @@ public class StompClientImpl implements StompClient {
                     setupConnection(message);
                     break;
                 case MESSAGE:
-                    consumeMessage(message);
+                    subscriptions.dispatch(message);
                     break;
                 case RECEIPT:
-                    completeReceipt(message);
+                    receipts.completeReceipt(message);
                     break;
                 case ERROR:
-                    if (!failPendingReceipt(message)) {
+                    if (!receipts.failFromError(message)) {
                         onError(message);
                     }
                     break;
@@ -146,120 +107,38 @@ public class StompClientImpl implements StompClient {
                     break;
             }
         }
-
-    }
-
-    private class SubscriptionImpl implements Subscription {
-        private final String topic;
-        private final int id;
-        private final AckMode ackMode;
-        private final boolean autoAckAfterDelivery;
-
-        private SubscriptionImpl(String topic, int id, AckMode ackMode, boolean autoAckAfterDelivery) {
-            this.topic = topic;
-            this.id = id;
-            this.ackMode = ackMode;
-            this.autoAckAfterDelivery = autoAckAfterDelivery;
-        }
-
-        @Override
-        public AckMode ackMode() {
-            return ackMode;
-        }
-
-        @Override
-        public boolean autoAckAfterDelivery() {
-            return autoAckAfterDelivery;
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == this) {
-                return true;
-            } else if (Objects.isNull(obj) || obj.getClass() != getClass()) {
-                return false;
-            } else {
-                var other = (SubscriptionImpl) obj;
-                return id == other.id && Objects.equals(topic, other.topic);
-            }
-        }
-
-        @Override
-        public boolean hasData() {
-            Queue<Message> messageQueue = receivedMessages.get(SubscriptionImpl.this);
-            return Objects.nonNull(messageQueue) && !messageQueue.isEmpty();
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(topic, id);
-        }
-
-        @Override
-        public int id() {
-            return this.id;
-        }
-
-        @Override
-        public List<String> poll() {
-            Queue<Message> messageQueue = receivedMessages.get(SubscriptionImpl.this);
-            if (Objects.isNull(messageQueue)) {
-                return List.of();
-            }
-            List<String> messages = new ArrayList<>();
-            Message message;
-            while ((message = messageQueue.poll()) != null) {
-                messages.add(message.body());
-            }
-            logger.debug("polled messages! {}", messages);
-            return messages;
-        }
-
-        @Override
-        public boolean requiresManualAcknowledgement() {
-            return ackMode.requiresManualAcknowledgement() && !autoAckAfterDelivery;
-        }
-
-        @Override
-        public String topic() {
-            return this.topic;
-        }
-
-        @Override
-        public String toString() {
-            return "Subscription[topic=%s, id=%s]".formatted(topic, id);
-        }
     }
 
     private static final Logger logger = LoggerFactory.getLogger(StompClientImpl.class);
-    private static final Duration DEFAULT_HEART_BEAT_INTERVAL = Duration.ofSeconds(30);
     private static final Duration DEFAULT_CLOSE_GRACE_PERIOD = Duration.ofMillis(500);
+
     private final CountDownLatch connectedLatch;
     private final Object lock = new Object();
     private final AtomicReference<Stomp> selectedProtocol = new AtomicReference<>();
     private final AtomicReference<StompException> connectionError = new AtomicReference<>();
+    private final ReceiptTracker receipts = new ReceiptTracker();
+    private final ScheduledExecutorService heartBeatService;
+    private final ClientHeartbeat heartbeat;
+    private final SubscriptionDispatcher subscriptions;
+    private final AtomicBoolean closed = new AtomicBoolean(false);
+    private final SSLContext sslContext;
+
     private UserCredential credentials;
     private Transport transport;
-    private final Map<Subscription, Consumer<String>> consumers = new HashMap<>();
-    private final Map<Subscription, Consumer<StompDelivery>> deliveryConsumers = new HashMap<>();
-    private final Map<String, CompletableFuture<Void>> pendingReceipts = new ConcurrentHashMap<>();
-    private final Map<Subscription, Queue<Message>> receivedMessages = Collections.synchronizedMap(new HashMap<>());
-    private final Set<Subscription> polling = Collections.synchronizedSet(new HashSet<>());
-    private final ScheduledExecutorService heartBeatService;
-    private ScheduledFuture<?> heartBeatTask;
-
-    private final AtomicInteger subscriptIdSequence;
-    private final AtomicBoolean closed = new AtomicBoolean(false);
     private Set<Stomp> protocols;
     private Optional<String> session;
-
-    private final SSLContext sslContext;
     private TransportListener listener;
 
     public StompClientImpl(String url, UserCredential credentials, TransportType transportType, Set<Stomp> protocols, SSLContext sslContext) {
         try {
             this.protocols = protocols;
             this.sslContext = sslContext;
+            this.heartBeatService = Executors.newSingleThreadScheduledExecutor();
+            this.heartbeat = new ClientHeartbeat(heartBeatService);
+            this.subscriptions = new SubscriptionDispatcher(heartbeat,
+                                                            selectedProtocol::get,
+                                                            () -> session,
+                                                            () -> transport);
             this.listener = new ConnectionListener();
             var uri = new URI(url);
             if (Objects.isNull(transportType)) {
@@ -269,10 +148,7 @@ public class StompClientImpl implements StompClient {
             }
             this.session = Optional.empty();
             this.credentials = credentials;
-            this.heartBeatService = Executors.newSingleThreadScheduledExecutor();
-            this.heartBeatTask = null;
             this.connectedLatch = new CountDownLatch(1);
-            this.subscriptIdSequence = new AtomicInteger(0);
         } catch (URISyntaxException e) {
             throw new IllegalArgumentException("Invalid URL: " + url, e);
         }
@@ -306,14 +182,14 @@ public class StompClientImpl implements StompClient {
             return;
         }
         logger.info("Stopping Stomp client");
-        stopHeartBeat();
+        heartbeat.stop();
         if (Objects.nonNull(selectedProtocol.get())) {
             gracefulDisconnect(gracePeriod);
         } else {
             transport.close();
         }
-        failPendingReceipts();
-        heartBeatService.shutdown();
+        receipts.failAllOnClose();
+        heartbeat.shutdown();
         logger.info("Stomp client stopped");
         synchronized (lock) {
             lock.notify();
@@ -349,50 +225,6 @@ public class StompClientImpl implements StompClient {
         return this;
     }
 
-    private void consumeMessage(Message message) {
-        var subscription = findDeliveryConsumerSubscription(message.headers().get(Header.SUBSCRIPTION),
-                                                            message.headers().get(Header.DESTINATION));
-
-        if (subscription.isPresent()) {
-            var delivery = new StompDeliveryImpl(message,
-                                                 subscription.get(),
-                                                 selectedProtocol.get(),
-                                                 session,
-                                                 transport);
-            deliveryConsumers.get(subscription.get()).accept(delivery);
-            if (subscription.get().autoAckAfterDelivery() && !delivery.isAcknowledged()) {
-                delivery.autoAcknowledge();
-            }
-            logger.debug("Delivery consumer found! {}", subscription);
-            return;
-        }
-
-        subscription = findConsumerSubscription(message.headers().get(Header.SUBSCRIPTION),
-                                                message.headers().get(Header.DESTINATION));
-
-        if (subscription.isPresent()) {
-            consumers.get(subscription.get()).accept(message.body());
-            if (subscription.get().autoAckAfterDelivery()) {
-                scheduleOutbound(() -> selectedProtocol.get().acknowledge(message, session, transport));
-            }
-            logger.debug("Consumer found! {}", subscription);
-            return;
-        }
-
-        subscription = findPollingSubscription(message.headers().get(Header.SUBSCRIPTION),
-                                               message.headers().get(Header.DESTINATION));
-        logger.debug("Subscription found! {}", subscription);
-        if (subscription.isPresent()) {
-            receivedMessages.computeIfAbsent(subscription.get(), ignored -> new ConcurrentLinkedQueue<>())
-                            .add(message);
-            if (subscription.get().autoAckAfterDelivery()) {
-                scheduleOutbound(() -> selectedProtocol.get().acknowledge(message, session, transport));
-            }
-        } else {
-            logger.warn("No subscription found for message: {}", message);
-        }
-    }
-
     private Transport createTransport(URI uri, TransportListener transportListener) {
         return createTransport(uri, transportListener, null);
     }
@@ -406,50 +238,9 @@ public class StompClientImpl implements StompClient {
         return TransportFactory.create(transportUri, transportListener, sslContext);
     }
 
-    private void failPendingReceipts() {
-        pendingReceipts.values()
-                       .forEach(future -> future.completeExceptionally(new StompException("Client closed")));
-        pendingReceipts.clear();
-    }
-
-    private Optional<Subscription> findConsumerSubscription(Optional<String> subscriptionId,
-                                                            Optional<String> destination) {
-        return findSubscription(subscriptionId, destination, consumers.keySet());
-    }
-
-    private Optional<Subscription> findDeliveryConsumerSubscription(Optional<String> subscriptionId,
-                                                                    Optional<String> destination) {
-        return findSubscription(subscriptionId, destination, deliveryConsumers.keySet());
-    }
-
-    private Optional<Subscription> findPollingSubscription(Optional<String> subscriptionId,
-                                                           Optional<String> destination) {
-        return findSubscription(subscriptionId, destination, polling);
-    }
-
-    private Optional<Subscription> findSubscription(Optional<String> subscriptionId,
-                                                    Optional<String> destination,
-                                                    Set<Subscription> subscriptions) {
-        /*
-         * 1. Need to filter all ids that are non-numbers. ActiveMQ Stomp V1.0 sends as
-         * subscription id "/subscription/<topic>". So, we need to filter out the value
-         * and use the destination header to follow the specification.
-         */
-        return subscriptionId.filter(id -> id.matches("\\d+"))
-                             .map(Integer::parseInt)
-                             .flatMap(id -> subscriptions.stream()
-                                                         .filter(subs -> subs.id() == id)
-                                                         .findFirst())
-                             .or(() -> subscriptions.stream()
-                                                    .filter(subs -> subs.topic()
-                                                                        .equals(destination.orElseThrow(() -> new IllegalStateException("No destination found in message"))))
-                                                    .findFirst());
-    }
-
     private void gracefulDisconnect(Duration gracePeriod) {
         var receiptId = UUID.randomUUID().toString();
-        var completion = new CompletableFuture<Void>();
-        pendingReceipts.put(receiptId, completion);
+        var completion = receipts.register(receiptId);
         transport.send(MessageBuilder.builder(Command.DISCONNECT)
                                      .header(Header.RECEIPT, receiptId)
                                      .build());
@@ -460,7 +251,7 @@ public class StompClientImpl implements StompClient {
         } catch (Exception ex) {
             logger.debug("Graceful disconnect timed out or failed: {}", ex.getMessage());
         } finally {
-            pendingReceipts.remove(receiptId, completion);
+            receipts.remove(receiptId, completion);
             transport.close();
         }
     }
@@ -486,12 +277,6 @@ public class StompClientImpl implements StompClient {
         };
     }
 
-    // Reader thread must not block on transport.send — heartbeats and ACKs share
-    // this executor.
-    private void scheduleOutbound(Runnable task) {
-        heartBeatService.execute(task);
-    }
-
     @Override
     public StompReceipt send(String destination, String body, SendOptions options) {
         Objects.requireNonNull(options, "options cannot be null");
@@ -505,7 +290,7 @@ public class StompClientImpl implements StompClient {
 
     @Override
     public void sendPlain(String destination, String content, String contentType) {
-        this.selectedProtocol.get().send(destination, content, contentType, this.session, this.transport);
+        selectedProtocol.get().send(destination, content, contentType, session, transport);
     }
 
     private StompReceipt sendWithParameters(String destination,
@@ -519,59 +304,21 @@ public class StompClientImpl implements StompClient {
                             .send(destination, body, options.contentType(), session, transport, parameters);
             return new StompReceiptImpl("", CompletableFuture.completedFuture(null));
         }
-        var completion = new CompletableFuture<Void>();
-        pendingReceipts.put(receiptId.get(), completion);
+        var completion = receipts.register(receiptId.get());
         selectedProtocol.get()
                         .send(destination, body, options.contentType(), session, transport, parameters);
         completion.orTimeout(options.receiptTimeout().toMillis(), TimeUnit.MILLISECONDS)
-                  .whenComplete((ignored, error) -> pendingReceipts.remove(receiptId.get(), completion));
+                  .whenComplete((ignored, error) -> receipts.remove(receiptId.get(), completion));
         return new StompReceiptImpl(receiptId.get(), completion);
     }
 
     private void setupConnection(Message message) {
         logger.info("Connected with server {}", message);
         session = message.headers().get(Header.SESSION);
-        selectedProtocol.set(Stomp.getProtocol(message.headers().version(),
-                                               protocols));
-        if (selectedProtocol.get().hasHeartBeat()) {
-            logger.info("Heart beat is enabled");
-            logger.info("Heart beat interval: {}", message.headers().get(Header.HEART_BEAT));
-            message.headers()
-                   .get(Header.HEART_BEAT)
-                   .map(heartBeatInterval -> {
-                       String[] heartBeats = heartBeatInterval.split(",");
-                       var serverExpectMs = Integer.parseInt(heartBeats[1].trim());
-                       var clientSendMs = DEFAULT_HEART_BEAT_INTERVAL.toMillis();
-                       // STOMP 1.2: client send rate is max(cx, sy); use 0.7 to send before deadline.
-                       return Math.round(0.7 * Math.max(clientSendMs, serverExpectMs));
-                   }).ifPresent(interval -> {
-                       if (interval > 0) {
-                           logger.info("Setting up heart beat with interval: {}", interval);
-                           // Check more often than the send interval so scheduling jitter does not miss
-                           // the deadline.
-                           var checkPeriodMs = Math.max(1_000L, interval / 4);
-                           heartBeatTask = heartBeatService.scheduleAtFixedRate(() -> {
-                               try {
-                                   if (transport.outboundSilentTime() >= interval) {
-                                       transport.send(selectedProtocol.get().heartBeatMessage());
-                                   }
-                               } catch (RuntimeException ex) {
-                                   logger.debug("Heartbeat send failed: {}", ex.getMessage());
-                               }
-                           }, checkPeriodMs, checkPeriodMs, TimeUnit.MILLISECONDS);
-                       } else {
-                           logger.info("Heart beat interval is zero. Disabling heart beat");
-                       }
-                   });
-        }
+        selectedProtocol.set(Stomp.getProtocol(message.headers().version(), protocols));
+        heartbeat.negotiateAndStart(message, transport, selectedProtocol::get);
         connectedLatch.countDown();
         logger.info("Client connected");
-    }
-
-    private void stopHeartBeat() {
-        if (Objects.nonNull(heartBeatTask)) {
-            heartBeatTask.cancel(false);
-        }
     }
 
     @Override
@@ -586,64 +333,28 @@ public class StompClientImpl implements StompClient {
 
     @Override
     public Subscription subscribe(String topic, Consumer<String> consumer) {
-        Objects.requireNonNull(consumer, "consumer cannot be null");
-        var subscriptionId = subscriptIdSequence.incrementAndGet();
-        var subscription = new SubscriptionImpl(topic, subscriptionId, AckMode.CLIENT, true);
-        consumers.put(subscription, consumer);
-        selectedProtocol.get()
-                        .subscribe(subscription, session, transport, subscription.ackMode(), Map.of());
-        return subscription;
+        return subscriptions.subscribe(topic, consumer);
     }
 
     @Override
     public Subscription subscribe(String topic, SubscribeOptions options) {
-        Objects.requireNonNull(options, "options cannot be null");
-        var subscriptionId = subscriptIdSequence.incrementAndGet();
-        var autoAckAfterDelivery = !options.ackMode().requiresManualAcknowledgement();
-        var subscription = new SubscriptionImpl(topic, subscriptionId, options.ackMode(), autoAckAfterDelivery);
-        polling.add(subscription);
-        selectedProtocol.get()
-                        .subscribe(subscription, session, transport, options.ackMode(), options.headers());
-        return subscription;
+        return subscriptions.subscribe(topic, options);
     }
 
     @Override
     public Subscription subscribe(String topic, SubscribeOptions options, Consumer<StompDelivery> consumer) {
-        Objects.requireNonNull(options, "options cannot be null");
-        Objects.requireNonNull(consumer, "consumer cannot be null");
-        var subscriptionId = subscriptIdSequence.incrementAndGet();
-        var autoAckAfterDelivery = !options.ackMode().requiresManualAcknowledgement();
-        var subscription = new SubscriptionImpl(topic, subscriptionId, options.ackMode(), autoAckAfterDelivery);
-        deliveryConsumers.put(subscription, consumer);
-        selectedProtocol.get()
-                        .subscribe(subscription, session, transport, options.ackMode(), options.headers());
-        return subscription;
+        return subscriptions.subscribe(topic, options, consumer);
     }
 
     @Override
     public StompClient unsubscribe(String topic) {
-        consumers.entrySet()
-                 .stream()
-                 .map(Map.Entry::getKey)
-                 .filter(subscription -> subscription.topic().equals(topic))
-                 .toList()
-                 .forEach(this::unsubscribe);
-        deliveryConsumers.entrySet()
-                         .stream()
-                         .map(Map.Entry::getKey)
-                         .filter(subscription -> subscription.topic().equals(topic))
-                         .toList()
-                         .forEach(this::unsubscribe);
+        subscriptions.unsubscribe(topic);
         return this;
     }
 
     @Override
     public StompClient unsubscribe(Subscription subscription) {
-        this.selectedProtocol.get().unsubscribe(subscription, transport);
-        this.consumers.remove(subscription);
-        this.deliveryConsumers.remove(subscription);
-        this.polling.remove(subscription);
-        this.receivedMessages.remove(subscription);
+        subscriptions.unsubscribe(subscription);
         return this;
     }
 

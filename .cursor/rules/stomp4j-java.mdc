@@ -36,8 +36,48 @@ Imports and formatting: [stomp4j-format-imports.mdc](stomp4j-format-imports.mdc)
 
 - Always **SLF4J** — never `System.out`, `System.err`, or `java.util.logging`.
 - One static logger per class: `LoggerFactory.getLogger(MyClass.class)`.
-- Use **parameterized** messages — not concatenation.
+- Use **`{}` placeholders** — never string concatenation in log messages ([FAQ: fastest way of logging](https://www.slf4j.org/faq.html#logging_performance)).
 - Do not log secrets, passwords, or full credentials.
+- Core modules depend on **`slf4j-api` only**; never declare a logging provider/binding in library code ([manual: libraries](https://www.slf4j.org/manual.html#libraries)).
+
+### Parameterized messages (traditional API)
+
+The typical pattern passes **values already in scope** as arguments. SLF4J checks the level first; only then does it format the message and call `toString()` on those arguments.
+
+```java
+logger.debug("Temperature set to {}. Old value was {}.", newT, oldT);
+```
+
+This avoids the cost of string concatenation when the level is disabled. It does **not** defer Java expression evaluation — any method call in the argument list runs before the logger method is invoked.
+
+### Fluent API and lazy `Supplier` arguments (SLF4J 2.0+)
+
+Use `atTrace()` / `atDebug()` / `atInfo()` / `atWarn()` / `atError()` when building the event needs deferred work ([manual: fluent logging API](https://www.slf4j.org/manual.html#fluent)). For a disabled level, the returned `LoggingEventBuilder` is a no-op.
+
+- **Terminate every chain with `.log()`** — omitting it logs nothing.
+- Pass **expensive expressions** via `addArgument(Supplier)`, not as direct method-call arguments.
+
+| Argument | Pattern |
+|---|---|
+| Literal, local, or value already computed | `logger.debug("interval: {}", interval)` or `logger.atDebug().log("interval: {}", interval)` |
+| Method call, chained access, `encode()`, `formatted()`, or other non-trivial work | `logger.atDebug().addArgument(() -> expensive()).log("…: {}")` |
+
+```java
+// ❌ headers().get() runs even when INFO is disabled
+logger.info("Heart beat interval: {}", connected.headers().get(Header.HEART_BEAT));
+
+// ✅ Supplier evaluated only when INFO is enabled (manual example pattern)
+logger.atInfo()
+      .setMessage("Heart beat interval: {}")
+      .addArgument(() -> connected.headers().get(Header.HEART_BEAT))
+      .log();
+```
+
+Prefer `addKeyValue("name", value)` over embedding structured fields in the message when key-value context helps operators ([manual: fluent API](https://www.slf4j.org/manual.html#fluent)).
+
+Do not wrap parameterized calls in `isDebugEnabled()` / `isInfoEnabled()` guards — that double-checks the level; use `{}` or the fluent API instead.
+
+Existing lazy-argument examples: `AbstractNioTcpTransport`, `WebSocketTransport`, `ClientHeartbeat`.
 
 Exceptions and error paths: [stomp4j-exceptions.mdc](stomp4j-exceptions.mdc) — domain types, no broad `catch (Exception)`, ERROR logging on failures.
 
