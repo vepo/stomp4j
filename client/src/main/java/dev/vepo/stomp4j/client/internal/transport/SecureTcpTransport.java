@@ -63,6 +63,23 @@ public class SecureTcpTransport implements Transport {
         this.done = new CountDownLatch(1);
     }
 
+    private void abortConnect() {
+        running.set(false);
+        if (Objects.nonNull(socket)) {
+            try {
+                socket.close();
+            } catch (IOException ex) {
+                logger.debug("Error closing socket after connect failure", ex);
+            }
+            socket = null;
+        }
+        try {
+            done.await(1, TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+            logger.error("Interrupted while waiting for reader after connect failure", ex);
+        }
+    }
+
     @Override
     public void close() {
         running.set(false);
@@ -105,23 +122,6 @@ public class SecureTcpTransport implements Transport {
             if (!connected) {
                 abortConnect();
             }
-        }
-    }
-
-    private void abortConnect() {
-        running.set(false);
-        if (Objects.nonNull(socket)) {
-            try {
-                socket.close();
-            } catch (IOException ex) {
-                logger.debug("Error closing socket after connect failure", ex);
-            }
-            socket = null;
-        }
-        try {
-            done.await(1, TimeUnit.SECONDS);
-        } catch (InterruptedException ex) {
-            logger.error("Interrupted while waiting for reader after connect failure", ex);
         }
     }
 

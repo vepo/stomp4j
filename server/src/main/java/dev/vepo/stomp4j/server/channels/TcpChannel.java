@@ -136,7 +136,7 @@ public class TcpChannel implements Channel {
                     if (key.isAcceptable()) {
                         acceptSession(key);
                     } else if (key.isReadable()) {
-                        threadPool.submit(() -> readSession(key));
+                        readSession(key);
                     }
                     keyIterator.remove();
                 }
@@ -281,26 +281,31 @@ public class TcpChannel implements Channel {
 
     private void readSession(SelectionKey key) {
         var attachment = (SessionAttachment) key.attachment();
-        var buffer = bufferPool.request();
         try {
-            int length = attachment.socket().read(buffer);
-            if (length < 0) {
-                closeSession(attachment.session());
-                key.cancel();
-                return;
-            }
-            if (length > 0) {
-                buffer.flip();
-                var data = new byte[length];
-                buffer.get(data, 0, length);
-                attachment.session().offer(data, length);
-            }
+            int length;
+            do {
+                var buffer = bufferPool.request();
+                try {
+                    length = attachment.socket().read(buffer);
+                    if (length < 0) {
+                        closeSession(attachment.session());
+                        key.cancel();
+                        return;
+                    }
+                    if (length > 0) {
+                        buffer.flip();
+                        var data = new byte[length];
+                        buffer.get(data, 0, length);
+                        attachment.session().offer(data, length);
+                    }
+                } finally {
+                    bufferPool.release(buffer);
+                }
+            } while (length > 0);
         } catch (IOException ex) {
             logger.debug("Read error, closing session", ex);
             closeSession(attachment.session());
             key.cancel();
-        } finally {
-            bufferPool.release(buffer);
         }
     }
 
@@ -334,39 +339,6 @@ public class TcpChannel implements Channel {
             } catch (IOException ex) {
                 logger.debug("Error closing SSL socket", ex);
             }
-        }
-    }
-
-    @Override
-    public synchronized void start() {
-        if (running.get()) {
-            logger.warn("Channel already started");
-            return;
-        }
-        logger.info("Starting TCP Channel at port {}", port);
-        try {
-            if (runtime.sslSettings().isPresent()) {
-                sslServerSocket = (SSLServerSocket) runtime.sslSettings()
-                                                           .get()
-                                                           .sslContext()
-                                                           .getServerSocketFactory()
-                                                           .createServerSocket(port);
-                running.set(true);
-                threadPool.submit(this::acceptSsl);
-            } else {
-                this.selector = Selector.open();
-                this.channel = ServerSocketChannel.open();
-                channel.configureBlocking(false);
-                channel.bind(new InetSocketAddress(port));
-                channel.register(selector, SelectionKey.OP_ACCEPT);
-                running.set(true);
-                threadPool.submit(this::accept);
-            }
-            logger.info("TCP Channel started! port={}", port);
-        } catch (Exception ex) {
-            logger.error("Could not start channel on port {}", port, ex);
-            rollbackStartup();
-            throw new IllegalStateException("Could not start TCP channel on port %d".formatted(port), ex);
         }
     }
 
@@ -409,6 +381,39 @@ public class TcpChannel implements Channel {
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             logger.error("Thread interrupted while shutting down channel thread pool", ex);
+        }
+    }
+
+    @Override
+    public synchronized void start() {
+        if (running.get()) {
+            logger.warn("Channel already started");
+            return;
+        }
+        logger.info("Starting TCP Channel at port {}", port);
+        try {
+            if (runtime.sslSettings().isPresent()) {
+                sslServerSocket = (SSLServerSocket) runtime.sslSettings()
+                                                           .get()
+                                                           .sslContext()
+                                                           .getServerSocketFactory()
+                                                           .createServerSocket(port);
+                running.set(true);
+                threadPool.submit(this::acceptSsl);
+            } else {
+                this.selector = Selector.open();
+                this.channel = ServerSocketChannel.open();
+                channel.configureBlocking(false);
+                channel.bind(new InetSocketAddress(port));
+                channel.register(selector, SelectionKey.OP_ACCEPT);
+                running.set(true);
+                threadPool.submit(this::accept);
+            }
+            logger.info("TCP Channel started! port={}", port);
+        } catch (Exception ex) {
+            logger.error("Could not start channel on port {}", port, ex);
+            rollbackStartup();
+            throw new IllegalStateException("Could not start TCP channel on port %d".formatted(port), ex);
         }
     }
 

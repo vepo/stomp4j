@@ -28,34 +28,6 @@ import dev.vepo.stomp4j.client.tests.infra.StompContainer;
 @Execution(ExecutionMode.SAME_THREAD)
 class StompClientConnectFailureTest {
 
-    @Test
-    @DisplayName("Failed TCP connect closes transport and heartbeat executor")
-    void shouldCleanupAfterTcpConnectRefused() throws Exception {
-        int port;
-        try (var unused = new ServerSocket(0)) {
-            port = unused.getLocalPort();
-        }
-
-        var client = StompClient.create("stomp://127.0.0.1:%d".formatted(port));
-
-        assertThatThrownBy(client::connect).isInstanceOf(StompException.class);
-
-        assertClientResourcesReleased(client);
-        client.close();
-    }
-
-    @Tag("integration")
-    @Test
-    @DisplayName("Failed STOMP negotiation closes client resources")
-    void shouldCleanupAfterAuthenticationFailure(StompActiveMqContainer broker) throws Exception {
-        var client = StompClient.create(broker.tcpUrl(), new UserCredential("wrong", "credentials"));
-
-        assertThatThrownBy(client::connect).isInstanceOf(StompException.class);
-
-        assertClientResourcesReleased(client);
-        client.close();
-    }
-
     private static void assertClientResourcesReleased(StompClient client) throws Exception {
         assertThat(clientClosed(client)).isTrue();
 
@@ -90,5 +62,33 @@ class StompClientConnectFailureTest {
         var field = TcpTransport.class.getDeclaredField("running");
         field.setAccessible(true);
         return ((AtomicBoolean) field.get(transport)).get();
+    }
+
+    @Tag("integration")
+    @Test
+    @DisplayName("Failed STOMP negotiation closes client resources")
+    void shouldCleanupAfterAuthenticationFailure(StompActiveMqContainer broker) throws Exception {
+        var client = StompClient.create(broker.tcpUrl(), new UserCredential("wrong", "credentials"));
+
+        assertThatThrownBy(client::connect).isInstanceOf(StompException.class);
+
+        assertClientResourcesReleased(client);
+        client.close();
+    }
+
+    @Test
+    @DisplayName("Failed TCP connect closes transport and heartbeat executor")
+    void shouldCleanupAfterTcpConnectRefused() throws Exception {
+        int port;
+        try (var unused = new ServerSocket(0)) {
+            port = unused.getLocalPort();
+        }
+
+        var client = StompClient.create("stomp://127.0.0.1:%d".formatted(port));
+
+        assertThatThrownBy(client::connect).isInstanceOf(StompException.class);
+
+        assertClientResourcesReleased(client);
+        client.close();
     }
 }

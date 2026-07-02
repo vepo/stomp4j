@@ -26,77 +26,6 @@ import dev.vepo.stomp4j.commons.protocol.Message;
 @Execution(ExecutionMode.SAME_THREAD)
 class TcpTransportConnectFailureTest {
 
-    private ExecutorService acceptExecutor;
-
-    @Test
-    @DisplayName("TcpTransport leaves no open socket when connect is refused")
-    void shouldCloseSocketWhenConnectRefused() throws Exception {
-        int port;
-        try (var unused = new ServerSocket(0)) {
-            port = unused.getLocalPort();
-        }
-
-        var transport = new TcpTransport(URI.create("stomp://127.0.0.1:%d".formatted(port)), noopListener());
-
-        assertThatThrownBy(transport::connect).isInstanceOf(StompException.class);
-        assertSocketReleased(transport);
-        transport.close();
-    }
-
-    @Test
-    @DisplayName("TcpTransport closes socket when listener rejects connection")
-    void shouldCloseSocketWhenListenerRejectsConnection() throws Exception {
-        try (var server = new ServerSocket(0)) {
-            var port = server.getLocalPort();
-            acceptExecutor = Executors.newSingleThreadExecutor();
-            acceptExecutor.submit(() -> {
-                try (var accepted = server.accept()) {
-                    // hold connection until transport aborts
-                } catch (IOException ex) {
-                    throw new IllegalStateException(ex);
-                }
-            });
-
-            var transport = new TcpTransport(URI.create("stomp://127.0.0.1:%d".formatted(port)),
-                    rejectingListener());
-
-            assertThatThrownBy(transport::connect).isInstanceOf(StompException.class);
-            assertSocketReleased(transport);
-            transport.close();
-        }
-    }
-
-    @Test
-    @DisplayName("SecureTcpTransport closes socket when TLS handshake fails")
-    void shouldCloseSocketWhenSslHandshakeFails() throws Exception {
-        try (var server = new ServerSocket(0)) {
-            var port = server.getLocalPort();
-            acceptExecutor = Executors.newSingleThreadExecutor();
-            acceptExecutor.submit(() -> {
-                try (var accepted = server.accept()) {
-                    // plain TCP endpoint rejects TLS handshake
-                } catch (IOException ex) {
-                    throw new IllegalStateException(ex);
-                }
-            });
-
-            var transport = new SecureTcpTransport(URI.create("stomps://127.0.0.1:%d".formatted(port)),
-                    noopListener());
-
-            assertThatThrownBy(transport::connect).isInstanceOf(StompException.class);
-            assertSocketReleased(transport);
-            transport.close();
-        }
-    }
-
-    @AfterEach
-    void tearDown() {
-        if (acceptExecutor != null) {
-            acceptExecutor.shutdownNow();
-            acceptExecutor = null;
-        }
-    }
-
     private static void assertSocketReleased(Object transport) throws Exception {
         assertThat(fieldValue(transport, "socket")).isNull();
     }
@@ -145,5 +74,76 @@ class TcpTransportConnectFailureTest {
             @Override
             public void onMessage(Message message) {}
         };
+    }
+
+    private ExecutorService acceptExecutor;
+
+    @Test
+    @DisplayName("TcpTransport leaves no open socket when connect is refused")
+    void shouldCloseSocketWhenConnectRefused() throws Exception {
+        int port;
+        try (var unused = new ServerSocket(0)) {
+            port = unused.getLocalPort();
+        }
+
+        var transport = new TcpTransport(URI.create("stomp://127.0.0.1:%d".formatted(port)), noopListener());
+
+        assertThatThrownBy(transport::connect).isInstanceOf(StompException.class);
+        assertSocketReleased(transport);
+        transport.close();
+    }
+
+    @Test
+    @DisplayName("TcpTransport closes socket when listener rejects connection")
+    void shouldCloseSocketWhenListenerRejectsConnection() throws Exception {
+        try (var server = new ServerSocket(0)) {
+            var port = server.getLocalPort();
+            acceptExecutor = Executors.newSingleThreadExecutor();
+            acceptExecutor.submit(() -> {
+                try (var accepted = server.accept()) {
+                    // hold connection until transport aborts
+                } catch (IOException ex) {
+                    throw new IllegalStateException(ex);
+                }
+            });
+
+            var transport = new TcpTransport(URI.create("stomp://127.0.0.1:%d".formatted(port)),
+                                             rejectingListener());
+
+            assertThatThrownBy(transport::connect).isInstanceOf(StompException.class);
+            assertSocketReleased(transport);
+            transport.close();
+        }
+    }
+
+    @Test
+    @DisplayName("SecureTcpTransport closes socket when TLS handshake fails")
+    void shouldCloseSocketWhenSslHandshakeFails() throws Exception {
+        try (var server = new ServerSocket(0)) {
+            var port = server.getLocalPort();
+            acceptExecutor = Executors.newSingleThreadExecutor();
+            acceptExecutor.submit(() -> {
+                try (var accepted = server.accept()) {
+                    // plain TCP endpoint rejects TLS handshake
+                } catch (IOException ex) {
+                    throw new IllegalStateException(ex);
+                }
+            });
+
+            var transport = new SecureTcpTransport(URI.create("stomps://127.0.0.1:%d".formatted(port)),
+                                                   noopListener());
+
+            assertThatThrownBy(transport::connect).isInstanceOf(StompException.class);
+            assertSocketReleased(transport);
+            transport.close();
+        }
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (acceptExecutor != null) {
+            acceptExecutor.shutdownNow();
+            acceptExecutor = null;
+        }
     }
 }

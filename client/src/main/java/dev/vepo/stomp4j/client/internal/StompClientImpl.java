@@ -267,6 +267,12 @@ public class StompClientImpl implements StompClient {
         }
     }
 
+    private StompException abortConnect(StompException failure) {
+        logger.error("STOMP connect failed for transport {}", transport, failure);
+        close();
+        return failure;
+    }
+
     void abortTransaction(String transactionId) {
         selectedProtocol.get().abortTransaction(transactionId, transport);
     }
@@ -330,12 +336,6 @@ public class StompClientImpl implements StompClient {
         }
         logger.info("Client connected");
         return this;
-    }
-
-    private StompException abortConnect(StompException failure) {
-        logger.error("STOMP connect failed for transport {}", transport, failure);
-        close();
-        return failure;
     }
 
     private void consumeMessage(Message message) {

@@ -51,14 +51,18 @@ public interface StompClient extends AutoCloseable {
     void close(Duration gracePeriod);
 
     /**
-     * Opens the transport and completes STOMP {@code CONNECT} → {@code CONNECTED} negotiation.
+     * Opens the transport and completes STOMP {@code CONNECT} → {@code CONNECTED}
+     * negotiation.
      *
-     * <p>On failure, the client is closed automatically — transport, heartbeat executor, and
-     * related resources are released before the exception is thrown. A failed client must not be
-     * reused; create a new instance or use try-with-resources so {@link #close()} runs on exit.
+     * <p>
+     * On failure, the client is closed automatically — transport, heartbeat
+     * executor, and related resources are released before the exception is thrown.
+     * A failed client must not be reused; create a new instance or use
+     * try-with-resources so {@link #close()} runs on exit.
      *
      * @return this client for chaining
-     * @throws dev.vepo.stomp4j.client.exceptions.StompException when connect or negotiation fails
+     * @throws dev.vepo.stomp4j.client.exceptions.StompException when connect or
+     *                                                           negotiation fails
      */
     StompClient connect();
 

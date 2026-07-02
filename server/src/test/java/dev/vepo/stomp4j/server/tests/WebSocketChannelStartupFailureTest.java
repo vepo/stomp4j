@@ -28,6 +28,36 @@ import dev.vepo.stomp4j.server.tests.infra.EphemeralPorts;
 @Execution(ExecutionMode.SAME_THREAD)
 class WebSocketChannelStartupFailureTest {
 
+    private static Object fieldValue(WebSocketChannel webSocketChannel, String name) throws Exception {
+        var field = WebSocketChannel.class.getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(webSocketChannel);
+    }
+
+    private static ChannelListener noopListener() {
+        return new ChannelListener() {
+            @Override
+            public void inboundMessageReceived(Session session, Message message) {}
+
+            @Override
+            public void sessionConnected(Session session) {}
+
+            @Override
+            public void sessionDisconnected(Session session) {}
+
+            @Override
+            public boolean subscriptionRequested(Session session, String topic) {
+                return true;
+            }
+        };
+    }
+
+    private static boolean running(WebSocketChannel webSocketChannel) throws Exception {
+        var field = WebSocketChannel.class.getDeclaredField("running");
+        field.setAccessible(true);
+        return ((AtomicBoolean) field.get(webSocketChannel)).get();
+    }
+
     private WebSocketChannel channel;
 
     private ServerSocketChannel portHolder;
@@ -42,13 +72,13 @@ class WebSocketChannelStartupFailureTest {
             portHolder.bind(new InetSocketAddress(port));
 
             channel = new WebSocketChannel(port, noopListener(), new ChannelRuntime(
-                    SessionConfig.defaults(),
-                    Optional.empty(),
-                    heartbeatExecutor));
+                                                                                    SessionConfig.defaults(),
+                                                                                    Optional.empty(),
+                                                                                    heartbeatExecutor));
 
             assertThatThrownBy(channel::start)
-                    .isInstanceOf(IllegalStateException.class)
-                    .hasMessageContaining(String.valueOf(port));
+                                              .isInstanceOf(IllegalStateException.class)
+                                              .hasMessageContaining(String.valueOf(port));
 
             assertThat(running(channel)).isFalse();
             assertThat(fieldValue(channel, "vertx")).isNull();
@@ -70,8 +100,8 @@ class WebSocketChannelStartupFailureTest {
                                             .handler(message -> {})
                                             .subscription(topic -> true)
                                             .start())
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining(String.valueOf(port));
+                                                     .isInstanceOf(IllegalStateException.class)
+                                                     .hasMessageContaining(String.valueOf(port));
     }
 
     @AfterEach
@@ -82,35 +112,5 @@ class WebSocketChannelStartupFailureTest {
         if (portHolder != null && portHolder.isOpen()) {
             portHolder.close();
         }
-    }
-
-    private static ChannelListener noopListener() {
-        return new ChannelListener() {
-            @Override
-            public void inboundMessageReceived(Session session, Message message) {}
-
-            @Override
-            public void sessionConnected(Session session) {}
-
-            @Override
-            public void sessionDisconnected(Session session) {}
-
-            @Override
-            public boolean subscriptionRequested(Session session, String topic) {
-                return true;
-            }
-        };
-    }
-
-    private static Object fieldValue(WebSocketChannel webSocketChannel, String name) throws Exception {
-        var field = WebSocketChannel.class.getDeclaredField(name);
-        field.setAccessible(true);
-        return field.get(webSocketChannel);
-    }
-
-    private static boolean running(WebSocketChannel webSocketChannel) throws Exception {
-        var field = WebSocketChannel.class.getDeclaredField("running");
-        field.setAccessible(true);
-        return ((AtomicBoolean) field.get(webSocketChannel)).get();
     }
 }

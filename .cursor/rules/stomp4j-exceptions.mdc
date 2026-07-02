@@ -111,7 +111,38 @@ Log each failure **once** at the point of cleanup or translation — not in both
 
 ## `InterruptedException`
 
-When the handler **throws** a domain exception or **returns an error**, do **not** call `Thread.currentThread().interrupt()` — the failure is already surfaced to the caller. Re-interrupting is for methods that **return normally** after catching interrupt (e.g. cooperative shutdown loops) so upstream code can still observe the flag.
+Decide whether to call `Thread.currentThread().interrupt()` from **who owns the thread** and **what the method does next** — not from habit on every catch.
+
+| Context | Re-interrupt? |
+|---------|---------------|
+| Method **throws** a domain exception after catch | **No** — failure is already surfaced |
+| **`close()` / shutdown** on an **application** thread (transport, client, server API) | **No** — release resources and return |
+| **Loop or `await` on a thread this type created** (`ExecutorService`, dedicated I/O runnable) and method **returns normally** | **Yes** — restore flag so cooperative shutdown can observe interrupt |
+| **Cleanup required** before leaving the catch block | **Always finish cleanup first** — never call `interrupt()` if it could prevent closing sockets, `abort()`, or executor shutdown |
+
+### Close and lifecycle — cleanup, then return
+
+`close()` is usually invoked by application code, not by a transport-owned worker. On `InterruptedException` while waiting for graceful teardown, **abort or close resources and exit** — do not re-interrupt the caller.
+
+```java
+// ❌ Re-interrupt on app-thread close; risks skipping abort if control flow changes
+} catch (InterruptedException ex) {
+    Thread.currentThread().interrupt();
+    webSocketClient.abort();
+}
+
+// ✅ Finish cleanup, then return (finally / httpClient.close() still run)
+} catch (InterruptedException ex) {
+    logger.debug("Interrupted while waiting for WebSocket close; aborting connection", ex);
+    webSocketClient.abort();
+}
+```
+
+Same rule for `transport.close()`, channel shutdown, and `awaitTermination` in **public** lifecycle methods: release resources, do not set the interrupt flag on the application thread unless the API contract explicitly documents interrupt propagation.
+
+### Throw path — no re-interrupt
+
+When the handler **throws** a domain exception or **returns an error**, do **not** call `Thread.currentThread().interrupt()` — the failure is already surfaced to the caller.
 
 ```java
 // ❌ Throw path — interrupt is redundant; caller gets StompException instead
@@ -124,12 +155,20 @@ When the handler **throws** a domain exception or **returns an error**, do **not
 } catch (InterruptedException ex) {
     throw abortConnect(new StompException("Connection interrupted", ex));
 }
+```
 
-// ✅ Normal return after interrupt — restore flag for caller
+### Owned worker thread — restore flag on normal return
+
+Re-interrupt only when the **current thread is one this type started** (e.g. read loop on `Executors.newSingleThreadExecutor`) and the method **returns normally** after catching interrupt so upstream shutdown logic can still observe the flag.
+
+```java
+// ✅ Normal return after interrupt on a transport read loop we own
 } catch (InterruptedException ex) {
     Thread.currentThread().interrupt();
 }
 ```
+
+Do **not** re-interrupt on threads you do not own (application `close()`, JUnit, framework callbacks).
 
 ## Cleanup before rethrow
 

@@ -85,6 +85,20 @@ public class WebSocketChannel implements Channel {
         this.sessionCloser = this::closeSession;
     }
 
+    private void awaitShutdown(Future<Void> shutdown, String resourceName) {
+        try {
+            shutdown.toCompletionStage()
+                    .toCompletableFuture()
+                    .get(CLOSE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            logger.info("{} closed", resourceName);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            logger.error("Interrupted while closing {}", resourceName, ex);
+        } catch (TimeoutException | ExecutionException ex) {
+            logger.error("Error closing {}", resourceName, ex);
+        }
+    }
+
     @Override
     public synchronized void close() {
         logger.info("Closing WebSocket channel... port={}", port);
@@ -110,20 +124,6 @@ public class WebSocketChannel implements Channel {
         logger.info("WebSocket channel closed port={}", port);
     }
 
-    private void awaitShutdown(Future<Void> shutdown, String resourceName) {
-        try {
-            shutdown.toCompletionStage()
-                    .toCompletableFuture()
-                    .get(CLOSE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-            logger.info("{} closed", resourceName);
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            logger.error("Interrupted while closing {}", resourceName, ex);
-        } catch (TimeoutException | ExecutionException ex) {
-            logger.error("Error closing {}", resourceName, ex);
-        }
-    }
-
     private void closeSession(Session session) {
         var webSocket = activeSessions.remove(session);
         if (Objects.nonNull(webSocket) && !webSocket.isClosed()) {
@@ -132,6 +132,11 @@ public class WebSocketChannel implements Channel {
         if (session.status() != Status.END) {
             listener.sessionDisconnected(session);
         }
+    }
+
+    private void failStart(IllegalStateException failure) {
+        close();
+        throw failure;
     }
 
     @Override
@@ -211,11 +216,6 @@ public class WebSocketChannel implements Channel {
             Thread.currentThread().interrupt();
             failStart(new IllegalStateException("Interrupted while starting WebSocket server", ex));
         }
-    }
-
-    private void failStart(IllegalStateException failure) {
-        close();
-        throw failure;
     }
 
     @Override

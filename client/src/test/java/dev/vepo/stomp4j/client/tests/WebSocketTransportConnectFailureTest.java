@@ -27,55 +27,14 @@ import dev.vepo.stomp4j.commons.protocol.Message;
 @Execution(ExecutionMode.SAME_THREAD)
 class WebSocketTransportConnectFailureTest {
 
-    @BeforeAll
-    static void shortConnectTimeout() {
-        System.setProperty("stomp4j.websocket.connectTimeoutSeconds", "1");
-    }
-
-    @Test
-    @DisplayName("WebSocketTransport closes HttpClient when connect fails")
-    void shouldCloseHttpClientWhenConnectFails() throws Exception {
-        int port;
-        try (var unused = new ServerSocket(0)) {
-            port = unused.getLocalPort();
-        }
-
-        var transport = new WebSocketTransport(URI.create("ws://127.0.0.1:%d".formatted(port)), noopListener());
-
-        assertThatThrownBy(transport::connect).isInstanceOf(StompException.class);
-        assertHttpClientClosed(transport);
-        assertThat(fieldValue(transport, "webSocketClient")).isNull();
-
-        assertThatThrownBy(transport::connect).isInstanceOf(StompException.class);
-        transport.close();
-    }
-
-    @Test
-    @DisplayName("StompClient closes WebSocket transport when connect fails")
-    void shouldCleanupWebSocketClientAfterFailedConnect() throws Exception {
-        int port;
-        try (var unused = new ServerSocket(0)) {
-            port = unused.getLocalPort();
-        }
-
-        var client = StompClient.create("ws://127.0.0.1:%d".formatted(port));
-
-        assertThatThrownBy(client::connect).isInstanceOf(StompException.class);
-
-        assertThat(clientClosed(client)).isTrue();
-        var transport = (WebSocketTransport) fieldValue(client, "transport");
-        assertHttpClientClosed(transport);
-        client.close();
-    }
-
     private static void assertHttpClientClosed(WebSocketTransport transport) throws Exception {
         var httpClient = (HttpClient) fieldValue(transport, "httpClient");
         var uri = URI.create("ws://127.0.0.1:9");
         assertThatThrownBy(() -> httpClient.newWebSocketBuilder()
-                .buildAsync(uri, new WebSocket.Listener() {})
-                .join())
-                .hasRootCauseInstanceOf(IOException.class)
-                .hasRootCauseMessage("closed");
+                                           .buildAsync(uri, new WebSocket.Listener() {})
+                                           .join())
+                                                   .hasRootCauseInstanceOf(IOException.class)
+                                                   .hasRootCauseMessage("closed");
     }
 
     private static boolean clientClosed(StompClient client) throws Exception {
@@ -112,5 +71,46 @@ class WebSocketTransportConnectFailureTest {
             @Override
             public void onMessage(Message message) {}
         };
+    }
+
+    @BeforeAll
+    static void shortConnectTimeout() {
+        System.setProperty("stomp4j.websocket.connectTimeoutSeconds", "1");
+    }
+
+    @Test
+    @DisplayName("StompClient closes WebSocket transport when connect fails")
+    void shouldCleanupWebSocketClientAfterFailedConnect() throws Exception {
+        int port;
+        try (var unused = new ServerSocket(0)) {
+            port = unused.getLocalPort();
+        }
+
+        var client = StompClient.create("ws://127.0.0.1:%d".formatted(port));
+
+        assertThatThrownBy(client::connect).isInstanceOf(StompException.class);
+
+        assertThat(clientClosed(client)).isTrue();
+        var transport = (WebSocketTransport) fieldValue(client, "transport");
+        assertHttpClientClosed(transport);
+        client.close();
+    }
+
+    @Test
+    @DisplayName("WebSocketTransport closes HttpClient when connect fails")
+    void shouldCloseHttpClientWhenConnectFails() throws Exception {
+        int port;
+        try (var unused = new ServerSocket(0)) {
+            port = unused.getLocalPort();
+        }
+
+        var transport = new WebSocketTransport(URI.create("ws://127.0.0.1:%d".formatted(port)), noopListener());
+
+        assertThatThrownBy(transport::connect).isInstanceOf(StompException.class);
+        assertHttpClientClosed(transport);
+        assertThat(fieldValue(transport, "webSocketClient")).isNull();
+
+        assertThatThrownBy(transport::connect).isInstanceOf(StompException.class);
+        transport.close();
     }
 }

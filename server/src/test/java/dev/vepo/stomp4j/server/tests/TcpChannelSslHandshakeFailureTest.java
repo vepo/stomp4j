@@ -31,42 +31,6 @@ import dev.vepo.stomp4j.server.tests.infra.TestSsl;
 @Execution(ExecutionMode.SAME_THREAD)
 class TcpChannelSslHandshakeFailureTest {
 
-    private TcpChannel channel;
-
-    @Test
-    @DisplayName("TcpChannel closes accepted SSL socket when handshake fails")
-    void shouldCloseSslSocketWhenHandshakeFails() throws Exception {
-        var port = EphemeralPorts.allocate();
-        var heartbeatExecutor = Executors.newSingleThreadScheduledExecutor();
-        try {
-            var sslSettings = new SslSettings(TestSsl.serverSslContext(), Optional.empty());
-            channel = new TcpChannel(port, noopListener(), new ChannelRuntime(
-                    SessionConfig.defaults(),
-                    Optional.of(sslSettings),
-                    heartbeatExecutor));
-            channel.start();
-
-            try (var client = new Socket()) {
-                client.connect(new InetSocketAddress("localhost", port), 2000);
-                client.getOutputStream().write("NOT-TLS\n".getBytes());
-                client.getOutputStream().flush();
-
-                await().atMost(Duration.ofSeconds(5)).until(() -> clientDisconnected(client));
-
-                assertThat(sslSessions(channel)).isEmpty();
-            }
-        } finally {
-            heartbeatExecutor.shutdownNow();
-        }
-    }
-
-    @AfterEach
-    void tearDown() {
-        if (channel != null) {
-            channel.close();
-        }
-    }
-
     private static boolean clientDisconnected(Socket client) throws IOException {
         client.setSoTimeout(100);
         try {
@@ -99,5 +63,41 @@ class TcpChannelSslHandshakeFailureTest {
         var field = TcpChannel.class.getDeclaredField("sslSessions");
         field.setAccessible(true);
         return (Map<Session, ?>) field.get(tcpChannel);
+    }
+
+    private TcpChannel channel;
+
+    @Test
+    @DisplayName("TcpChannel closes accepted SSL socket when handshake fails")
+    void shouldCloseSslSocketWhenHandshakeFails() throws Exception {
+        var port = EphemeralPorts.allocate();
+        var heartbeatExecutor = Executors.newSingleThreadScheduledExecutor();
+        try {
+            var sslSettings = new SslSettings(TestSsl.serverSslContext(), Optional.empty());
+            channel = new TcpChannel(port, noopListener(), new ChannelRuntime(
+                                                                              SessionConfig.defaults(),
+                                                                              Optional.of(sslSettings),
+                                                                              heartbeatExecutor));
+            channel.start();
+
+            try (var client = new Socket()) {
+                client.connect(new InetSocketAddress("localhost", port), 2000);
+                client.getOutputStream().write("NOT-TLS\n".getBytes());
+                client.getOutputStream().flush();
+
+                await().atMost(Duration.ofSeconds(5)).until(() -> clientDisconnected(client));
+
+                assertThat(sslSessions(channel)).isEmpty();
+            }
+        } finally {
+            heartbeatExecutor.shutdownNow();
+        }
+    }
+
+    @AfterEach
+    void tearDown() {
+        if (channel != null) {
+            channel.close();
+        }
     }
 }
