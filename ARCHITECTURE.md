@@ -215,7 +215,7 @@ Application thread(s)          Transport read thread
 
 | Component | Thread model |
 |-----------|--------------|
-| `TcpChannel` | NIO `Selector` loop + `ExecutorService` for accepted sockets; one `Session` per connection |
+| `TcpChannel` | NIO `Selector` loop on one dedicated I/O thread; one `Session` per connection |
 | `WebSocketChannel` | Vert.x 5 event loop |
 | `Session` | Frame handling on the channel I/O thread for that connection; `HashMap` / `HashSet` fields assume **single-threaded access per session** |
 | `MessageHandler` / `SubscriptionHandler` | Invoked on the session I/O thread — must return quickly; offload blocking work |

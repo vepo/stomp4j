@@ -2,17 +2,14 @@ package dev.vepo.stomp4j.server.channels;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.channels.ClosedSelectorException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -121,12 +118,12 @@ public class TcpChannel implements Channel {
     private final int port;
     private final ChannelListener listener;
     private final ChannelRuntime runtime;
-    private final ExecutorService threadPool;
     private final AtomicBoolean running;
     private final BufferPool bufferPool;
     private final Map<Session, SessionAttachment> sessionAttachments;
     private final TcpExternalOutboundChannel outboundChannel;
     private final SessionCloser sessionCloser;
+    private Thread ioThread;
     private Selector selector;
     private ServerSocketChannel channel;
 
@@ -134,7 +131,6 @@ public class TcpChannel implements Channel {
         this.port = port;
         this.listener = listener;
         this.runtime = runtime;
-        this.threadPool = Executors.newFixedThreadPool(10);
         this.running = new AtomicBoolean(false);
         this.bufferPool = new BufferPool(10, 1024);
         this.sessionAttachments = new ConcurrentHashMap<>();
@@ -144,11 +140,25 @@ public class TcpChannel implements Channel {
 
     private void accept() {
         try {
-            Objects.requireNonNull(selector, "selector cannot be null!");
             while (running.get()) {
-                selector.select();
-                Set<SelectionKey> selectedKeys = selector.selectedKeys();
-                Iterator<SelectionKey> keyIterator = selectedKeys.iterator();
+                var currentSelector = selector;
+                if (Objects.isNull(currentSelector) || !currentSelector.isOpen()) {
+                    return;
+                }
+                int ready;
+                try {
+                    ready = currentSelector.select();
+                } catch (ClosedSelectorException ex) {
+                    return;
+                }
+                if (!running.get()) {
+                    return;
+                }
+                if (ready == 0) {
+                    continue;
+                }
+                var selectedKeys = currentSelector.selectedKeys();
+                var keyIterator = selectedKeys.iterator();
 
                 while (keyIterator.hasNext()) {
                     SelectionKey key = keyIterator.next();
@@ -169,7 +179,11 @@ public class TcpChannel implements Channel {
                 }
             }
         } catch (IOException ex) {
-            logger.error("Accept loop error", ex);
+            if (running.get()) {
+                logger.error("Accept loop error", ex);
+            } else {
+                logger.debug("Accept loop ended during shutdown", ex);
+            }
         }
     }
 
@@ -244,9 +258,13 @@ public class TcpChannel implements Channel {
         logger.info("Closing channel... port={}", port);
         this.running.set(false);
         try {
-            if (Objects.nonNull(selector) && selector.isOpen()) {
-                selector.wakeup();
-                for (var key : selector.keys()) {
+            var currentSelector = selector;
+            if (Objects.nonNull(currentSelector) && currentSelector.isOpen()) {
+                currentSelector.wakeup();
+            }
+            joinIoThread();
+            if (Objects.nonNull(currentSelector) && currentSelector.isOpen()) {
+                for (var key : currentSelector.keys()) {
                     if (key.attachment() instanceof SessionAttachment attachment) {
                         synchronized (attachment.ioLock()) {
                             shutdownTlsIo(attachment);
@@ -267,13 +285,12 @@ public class TcpChannel implements Channel {
                               .forEach(this::closeSession);
             if (Objects.nonNull(selector) && selector.isOpen()) {
                 selector.close();
-                selector = null;
             }
+            selector = null;
             if (Objects.nonNull(channel)) {
                 channel.close();
                 channel = null;
             }
-            shutdownThreadPool();
         } catch (IOException ex) {
             logger.error("Error closing channel", ex);
         }
@@ -383,6 +400,19 @@ public class TcpChannel implements Channel {
                 || (Objects.nonNull(attachment.sslIo()) && attachment.sslIo().hasEncryptedOutbound());
     }
 
+    private void joinIoThread() {
+        var thread = ioThread;
+        ioThread = null;
+        if (Objects.isNull(thread) || !thread.isAlive()) {
+            return;
+        }
+        try {
+            thread.join(TimeUnit.SECONDS.toMillis(1));
+        } catch (InterruptedException ex) {
+            logger.error("Interrupted while joining TCP channel I/O thread", ex);
+        }
+    }
+
     @Override
     public OutboundChannel outboundChannel() {
         return outboundChannel;
@@ -477,19 +507,6 @@ public class TcpChannel implements Channel {
             }
             channel = null;
         }
-        shutdownThreadPool();
-    }
-
-    private void shutdownThreadPool() {
-        if (threadPool.isShutdown()) {
-            return;
-        }
-        threadPool.shutdown();
-        try {
-            threadPool.awaitTermination(1, TimeUnit.SECONDS);
-        } catch (InterruptedException ex) {
-            logger.error("Thread interrupted while shutting down channel thread pool", ex);
-        }
     }
 
     private void shutdownTlsIo(SessionAttachment attachment) {
@@ -513,7 +530,10 @@ public class TcpChannel implements Channel {
             channel.bind(new InetSocketAddress(port));
             channel.register(selector, SelectionKey.OP_ACCEPT);
             running.set(true);
-            threadPool.submit(this::accept);
+            ioThread = Thread.ofPlatform()
+                             .daemon(true)
+                             .name("tcp-channel-%d".formatted(port))
+                             .start(this::accept);
             logger.info("TCP Channel started! port={}", port);
         } catch (Exception ex) {
             logger.error("Could not start channel on port {}", port, ex);

@@ -3,11 +3,9 @@ package dev.vepo.stomp4j.server.tests;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
 import java.nio.channels.ServerSocketChannel;
 import java.util.Optional;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -60,10 +58,6 @@ class TcpChannelStartupFailureTest {
         return ((AtomicBoolean) field.get(tcpChannel)).get();
     }
 
-    private static ExecutorService threadPool(TcpChannel tcpChannel) throws Exception {
-        return (ExecutorService) fieldValue(tcpChannel, "threadPool");
-    }
-
     private TcpChannel channel;
 
     private ServerSocketChannel portHolder;
@@ -105,7 +99,7 @@ class TcpChannelStartupFailureTest {
             assertThat(running(channel)).isFalse();
             assertThat(fieldValue(channel, "selector")).isNull();
             assertThat(fieldValue(channel, "channel")).isNull();
-            assertThat(threadPool(channel).isShutdown()).isTrue();
+            assertThat(fieldValue(channel, "ioThread")).isNull();
         } finally {
             heartbeatExecutor.shutdownNow();
         }
@@ -113,7 +107,7 @@ class TcpChannelStartupFailureTest {
 
     @AfterEach
     void tearDown() throws Exception {
-        if (channel != null && !threadPool(channel).isShutdown()) {
+        if (channel != null) {
             channel.close();
         }
         if (portHolder != null && portHolder.isOpen()) {
