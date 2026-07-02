@@ -8,6 +8,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 
+import dev.vepo.stomp4j.integration.server.CompositeStompDestinationHandler;
 import dev.vepo.stomp4j.server.StompConnectionListener;
 import dev.vepo.stomp4j.server.StompServer;
 import dev.vepo.stomp4j.server.SubscriptionHandler;
@@ -43,7 +44,7 @@ public class StompServerAutoConfiguration {
         if (handlers.isEmpty()) {
             builder.handler(message -> {});
         } else {
-            builder.handler(new CompositeStompInboundHandler(handlers));
+            builder.handler(new CompositeStompDestinationHandler(handlers));
         }
         subscriptionHandler.ifAvailable(builder::subscription);
         if (subscriptionHandler.getIfAvailable() == null) {

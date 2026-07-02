@@ -1,6 +1,7 @@
 package dev.vepo.stomp4j.quarkus.server;
 
 import dev.vepo.stomp4j.commons.TransportType;
+import dev.vepo.stomp4j.integration.server.CompositeStompDestinationHandler;
 import dev.vepo.stomp4j.server.StompConnectionListener;
 import dev.vepo.stomp4j.server.StompServer;
 import dev.vepo.stomp4j.server.SubscriptionHandler;
@@ -50,7 +51,7 @@ public class StompServerProducer {
         if (handlers.isEmpty()) {
             builder.handler(message -> {});
         } else {
-            builder.handler(new CompositeStompInboundHandler(handlers));
+            builder.handler(new CompositeStompDestinationHandler(handlers));
         }
         if (subscriptionHandler.isResolvable()) {
             builder.subscription(subscriptionHandler.get());

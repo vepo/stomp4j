@@ -3,7 +3,7 @@ package dev.vepo.stomp4j.quarkus.client.tests;
 import java.util.concurrent.atomic.AtomicReference;
 
 import dev.vepo.stomp4j.quarkus.cdi.StompAsync;
-import dev.vepo.stomp4j.quarkus.client.Acknowledgment;
+import dev.vepo.stomp4j.integration.client.Acknowledgment;
 import dev.vepo.stomp4j.quarkus.client.StompDestination;
 import dev.vepo.stomp4j.quarkus.client.StompInboundMessage;
 import jakarta.enterprise.context.ApplicationScoped;

@@ -1,11 +1,14 @@
 package dev.vepo.stomp4j.spring.boot.autoconfigure.client;
 
 import java.util.Objects;
+import java.util.Optional;
 
 import javax.net.ssl.SSLContext;
 
 import dev.vepo.stomp4j.client.StompClient;
 import dev.vepo.stomp4j.client.UserCredential;
+import dev.vepo.stomp4j.integration.client.StompClientBootstrap;
+import dev.vepo.stomp4j.integration.client.StompClientBootstrapOptions;
 
 public class StompClientFactory {
 
@@ -25,20 +28,10 @@ public class StompClientFactory {
     }
 
     public StompClient create() {
-        var credentials = buildCredentials();
-        if (Objects.nonNull(properties.getTransportType()) && Objects.nonNull(credentials)) {
-            return StompClient.create(properties.getUrl(), properties.getTransportType(), credentials);
-        }
-        if (Objects.nonNull(properties.getTransportType())) {
-            return StompClient.create(properties.getUrl(), properties.getTransportType());
-        }
-        if (Objects.nonNull(sslContext)) {
-            return StompClient.create(properties.getUrl(), credentials, sslContext);
-        }
-        if (Objects.nonNull(credentials)) {
-            return StompClient.create(properties.getUrl(), credentials);
-        }
-        return StompClient.create(properties.getUrl());
+        return StompClientBootstrap.create(new StompClientBootstrapOptions(properties.getUrl(),
+                                                                           Optional.ofNullable(properties.getTransportType()),
+                                                                           Optional.ofNullable(buildCredentials()),
+                                                                           Optional.ofNullable(sslContext)));
     }
 
     public StompClient create(String url, UserCredential credentials) {

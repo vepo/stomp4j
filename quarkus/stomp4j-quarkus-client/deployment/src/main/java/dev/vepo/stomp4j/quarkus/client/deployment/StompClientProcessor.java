@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import dev.vepo.stomp4j.client.AckMode;
-import dev.vepo.stomp4j.quarkus.client.Acknowledgment;
+import dev.vepo.stomp4j.integration.client.Acknowledgment;
 import dev.vepo.stomp4j.quarkus.client.StompDestination;
 import dev.vepo.stomp4j.quarkus.client.StompDispatchMode;
 import dev.vepo.stomp4j.quarkus.client.StompClientConfig;

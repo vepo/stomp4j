@@ -16,6 +16,11 @@
     <dependencies>
         <dependency>
             <groupId>dev.vepo</groupId>
+            <artifactId>stomp4j-integration-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>dev.vepo</groupId>
             <artifactId>stomp4j-client</artifactId>
             <version>${project.version}</version>
             <optional>true</optional>

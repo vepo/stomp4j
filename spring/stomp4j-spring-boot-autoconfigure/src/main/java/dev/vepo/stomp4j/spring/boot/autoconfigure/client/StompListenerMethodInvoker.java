@@ -14,6 +14,8 @@ import dev.vepo.stomp4j.client.AckMode;
 import dev.vepo.stomp4j.client.StompDelivery;
 import dev.vepo.stomp4j.commons.protocol.Header;
 import dev.vepo.stomp4j.commons.protocol.Headers;
+import dev.vepo.stomp4j.integration.client.Acknowledgment;
+import dev.vepo.stomp4j.integration.client.InboundAckPolicy;
 
 public class StompListenerMethodInvoker {
 
@@ -28,16 +30,7 @@ public class StompListenerMethodInvoker {
                                StompDelivery delivery,
                                Acknowledgment acknowledgment,
                                boolean threw) {
-        if (delivery.acknowledged()) {
-            return;
-        }
-        if (ackMode.requiresManualAcknowledgement()) {
-            if (threw) {
-                acknowledgment.nack();
-            }
-            return;
-        }
-        acknowledgment.acknowledge();
+        InboundAckPolicy.afterInvocation(ackMode, delivery, acknowledgment, threw);
     }
 
     private java.util.Optional<String> headerValue(Headers headers, String name) {

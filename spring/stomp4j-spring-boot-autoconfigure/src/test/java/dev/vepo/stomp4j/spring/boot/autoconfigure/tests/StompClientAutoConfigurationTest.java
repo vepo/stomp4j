@@ -21,7 +21,7 @@ import org.springframework.test.context.ContextConfiguration;
 
 import dev.vepo.stomp4j.client.AckMode;
 import dev.vepo.stomp4j.client.StompDelivery;
-import dev.vepo.stomp4j.spring.boot.autoconfigure.client.Acknowledgment;
+import dev.vepo.stomp4j.integration.client.Acknowledgment;
 import dev.vepo.stomp4j.spring.boot.autoconfigure.client.StompClientAutoConfiguration;
 import dev.vepo.stomp4j.spring.boot.autoconfigure.client.StompClientTemplate;
 import dev.vepo.stomp4j.spring.boot.autoconfigure.client.StompListener;

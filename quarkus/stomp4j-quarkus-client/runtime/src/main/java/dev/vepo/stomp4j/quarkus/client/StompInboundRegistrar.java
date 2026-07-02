@@ -5,6 +5,8 @@ import java.util.concurrent.Executors;
 
 import dev.vepo.stomp4j.client.AckMode;
 import dev.vepo.stomp4j.client.StompDelivery;
+import dev.vepo.stomp4j.integration.client.Acknowledgment;
+import dev.vepo.stomp4j.integration.client.InboundAckPolicy;
 import dev.vepo.stomp4j.quarkus.cdi.StompAsync;
 import dev.vepo.stomp4j.quarkus.cdi.StompSync;
 import io.quarkus.runtime.ShutdownEvent;
@@ -34,16 +36,7 @@ public class StompInboundRegistrar {
     }
 
     private void applyAckRules(AckMode ackMode, StompDelivery delivery, boolean threw) {
-        if (delivery.acknowledged()) {
-            return;
-        }
-        if (ackMode.requiresManualAcknowledgement()) {
-            if (threw) {
-                delivery.nack();
-            }
-            return;
-        }
-        Acknowledgment.of(delivery).acknowledge();
+        InboundAckPolicy.afterInvocation(ackMode, delivery, Acknowledgment.of(delivery), threw);
     }
 
     private void dispatch(StompInboundEndpoint endpoint, StompDelivery delivery) {

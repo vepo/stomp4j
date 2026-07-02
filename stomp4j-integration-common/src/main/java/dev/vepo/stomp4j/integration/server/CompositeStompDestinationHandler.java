@@ -1,14 +1,15 @@
-package dev.vepo.stomp4j.quarkus.server;
+package dev.vepo.stomp4j.integration.server;
 
 import java.util.List;
 
+import dev.vepo.stomp4j.server.MessageHandler;
 import dev.vepo.stomp4j.server.StompMessage;
 
-public final class CompositeStompInboundHandler implements StompInboundHandler {
+public final class CompositeStompDestinationHandler implements MessageHandler {
 
-    private final List<StompInboundHandler> handlers;
+    private final List<StompDestinationHandler> handlers;
 
-    public CompositeStompInboundHandler(List<StompInboundHandler> handlers) {
+    public CompositeStompDestinationHandler(List<? extends StompDestinationHandler> handlers) {
         this.handlers = List.copyOf(handlers);
     }
 
@@ -19,7 +20,6 @@ public final class CompositeStompInboundHandler implements StompInboundHandler {
                 .forEach(handler -> handler.onSend(message));
     }
 
-    @Override
     public boolean supports(String destination) {
         return handlers.stream().anyMatch(handler -> handler.supports(destination));
     }

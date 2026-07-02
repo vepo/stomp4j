@@ -1,4 +1,4 @@
-package dev.vepo.stomp4j.spring.boot.autoconfigure.client;
+package dev.vepo.stomp4j.integration.client;
 
 import dev.vepo.stomp4j.client.StompDelivery;
 

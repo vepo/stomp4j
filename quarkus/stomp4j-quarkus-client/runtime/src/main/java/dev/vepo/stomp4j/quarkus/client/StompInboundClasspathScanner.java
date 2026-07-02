@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Set;
 
 import dev.vepo.stomp4j.client.AckMode;
+import dev.vepo.stomp4j.integration.client.Acknowledgment;
 import dev.vepo.stomp4j.quarkus.cdi.StompAsync;
 import dev.vepo.stomp4j.quarkus.cdi.StompSync;
 import io.quarkus.arc.Arc;

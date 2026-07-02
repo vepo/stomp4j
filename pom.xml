@@ -411,6 +411,7 @@
         <module>commons</module>
         <module>client</module>
         <module>server</module>
+        <module>stomp4j-integration-common</module>
         <module>spring</module>
         <module>quarkus</module>
         <module>bridge</module>

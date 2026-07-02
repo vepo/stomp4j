@@ -6,6 +6,8 @@ import javax.net.ssl.SSLContext;
 
 import dev.vepo.stomp4j.client.StompClient;
 import dev.vepo.stomp4j.client.UserCredential;
+import dev.vepo.stomp4j.integration.client.StompClientBootstrap;
+import dev.vepo.stomp4j.integration.client.StompClientBootstrapOptions;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
@@ -30,19 +32,9 @@ public class StompClientFactory {
     }
 
     public StompClient create() {
-        var credentials = buildCredentials();
-        if (config.transportType().isPresent() && credentials.isPresent()) {
-            return StompClient.create(config.url(), config.transportType().get(), credentials.get());
-        }
-        if (config.transportType().isPresent()) {
-            return StompClient.create(config.url(), config.transportType().get());
-        }
-        if (sslContext.isPresent() && credentials.isPresent()) {
-            return StompClient.create(config.url(), credentials.get(), sslContext.get());
-        }
-        if (credentials.isPresent()) {
-            return StompClient.create(config.url(), credentials.get());
-        }
-        return StompClient.create(config.url());
+        return StompClientBootstrap.create(new StompClientBootstrapOptions(config.url(),
+                                                                           config.transportType(),
+                                                                           buildCredentials(),
+                                                                           sslContext));
     }
 }

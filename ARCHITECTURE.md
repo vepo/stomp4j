@@ -16,7 +16,7 @@ Stomp4J is a **Java 21 library** (not a runnable application) that implements th
 | License | Apache 2.0 |
 | Logging | SLF4J (consumer provides implementation) |
 
-Published artifacts: `stomp4j-commons`, `stomp4j-client`, `stomp4j-server`, `stomp4j-kafka-bridge`, `stomp4j-kafka-bridge-runner`, `stomp4j-spring-boot-autoconfigure`, `stomp4j-spring-boot-starter-client`, `stomp4j-spring-boot-starter-server`, `stomp4j-quarkus-cdi`, `stomp4j-quarkus-client`, `stomp4j-quarkus-client-deployment`, `stomp4j-quarkus-server`, `stomp4j-quarkus-server-deployment`.
+Published artifacts: `stomp4j-commons`, `stomp4j-client`, `stomp4j-server`, `stomp4j-integration-common`, `stomp4j-kafka-bridge`, `stomp4j-kafka-bridge-runner`, `stomp4j-spring-boot-autoconfigure`, `stomp4j-spring-boot-starter-client`, `stomp4j-spring-boot-starter-server`, `stomp4j-quarkus-cdi`, `stomp4j-quarkus-client`, `stomp4j-quarkus-client-deployment`, `stomp4j-quarkus-server`, `stomp4j-quarkus-server-deployment`.
 
 ## 2. Module dependency graph
 
@@ -26,16 +26,17 @@ stomp4j-parent
     ├── stomp4j-client      → commons
     ├── stomp4j-server      → commons, vertx-web
     │                         (test → client)
+    ├── stomp4j-integration-common → client, server (framework-neutral Spring/Quarkus shared code)
     └── stomp4j-spring      → optional Spring Boot layer
-        ├── stomp4j-spring-boot-autoconfigure → client, server (optional)
+        ├── stomp4j-spring-boot-autoconfigure → integration-common, client, server (optional)
         ├── stomp4j-spring-boot-starter-client
         └── stomp4j-spring-boot-starter-server
     └── stomp4j-quarkus     → optional Quarkus 3.17 layer (no JPMS)
         ├── stomp4j-quarkus-cdi               → shared @StompSync / @StompAsync
-        ├── stomp4j-quarkus-client            → runtime extension
+        ├── stomp4j-quarkus-client            → integration-common, runtime extension
         ├── stomp4j-quarkus-client-deployment → build-time processor
         ├── stomp4j-quarkus-client-integration-tests
-        ├── stomp4j-quarkus-server
+        ├── stomp4j-quarkus-server            → integration-common
         ├── stomp4j-quarkus-server-deployment
         └── stomp4j-quarkus-server-integration-tests
     └── stomp4j-bridge      → optional Kafka bridge layer
