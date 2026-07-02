@@ -1,6 +1,6 @@
 ---
 name: Review Code Structure
-description: Audit class responsibilities, rule compliance, module boundaries, duplication, and reuse opportunities across Stomp4J.
+description: Audit class responsibilities, name–responsibility alignment, rule compliance, module boundaries, duplication, and reuse opportunities across Stomp4J.
 ---
 
 You are a senior Java architect reviewing the Stomp4J codebase. Produce a **read-only structural audit** — do **not** change production or test code unless the user explicitly asks to fix findings afterward.
@@ -48,12 +48,54 @@ For each **non-exempt** type in scope:
 |-------|----------------|
 | Responsibility block | Javadoc with `<b>Responsibilities</b>`, at least **Doing**, and **Not responsible for** naming a neighbour |
 | Single secret | One design decision per type (Parnas) — no TLS + subscription routing in one class |
-| Domain naming | Nouns from domain spec (`Session`, `Transport`, `Message`) — not job titles (`*Handler`, `*Manager`, `*Utils`) unless established |
 | God-class signals | >400 lines, >8 unrelated public methods, or >5 unrelated fields without clear grouping |
 
 **Exempt** (note as skipped, do not flag): one-field records, trivial enums, private nested types &lt;15 lines, pure DTOs with no behaviour.
 
 For each gap, state: missing block, vague Doing, scope creep, or suggested split/merge.
+
+### Name ↔ responsibility alignment
+
+Read [stomp4j-oop-design.mdc](../rules/stomp4j-oop-design.mdc) §1 (exists in real life) and §6 (name is not a job title). Cross-check **every non-exempt type** — name must match what the type **is** and what its **Doing** bullets / behaviour actually own.
+
+| Check | Pass criteria |
+|-------|----------------|
+| Name matches Doing | Primary noun in the class name appears in **Doing** (or is an established domain synonym from [domain-specification.md](../../docs/domain-specification.md)) |
+| Real-life entity | Name answers *“What does this object represent?”* — a `Session`, `Channel`, `Transport`, `Message`, not a procedure |
+| Not a job title | Avoid `*Parser`, `*Decoder`, `*Dispatcher`, `*Manager`, `*Utils`, `*Helper`, `*Processor`, `*Controller` unless the type is an **exported** handler/SPI contract (`MessageHandler`, `TransportProvider`, …) |
+| Suffix conventions | `*Impl` only on public-API implementations; `*Factory` / `*Builder` only when the type constructs other objects; `*Provider` only for SPI registration |
+| Layer honesty | Name reflects module and package (`TcpChannel` in `server.channels`, `TcpTransport` in `client` transport) — no `Client*` in server or vice versa |
+| Singular identity | Lifecycle types are singular (`Session`, `Subscription`); collections/buffers use plural or collective nouns (`MessageBuffer`, `Headers`) |
+
+**How to verify each type**
+
+1. Read the class name and package.
+2. Read the responsibility block **Doing** (or infer from public methods if block is missing).
+3. Ask: *Would a new contributor expect this name given only the Doing list?*
+4. Flag **mismatches** with evidence:
+
+| Mismatch kind | Example | Severity |
+|---------------|---------|----------|
+| Name understates scope | `MessageBuffer` also negotiates protocol version | major |
+| Name overstates scope | `ConnectionManager` only closes a socket | major |
+| Job title, not entity | `FrameDecoder` only accumulates bytes until NUL | minor–major |
+| Wrong layer noun | `StompClient` logic in a server `*Handler` class | major |
+| Established name kept | `TopicConsumerManager` — note if Doing matches domain or flag for rename | case-by-case |
+
+**Established exceptions** (do not flag without evidence of mismatch): exported `*Handler`, `*Authenticator`, `TransportProvider`, `Stomp` protocol types, Spring/Quarkus `*Lifecycle`, test `*Fixture` / `*Support`.
+
+Mechanical scan — review every hit; many are valid contracts:
+
+```bash
+# Job-title suffix candidates (main sources)
+rg -n '\b(class|interface|record|enum) \w+(Handler|Manager|Utils|Helper|Processor|Controller|Parser|Decoder|Dispatcher|Reader|Writer|Listener)\b' \
+  --glob '**/src/main/**/*.java' <scope-paths>
+
+# Factory/Builder/Provider without construction role — spot-check
+rg -n '\b(class|interface) \w+(Factory|Builder|Provider)\b' --glob '**/src/main/**/*.java' <scope-paths>
+```
+
+For each mismatch: cite **current name**, **what Doing actually says**, **suggested rename** (or merge target), and whether rename is **breaking** (public API) vs internal-only.
 
 ---
 
@@ -82,11 +124,9 @@ rg -n 'System\.(out|err)\.|java\.util\.logging' --glob '*.java' <scope-paths>
 # Cross-layer imports (examples — extend per module)
 rg -n 'import dev\.vepo\.stomp4j\.(client\.internal|server\.(channels|session))' --glob '*.java'
 
-# Job-title class names
-rg -n 'class \w+(Handler|Manager|Utils|Helper|Processor|Controller)\b' --glob '**/src/main/**/*.java' <scope-paths>
 ```
 
-Flag only **actionable** violations in scope; group repeated patterns once with a count.
+Flag only **actionable** violations in scope; group repeated patterns once with a count. Name ↔ responsibility findings belong in **§1** of the report (not duplicated here unless also a raw rule violation).
 
 ---
 
@@ -166,8 +206,8 @@ Rank findings in the report:
 
 1. **P0** — Boundary violations, wrong module deps, representation leaks in public API
 2. **P1** — God classes, significant duplication in hot paths (channels, protocol, session)
-3. **P2** — Missing responsibility blocks, Demeter / Tell-Don't-Ask smells
-4. **P3** — Naming, minor duplication, documentation gaps
+3. **P2** — Name ↔ responsibility mismatches on public API, missing responsibility blocks, Demeter / Tell-Don't-Ask smells
+4. **P3** — Internal rename candidates, minor duplication, documentation gaps
 
 End with a **top 5 recommended actions** (smallest high-value diffs first). Do not implement unless asked.
 
@@ -200,6 +240,16 @@ End with a **top 5 recommended actions** (smallest high-value diffs first). Do n
 ### Scope creep / split candidates
 
 {list}
+
+### Name ↔ responsibility mismatches
+
+| Severity | Type | Name issue | Doing / behaviour | Suggested rename or merge |
+|----------|------|------------|-------------------|---------------------------|
+| … | … | … | … | … |
+
+### Names consistent with responsibilities
+
+{brief count or list of well-aligned exemplars, e.g. `TcpOutboundQueue`, `MessageBuffer`}
 
 ## 2. Rules compliance
 
@@ -249,7 +299,7 @@ End with a **top 5 recommended actions** (smallest high-value diffs first). Do n
 
 ## Execution notes
 
-- Prefer **parallel** `explore` subagents per module for Phases 2–5, then merge into one report.
+- Prefer **parallel** `explore` subagents per module for Phases 2–5, then merge into one report. Phase 2 must include the **name ↔ responsibility** pass for every inventoried type.
 - Sample first, deep-dive on **channels**, **session**, **protocol**, **transport**, and **bridge** packages — highest churn.
 - If scope is huge, complete one module fully before skimming the rest; say so in the executive summary.
 - Finish with: `✅ Code structure review written to reports/…` and the report path.

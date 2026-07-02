@@ -82,4 +82,4 @@ Example: *"Use tdd-red to create a test for …"*
 | [fix_tests.md](.cursor/commands/fix_tests.md) | Loop until tests pass |
 | [fix_sonar_issues.md](.cursor/commands/fix_sonar_issues.md) | Static analysis fixes |
 | [increase_coverage.md](.cursor/commands/increase_coverage.md) | Coverage improvements |
-| [review_code_structure.md](.cursor/commands/review_code_structure.md) | Responsibilities, rules, boundaries, duplication, reuse audit |
+| [review_code_structure.md](.cursor/commands/review_code_structure.md) | Responsibilities, name alignment, rules, boundaries, duplication, reuse audit |
