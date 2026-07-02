@@ -9,7 +9,7 @@ import dev.vepo.stomp4j.client.transport.TransportProvider;
 public class TcpTransportProvider implements TransportProvider {
     @Override
     public Transport getTransport(URI uri, TransportListener listener) {
-        return new TcpTransport(uri, listener);
+        return new NioTcpTransport(uri, listener);
     }
 
     @Override

@@ -3,7 +3,6 @@ package dev.vepo.stomp4j.client.tests;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.lang.reflect.Field;
 import java.net.ServerSocket;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
@@ -20,6 +19,7 @@ import dev.vepo.stomp4j.client.StompClient;
 import dev.vepo.stomp4j.client.UserCredential;
 import dev.vepo.stomp4j.client.exceptions.StompException;
 import dev.vepo.stomp4j.client.internal.StompClientImpl;
+import dev.vepo.stomp4j.client.internal.transport.NioTcpTransport;
 import dev.vepo.stomp4j.client.internal.transport.TcpTransport;
 import dev.vepo.stomp4j.client.tests.infra.StompActiveMqContainer;
 import dev.vepo.stomp4j.client.tests.infra.StompContainer;
@@ -35,9 +35,13 @@ class StompClientConnectFailureTest {
         assertThat(heartBeatService.isShutdown()).isTrue();
 
         var transport = fieldValue(client, "transport");
+        assertThat(transportFieldValue(transport, "running", AtomicBoolean.class).get()).isFalse();
         if (transport instanceof TcpTransport tcpTransport) {
-            assertThat(tcpTransportRunning(tcpTransport)).isFalse();
             assertThat(tcpTransportExecutor(tcpTransport).isShutdown()).isTrue();
+        } else if (transport instanceof NioTcpTransport nioTcpTransport) {
+            assertThat(nioTcpTransportIoThread(nioTcpTransport)).satisfiesAnyOf(
+                                                                                thread -> assertThat(thread).isNull(),
+                                                                                thread -> assertThat(thread.isAlive()).isFalse());
         }
     }
 
@@ -52,16 +56,22 @@ class StompClientConnectFailureTest {
         return field.get(client);
     }
 
+    private static Thread nioTcpTransportIoThread(NioTcpTransport transport) throws Exception {
+        var field = NioTcpTransport.class.getDeclaredField("ioThread");
+        field.setAccessible(true);
+        return (Thread) field.get(transport);
+    }
+
     private static ExecutorService tcpTransportExecutor(TcpTransport transport) throws Exception {
         var field = TcpTransport.class.getDeclaredField("executor");
         field.setAccessible(true);
         return (ExecutorService) field.get(transport);
     }
 
-    private static boolean tcpTransportRunning(TcpTransport transport) throws Exception {
-        var field = TcpTransport.class.getDeclaredField("running");
+    private static <T> T transportFieldValue(Object transport, String name, Class<T> type) throws Exception {
+        var field = transport.getClass().getDeclaredField(name);
         field.setAccessible(true);
-        return ((AtomicBoolean) field.get(transport)).get();
+        return type.cast(field.get(transport));
     }
 
     @Tag("integration")
