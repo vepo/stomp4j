@@ -103,7 +103,7 @@ class StompKafkaBridgeStartupFailureTest {
                                                      .hasMessageContaining(String.valueOf(port));
         assertThat(fieldValue(bridge, "producer")).isNull();
         assertThat(fieldValue(bridge, "server")).isNull();
-        assertThat(fieldValue(bridge, "consumerManager")).isNull();
+        assertThat(fieldValue(bridge, "destinationConsumerRegistry")).isNull();
     }
 
     @AfterEach

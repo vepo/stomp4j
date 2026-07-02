@@ -15,7 +15,7 @@ import dev.vepo.stomp4j.bridge.internal.BridgeMessageHandler;
 import dev.vepo.stomp4j.bridge.internal.KafkaProducerFacade;
 import dev.vepo.stomp4j.bridge.internal.KafkaRecordToStompMapper;
 import dev.vepo.stomp4j.bridge.internal.StompToKafkaRecordMapper;
-import dev.vepo.stomp4j.bridge.internal.TopicConsumerManager;
+import dev.vepo.stomp4j.bridge.internal.DestinationConsumerRegistry;
 import dev.vepo.stomp4j.commons.TransportType;
 import dev.vepo.stomp4j.server.StompServer;
 import dev.vepo.stomp4j.server.StompSession;
@@ -116,7 +116,7 @@ public final class StompKafkaBridge implements AutoCloseable {
     private final CountDownLatch shutdownLatch;
 
     private KafkaProducerFacade producer;
-    private TopicConsumerManager consumerManager;
+    private DestinationConsumerRegistry destinationConsumerRegistry;
     private StompServer server;
 
     private StompKafkaBridge(Builder builder) {
@@ -149,15 +149,15 @@ public final class StompKafkaBridge implements AutoCloseable {
 
             @Override
             public void onSubscribed(StompSession session, String topic) {
-                if (Objects.nonNull(consumerManager)) {
-                    consumerManager.subscribe(topic);
+                if (Objects.nonNull(destinationConsumerRegistry)) {
+                    destinationConsumerRegistry.subscribe(topic);
                 }
             }
 
             @Override
             public void onUnsubscribed(StompSession session, String topic) {
-                if (Objects.nonNull(consumerManager)) {
-                    consumerManager.unsubscribe(topic);
+                if (Objects.nonNull(destinationConsumerRegistry)) {
+                    destinationConsumerRegistry.unsubscribe(topic);
                 }
             }
         };
@@ -169,9 +169,9 @@ public final class StompKafkaBridge implements AutoCloseable {
             server.close();
             server = null;
         }
-        if (Objects.nonNull(consumerManager)) {
-            consumerManager.close();
-            consumerManager = null;
+        if (Objects.nonNull(destinationConsumerRegistry)) {
+            destinationConsumerRegistry.close();
+            destinationConsumerRegistry = null;
         }
         if (Objects.nonNull(producer)) {
             producer.close();
@@ -206,10 +206,10 @@ public final class StompKafkaBridge implements AutoCloseable {
             }
 
             server = serverBuilder.start();
-            consumerManager = new TopicConsumerManager(destinationMapper,
-                                                       kafkaConfig,
-                                                       server.outboundChannel(),
-                                                       new KafkaRecordToStompMapper());
+            destinationConsumerRegistry = new DestinationConsumerRegistry(destinationMapper,
+                                                                          kafkaConfig,
+                                                                          server.outboundChannel(),
+                                                                          new KafkaRecordToStompMapper());
         } catch (RuntimeException ex) {
             logger.error("STOMP Kafka bridge startup failed", ex);
             close();

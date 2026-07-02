@@ -19,8 +19,30 @@ import dev.vepo.stomp4j.bridge.DestinationMapper;
 import dev.vepo.stomp4j.bridge.KafkaBridgeConfig;
 import dev.vepo.stomp4j.server.OutboundChannel;
 
-public final class TopicConsumerManager implements AutoCloseable {
+/**
+ * <p>
+ * <b>Responsibilities</b>
+ * </p>
+ * <ul>
+ * <li><b>Knowing:</b> Ref-counted Kafka consumers keyed by STOMP
+ * destination.</li>
+ * <li><b>Doing:</b> Start and stop per-destination poll loops that map Kafka
+ * records to STOMP {@code SEND} frames on the server
+ * {@link OutboundChannel}.</li>
+ * </ul>
+ * <p>
+ * <b>Collaborators:</b> {@link DestinationMapper}, {@link KafkaBridgeConfig},
+ * {@link KafkaRecordToStompMapper}, {@link OutboundChannel}
+ * </p>
+ * <p>
+ * <b>Not responsible for:</b> STOMP subscription acceptance policy, Kafka
+ * produce path, STOMP server lifecycle.
+ * </p>
+ */
+public final class DestinationConsumerRegistry implements AutoCloseable {
+
     private static final class DestinationConsumer {
+
         private static void pollLoop(KafkaBridgeConfig config,
                                      OutboundChannel outboundChannel,
                                      KafkaRecordToStompMapper recordMapper,
@@ -66,9 +88,7 @@ public final class TopicConsumerManager implements AutoCloseable {
 
         private final AtomicInteger subscribers;
         private final KafkaConsumer<String, byte[]> consumer;
-
         private final AtomicBoolean running;
-
         private final Future<?> task;
 
         private DestinationConsumer(AtomicInteger subscribers,
@@ -103,19 +123,19 @@ public final class TopicConsumerManager implements AutoCloseable {
         }
     }
 
-    private static final Logger logger = LoggerFactory.getLogger(TopicConsumerManager.class);
+    private static final Logger logger = LoggerFactory.getLogger(DestinationConsumerRegistry.class);
+
     private final DestinationMapper destinationMapper;
     private final KafkaBridgeConfig config;
     private final OutboundChannel outboundChannel;
     private final KafkaRecordToStompMapper recordMapper;
     private final ExecutorService executor;
-
     private final ConcurrentMap<String, DestinationConsumer> consumers;
 
-    public TopicConsumerManager(DestinationMapper destinationMapper,
-                                KafkaBridgeConfig config,
-                                OutboundChannel outboundChannel,
-                                KafkaRecordToStompMapper recordMapper) {
+    public DestinationConsumerRegistry(DestinationMapper destinationMapper,
+                                       KafkaBridgeConfig config,
+                                       OutboundChannel outboundChannel,
+                                       KafkaRecordToStompMapper recordMapper) {
         this.destinationMapper = destinationMapper;
         this.config = config;
         this.outboundChannel = outboundChannel;
