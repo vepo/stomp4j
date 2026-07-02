@@ -53,6 +53,24 @@ import dev.vepo.stomp4j.commons.protocol.Header;
 import dev.vepo.stomp4j.commons.protocol.Message;
 import dev.vepo.stomp4j.commons.protocol.MessageBuilder;
 
+/**
+ * <p>
+ * <b>Responsibilities</b>
+ * </p>
+ * <ul>
+ * <li><b>Knowing:</b> Selected STOMP protocol, transport handle, subscription
+ * registries, and receipt correlation state for one connected client.</li>
+ * <li><b>Doing:</b> Orchestrate transport connect, CONNECT negotiation,
+ * heart-beats, subscribe/send/unsubscribe, and graceful disconnect.</li>
+ * </ul>
+ * <p>
+ * <b>Collaborators:</b> {@link Transport}, {@link Stomp}, {@link Subscription}
+ * </p>
+ * <p>
+ * <b>Not responsible for:</b> Wire I/O and framing — owned by
+ * {@link dev.vepo.stomp4j.client.internal.transport} transports.
+ * </p>
+ */
 public class StompClientImpl implements StompClient {
 
     private class ConnectionListener implements TransportListener {

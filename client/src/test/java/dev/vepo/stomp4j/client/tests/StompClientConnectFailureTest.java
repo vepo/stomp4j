@@ -41,9 +41,7 @@ class StompClientConnectFailureTest {
     }
 
     private static void assertNioTransportIoThreadReleased(Object transport) throws Exception {
-        var field = transport.getClass().getDeclaredField("ioThread");
-        field.setAccessible(true);
-        var thread = (Thread) field.get(transport);
+        var thread = transportFieldValue(transport, "ioThread", Thread.class);
         assertThat(thread == null || !thread.isAlive()).isTrue();
     }
 
@@ -59,9 +57,17 @@ class StompClientConnectFailureTest {
     }
 
     private static <T> T transportFieldValue(Object transport, String name, Class<T> type) throws Exception {
-        var field = transport.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        return type.cast(field.get(transport));
+        var current = transport.getClass();
+        while (current != null) {
+            try {
+                var field = current.getDeclaredField(name);
+                field.setAccessible(true);
+                return type.cast(field.get(transport));
+            } catch (NoSuchFieldException ex) {
+                current = current.getSuperclass();
+            }
+        }
+        throw new NoSuchFieldException(name);
     }
 
     @Tag("integration")

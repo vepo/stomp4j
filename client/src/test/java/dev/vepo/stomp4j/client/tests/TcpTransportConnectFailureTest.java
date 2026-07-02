@@ -30,9 +30,17 @@ class TcpTransportConnectFailureTest {
     }
 
     private static Object fieldValue(Object target, String name) throws Exception {
-        var field = target.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        return field.get(target);
+        var type = target.getClass();
+        while (type != null) {
+            try {
+                var field = type.getDeclaredField(name);
+                field.setAccessible(true);
+                return field.get(target);
+            } catch (NoSuchFieldException ex) {
+                type = type.getSuperclass();
+            }
+        }
+        throw new NoSuchFieldException(name);
     }
 
     private static TransportListener noopListener() {

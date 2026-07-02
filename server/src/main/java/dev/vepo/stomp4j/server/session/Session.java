@@ -27,6 +27,26 @@ import dev.vepo.stomp4j.server.SubscriberAckListener;
 import dev.vepo.stomp4j.server.auth.Credentials;
 import dev.vepo.stomp4j.server.channels.ChannelListener;
 
+/**
+ * <p>
+ * <b>Responsibilities</b>
+ * </p>
+ * <ul>
+ * <li><b>Knowing:</b> Negotiated STOMP version, subscriptions, pending ACK
+ * state, and connection lifecycle status for one peer.</li>
+ * <li><b>Doing:</b> Process inbound STOMP commands, negotiate CONNECT,
+ * heart-beats, subscriptions, transactions, and deliver outbound broadcast
+ * MESSAGE frames.</li>
+ * </ul>
+ * <p>
+ * <b>Collaborators:</b> {@link OutboundChannel}, {@link ChannelListener},
+ * {@link MessageBuffer}, {@link SessionCloser}
+ * </p>
+ * <p>
+ * <b>Not responsible for:</b> Socket accept loop, TLS handshake, selector
+ * interest ops — owned by {@link dev.vepo.stomp4j.server.channels.TcpChannel}.
+ * </p>
+ */
 public class Session implements StompSession {
     private record HeartbeatNegotiation(long serverMs, long clientMs) {}
 

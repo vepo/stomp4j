@@ -11,6 +11,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import javax.net.ssl.SSLContext;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,7 +22,27 @@ import dev.vepo.stomp4j.client.transport.TransportListener;
 import dev.vepo.stomp4j.commons.protocol.Command;
 import dev.vepo.stomp4j.commons.protocol.Message;
 
+/**
+ * <p>
+ * <b>Responsibilities</b>
+ * </p>
+ * <ul>
+ * <li><b>Doing:</b> Open a STOMP-over-WebSocket session with
+ * {@link HttpClient}, deliver inbound frames via
+ * {@link WebSocketInboundFramer}, and send outbound frames from caller
+ * threads.</li>
+ * </ul>
+ * <p>
+ * <b>Collaborators:</b> {@link WebSocketInboundFramer},
+ * {@link TransportListener}, {@link ClientKey}
+ * </p>
+ * <p>
+ * <b>Not responsible for:</b> STOMP protocol negotiation, heart-beat
+ * scheduling, TLS context provisioning beyond optional {@link SSLContext}.
+ * </p>
+ */
 public class WebSocketTransport implements Transport {
+
     private static final Logger logger = LoggerFactory.getLogger(WebSocketTransport.class);
 
     private static int connectTimeoutSeconds() {
@@ -31,6 +53,7 @@ public class WebSocketTransport implements Transport {
     private final ClientKey key;
     private final URI uri;
     private final TransportListener listener;
+    private final boolean secure;
     private final WebSocketInboundFramer framer = new WebSocketInboundFramer();
     private volatile long lastSentMessage = System.nanoTime();
     private final Object sendLock = new Object();
@@ -41,9 +64,16 @@ public class WebSocketTransport implements Transport {
     private final CountDownLatch closeLatch = new CountDownLatch(1);
 
     public WebSocketTransport(URI uri, TransportListener listener) {
+        this(uri, listener, null);
+    }
+
+    WebSocketTransport(URI uri, TransportListener listener, SSLContext sslContext) {
         this.uri = uri;
         this.listener = listener;
-        this.httpClient = HttpClient.newHttpClient();
+        this.secure = Objects.nonNull(sslContext);
+        this.httpClient = Objects.isNull(sslContext)
+                                                     ? HttpClient.newHttpClient()
+                                                     : HttpClient.newBuilder().sslContext(sslContext).build();
         this.key = new ClientKey();
     }
 
@@ -82,9 +112,6 @@ public class WebSocketTransport implements Transport {
             try {
                 webSocketClient.sendClose(WebSocket.NORMAL_CLOSURE, "Client closed connection");
                 if (!closeLatch.await(2, TimeUnit.SECONDS)) {
-                    // Brokers often leave the WebSocket open after STOMP DISCONNECT;
-                    // HttpClient.close()
-                    // blocks until the socket ends, so abort when no close frame arrives in time.
                     logger.debug("WebSocket close frame not acknowledged; aborting connection");
                     webSocketClient.abort();
                 }
@@ -100,80 +127,13 @@ public class WebSocketTransport implements Transport {
 
     @Override
     public void connect() {
-        logger.info("Open WebSocket connection with: {}", uri);
+        logger.info("Opening{} WebSocket connection with: {}", secure ? " secure" : "", uri);
         connectFailed.set(false);
         try {
             connectFuture = httpClient.newWebSocketBuilder()
                                       .header("uuid", key.toHex())
-                                      // STOMP over WebSocket negotiates the application protocol during the HTTP
-                                      // upgrade
-                                      // via Sec-WebSocket-Protocol (v12.stomp, v11.stomp, …), not ordinary HTTP
-                                      // content
-                                      // negotiation. After the handshake, frames use the STOMP wire format — see
-                                      // https://stomp.github.io/stomp-specification-1.2.html and
-                                      // https://stomp.github.io/
                                       .subprotocols("v12.stomp", "v11.stomp", "v10.stomp", "stomp")
-                                      .buildAsync(uri, new WebSocket.Listener() {
-                                          @Override
-                                          public CompletionStage<?> onBinary(WebSocket webSocket, ByteBuffer data, boolean last) {
-                                              var bytes = new byte[data.remaining()];
-                                              data.get(bytes);
-                                              framer.offer(bytes, listener);
-                                              webSocket.request(1);
-                                              return null;
-                                          }
-
-                                          @Override
-                                          public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
-                                              logger.warn("Connection closed! statusCode={}, reason={}", statusCode, reason);
-                                              closeLatch.countDown();
-                                              return null;
-                                          }
-
-                                          @Override
-                                          public void onError(WebSocket webSocket, Throwable error) {
-                                              logger.error("Error on WebSocket connection!", error);
-                                              connectFailed.set(true);
-                                              openLatch.countDown();
-                                              closeLatch.countDown();
-                                              if (Objects.isNull(webSocketClient)) {
-                                                  webSocket.abort();
-                                              }
-                                              listener.onError(new Message(Command.ERROR,
-                                                                           dev.vepo.stomp4j.commons.protocol.Headers.builder()
-                                                                                                                    .with("message", error.getMessage())
-                                                                                                                    .build(),
-                                                                           error.getMessage()));
-                                          }
-
-                                          @Override
-                                          public void onOpen(WebSocket webSocket) {
-                                              logger.info("Connection open!");
-                                              webSocketClient = webSocket;
-                                              webSocket.request(1);
-                                              openLatch.countDown();
-                                              listener.onConnected(WebSocketTransport.this);
-                                          }
-
-                                          @Override
-                                          public CompletionStage<?> onPing(WebSocket webSocket, ByteBuffer message) {
-                                              webSocket.request(1);
-                                              return null;
-                                          }
-
-                                          @Override
-                                          public CompletionStage<?> onPong(WebSocket webSocket, ByteBuffer message) {
-                                              webSocket.request(1);
-                                              return null;
-                                          }
-
-                                          @Override
-                                          public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
-                                              framer.offer(data, listener);
-                                              webSocket.request(1);
-                                              return null;
-                                          }
-                                      });
+                                      .buildAsync(uri, newListener());
             awaitWebSocketOpen();
         } catch (StompException ex) {
             logger.error("WebSocket connect failed for {}", uri, ex);
@@ -186,6 +146,70 @@ public class WebSocketTransport implements Transport {
     @Override
     public String host() {
         return uri.getHost();
+    }
+
+    private WebSocket.Listener newListener() {
+        return new WebSocket.Listener() {
+            @Override
+            public CompletionStage<?> onBinary(WebSocket webSocket, ByteBuffer data, boolean last) {
+                var bytes = new byte[data.remaining()];
+                data.get(bytes);
+                framer.offer(bytes, listener);
+                webSocket.request(1);
+                return null;
+            }
+
+            @Override
+            public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
+                logger.warn("WebSocket connection closed statusCode={}, reason={}", statusCode, reason);
+                closeLatch.countDown();
+                return null;
+            }
+
+            @Override
+            public void onError(WebSocket webSocket, Throwable error) {
+                logger.error("WebSocket connection error", error);
+                connectFailed.set(true);
+                openLatch.countDown();
+                closeLatch.countDown();
+                if (Objects.isNull(webSocketClient)) {
+                    webSocket.abort();
+                }
+                listener.onError(new Message(Command.ERROR,
+                                             dev.vepo.stomp4j.commons.protocol.Headers.builder()
+                                                                                      .with("message", error.getMessage())
+                                                                                      .build(),
+                                             error.getMessage()));
+            }
+
+            @Override
+            public void onOpen(WebSocket webSocket) {
+                logger.info("WebSocket connection open");
+                webSocketClient = webSocket;
+                webSocket.request(1);
+                openLatch.countDown();
+                listener.onConnected(WebSocketTransport.this);
+            }
+
+            @Override
+            public CompletionStage<?> onPing(WebSocket webSocket, ByteBuffer message) {
+                webSocket.request(1);
+                return null;
+            }
+
+            @Override
+            public CompletionStage<?> onPong(WebSocket webSocket, ByteBuffer message) {
+                webSocket.request(1);
+                return null;
+            }
+
+            @Override
+            public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
+                framer.offer(data, listener);
+                webSocket.request(1);
+                return null;
+            }
+        };
     }
 
     @Override

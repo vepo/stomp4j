@@ -6,6 +6,24 @@ import java.nio.charset.StandardCharsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * <p>
+ * <b>Responsibilities</b>
+ * </p>
+ * <ul>
+ * <li><b>Knowing:</b> Accumulated wire bytes until a complete STOMP frame (NUL
+ * terminator) is available.</li>
+ * <li><b>Doing:</b> Append stream bytes, detect heart-beat octets, and decode
+ * complete frames via {@link FrameDecoder}.</li>
+ * </ul>
+ * <p>
+ * <b>Collaborators:</b> {@link FrameDecoder}, {@link Message}
+ * </p>
+ * <p>
+ * <b>Not responsible for:</b> Transport I/O, session routing, protocol version
+ * negotiation.
+ * </p>
+ */
 public class MessageBuffer {
     private static final Logger logger = LoggerFactory.getLogger(MessageBuffer.class);
     private final ByteArrayOutputStream buffer;

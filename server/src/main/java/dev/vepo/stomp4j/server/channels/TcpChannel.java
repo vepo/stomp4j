@@ -27,6 +27,24 @@ import dev.vepo.stomp4j.server.session.Session;
 import dev.vepo.stomp4j.server.session.SessionCloser;
 import dev.vepo.stomp4j.server.session.Status;
 
+/**
+ * <p>
+ * <b>Responsibilities</b>
+ * </p>
+ * <ul>
+ * <li><b>Doing:</b> Accept TCP connections on a selector thread, run optional
+ * TLS handshakes, attach per-connection {@link Session} I/O, and broadcast
+ * outbound frames to subscribed sessions.</li>
+ * </ul>
+ * <p>
+ * <b>Collaborators:</b> {@link Session}, {@link ChannelListener},
+ * {@link TcpOutboundQueue}, {@link SslEngineIo}
+ * </p>
+ * <p>
+ * <b>Not responsible for:</b> STOMP protocol state machine, application
+ * {@link dev.vepo.stomp4j.server.MessageHandler} logic.
+ * </p>
+ */
 public class TcpChannel implements Channel {
 
     private static final class SessionAttachment {
