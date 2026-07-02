@@ -36,7 +36,7 @@ No content is duplicated across pillars — each hub links to file-scoped rules 
 | Rule | Globs | Topic |
 |------|-------|-------|
 | [stomp4j-protocol.mdc](.cursor/rules/stomp4j-protocol.mdc) | `commons/**`, `client/**`, `server/**`, `bridge/**` | STOMP spec compliance |
-| [stomp4j-oop-design.mdc](.cursor/rules/stomp4j-oop-design.mdc) | `**/*.java` | Seven Virtues, Tell/Don't Ask, Demeter, no bypass |
+| [stomp4j-oop-design.mdc](.cursor/rules/stomp4j-oop-design.mdc) | `**/*.java` | Parnas information hiding, Seven Virtues, Tell/Don't Ask, Demeter |
 | [stomp4j-java.mdc](.cursor/rules/stomp4j-java.mdc) | `**/*.java` | Style, logging, `var`, streams, JPMS |
 | [stomp4j-format-imports.mdc](.cursor/rules/stomp4j-format-imports.mdc) | `**/*.java` | Imports and formatting |
 | [stomp4j-strings.mdc](.cursor/rules/stomp4j-strings.mdc) | `**/*.java` | String building |

@@ -1,5 +1,5 @@
 ---
-description: OOP design — Seven Virtues of a Good Object (Yegor256) + Tell/Don't Ask, Demeter, no bypass
+description: OOP design — Parnas information hiding, Seven Virtues (Yegor256), Tell/Don't Ask, Demeter, no bypass
 globs: "**/*.java"
 alwaysApply: false
 ---
@@ -9,6 +9,34 @@ alwaysApply: false
 Based on [Seven Virtues of a Good Object](https://www.yegor256.com/2014/11/20/seven-virtues-of-good-object.html). Naming and terms: [docs/domain-specification.md](../../docs/domain-specification.md).
 
 Apply on **new or touched** behaviour; do not mandate big-bang refactors.
+
+## Information hiding (Parnas)
+
+From David Parnas, [*On the Criteria To Be Used in Decomposing Systems into Modules*](https://wstomv.win.tue.nl/s.1.521.1.198.1103/SDM-report.pdf) (1972): each unit owns a **secret** — a design decision likely to change — and exposes only what callers need through a **stable interface**. Callers must not depend on how the secret is implemented.
+
+| Hide (secret) | Expose (contract) |
+|---------------|-------------------|
+| `SSLEngine` handshake steps, net/app buffers | `TcpSslIo.handshake`, `readApplication`, `drainOutbound` |
+| `Selector` interest ops, partial `SocketChannel` writes | `TcpChannel` session lifecycle; `OutboundChannel.send` |
+| Wire bytes, framing state | `Message`, `MessageBuffer`, `Session.offer` |
+| `StompClientImpl` maps, executors | `StompClient` public API |
+
+**Rules**
+
+1. **One secret per type** — if a class owns TLS state *and* STOMP subscription routing, split or nest so each secret has one owner ([stomp4j-class-responsibilities.mdc](stomp4j-class-responsibilities.mdc)).
+2. **Narrow surface** — export only intentional packages (`module-info.java`); keep `internal`, `channels`, `session` non-exported unless test-only `exports … to`.
+3. **No representation leak** — do not return `SelectionKey`, `ByteBuffer`, `SSLEngine`, or raw socket handles from public or cross-layer APIs; pass domain commands and data instead.
+4. **Localize change** — when a decision changes (blocking → NIO, TLS stack, buffer sizing), callers outside the owning module should compile unchanged.
+
+```java
+// ❌ Caller depends on TLS implementation detail
+attachment.sslIo().engine().getHandshakeStatus();
+
+// ✅ Caller depends on channel contract
+channel.outboundChannel().send(connectedFrame);
+```
+
+Information hiding supports **Tell, Don't Ask** and **Law of Demeter** below: callers send intent; they do not interrogate or reach through hidden structure.
 
 ## 1. Exists in real life
 
